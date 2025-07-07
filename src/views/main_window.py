@@ -1,13 +1,14 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter.font import Font
-from models.data_models import AppConfig
+from src.models.data_models import AppConfig
 
 class MainWindow:
-    def __init__(self, root, controller_financiero,controller_anticipos):
+    def __init__(self, root, controller_financiero, controller_anticipos, controller_base_mensual):
         self.root = root
         self.financiero_controller = controller_financiero
         self.anticipos_controller = controller_anticipos
+        self.base_mensual_controller = controller_base_mensual # Guardamos el nuevo controlador
         self.config = AppConfig()
         self.setup_ui()
         
@@ -78,6 +79,16 @@ class MainWindow:
             style='Accent.TButton'
         )
         self.action2_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
+        
+        # --- NUEVO BOTÓN: Base Mensual ---
+        self.base_mensual_button = ttk.Button(
+            self.buttons_frame,
+            text="Base Mensual",
+            # El comando llama al método del nuevo controlador para abrir la ventana
+            command=lambda: self.base_mensual_controller.abrir_vista(self.root),
+            style='Accent.TButton'
+        )
+        self.base_mensual_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
         
         # Barra de progreso (inicialmente oculta)
         self.progress_bar = ttk.Progressbar(

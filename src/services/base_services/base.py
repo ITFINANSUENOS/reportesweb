@@ -173,9 +173,6 @@ class ReportService:
         # --- Lógica avanzada para FINANSUEÑOS ---
         
         # 1. Preparar el DataFrame de búsqueda (crtmp_df)
-        # -- LA CORRECCIÓN ESTÁ AQUÍ --
-        # Se elimina la línea pd.to_numeric y se convierte directamente a datetime.
-        # 'dayfirst=True' asegura que '30/11/23' se lea como 30 de Noviembre.
         crtmp_df_copy = crtmp_df.copy() # Hacemos una copia para no modificar el original
         crtmp_df_copy['Fecha_Facturada'] = pd.to_datetime(crtmp_df_copy['Fecha_Facturada'], dayfirst=True, errors='coerce')
         
@@ -268,18 +265,24 @@ class ReportService:
                  reporte_df.loc[mask, 'Telefono_Call_Center'] = reporte_df.loc[mask, cols[2]]
 
         # 4. Eliminar las columnas originales de la matriz para limpiar el reporte
-        cols_a_borrar_matriz = self.config['MATRIZ_CARTERA']['new_names']
+        cols_a_borrar_matriz = [
+            'call_center_1_30_dias', 'call_center_nombre_1_30', 'call_center_telefono_1_30', 
+            'call_center_31_90_dias', 'call_center_nombre_31_90', 'call_center_telefono_31_90', 
+            'call_center_91_360_dias', 'call_center_nombre_91_360', 'call_center_telefono_91_360'
+        ]
         # Nos aseguramos de no borrar 'Zona' que es la clave de cruce
-        cols_a_borrar_matriz = [col for col in cols_a_borrar_matriz if col in reporte_df.columns and col != 'Zona']
-        reporte_df.drop(columns=cols_a_borrar_matriz, inplace=True, errors='ignore')
+        columnas_existentes_a_borrar = [col for col in cols_a_borrar_matriz if col in reporte_df.columns]
+        reporte_df.drop(columns=columnas_existentes_a_borrar, inplace=True, errors='ignore')
         
         return reporte_df
+
 
     def _calculate_balances(self, reporte_df, fnz003_df):
         """Calcula los diferentes saldos y los agrega al reporte."""
         print("📊 Calculando saldos...")
         reporte_df['Saldo_Capital'] = np.where(reporte_df['Empresa'] == 'ARPESOD', reporte_df.get('Saldo_Factura'), np.nan)
         if not fnz003_df.empty:
+            fnz003_df = self._create_credit_key(fnz003_df)
             fnz003_df['Credito'] = fnz003_df['Credito'].astype(str)
             mapa_capital = fnz003_df[fnz003_df['Concepto'].isin(['CAPITAL', 'ABONO DIF TASA'])].groupby('Credito')['Saldo'].sum()
             mapa_avales = fnz003_df[fnz003_df['Concepto'] == 'AVAL'].groupby('Credito')['Saldo'].sum()

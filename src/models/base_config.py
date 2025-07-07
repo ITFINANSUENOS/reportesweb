@@ -22,7 +22,7 @@ configuracion = {
     },
     "R91": {
         "usecols": ["VINNOMBRE", "VENNOMBRE", "MCDZONA", "MCDVINCULA", "MCDNUMCRU1", 
-                    "MCDTIPCRU1","VENOMBRE","VENCODIGO", "COBNOMBRE", "MCDCCOSTO", "CCONOMBRE", 
+                    "MCDTIPCRU1","VENOMBRE","VENCODIGO", "MCDCCOSTO", "CCONOMBRE", 
                     "META_INTER", "META_DC_AL", "META_DC_AT", "META_ATRAS"],
         "rename_map": { 
                        "MCDTIPCRU1": "Tipo_Credito", 
@@ -30,7 +30,6 @@ configuracion = {
                        "MCDVINCULA" : "Cedula_Cliente", 
                        "VINNOMBRE": "Nombre_Cliente", 
                        "MCDZONA" : "Zona", 
-                       "COBNOMBRE" : "Nombre_Cobrador", 
                        "VENNOMBRE" : "Nombre_Vendedor", 
                        "VENCODIGO" : "Codigo_Vendedor", 
                        "CCONOMBRE" : "Centro_Costos", 
@@ -82,8 +81,10 @@ configuracion = {
                       "IDENTIFICA":"Cedula_Cliente" }
     },
     "FNZ003":{
-        "usecols":["CREDITO","CONCEPTO","SALDO"],
-        "rename_map":{ "CREDITO":"Credito", 
+        "usecols":["CONCEPTO","SALDO","DESEMBOLSO", "NUMERO"],
+        "rename_map":{ 
+                      "DESEMBOLSO":"Tipo_Credito",
+                      "NUMERO": "Numero_Credito",  
                       "CONCEPTO":"Concepto", 
                       "SALDO":"Saldo" }
     },
@@ -140,33 +141,9 @@ configuracion = {
                }, 
               "merge_on": "Credito" 
               },
-           
         ]
     }
 }
-
-# --- 2. LISTA DE ARCHIVOS A PROCESAR ---
-# Asegúrate de que esta ruta sea correcta para tu sistema
-# ruta_base = 'C:/Users/usuario/Desktop/JUNIO/'
-ruta_base = '/home/balvin/dev/electrocreditos/JUNIO/'
-
-archivos_a_procesar = [
-    ruta_base + "ANALISIS ARP GENERAL 0506INICIAL.XLS",
-    ruta_base + "ANALISIS FNS GENERAL 0506INICIAL.XLS",
-    ruta_base + "R91 ARP JUNIO.XLSX",
-    ruta_base + "R91 FS JUNIO.XLSX",
-    ruta_base + "VENCIMIENTOS ARP JUNIO.XLSX",
-    ruta_base + "VENCIMIENTOS FNS JUNIO.XLSX",
-    ruta_base + "R03 2025 FNS.xlsx",
-    ruta_base + "R03 2025 ARP.xlsx",
-    ruta_base + "CRTMPCONSULTA1.XLSX",
-    ruta_base + "FNZ003 A 20 JUN.XLSX",
-    ruta_base + "MATRIZ DE CARTERA.xlsx",
-    ruta_base + "ASESORES ACTIVOS.xlsx",
-    ruta_base + "SC04.XLSX",
-    ruta_base + "DESEMBOLSOS FINANSUEÑOS.XLSX",
-    ruta_base + "METAS FRANJAS JUNIO.xlsx"
-]
 
 ORDEN_COLUMNAS_FINAL = [
     # --- Identificadores Principales ---
@@ -204,6 +181,8 @@ ORDEN_COLUMNAS_FINAL = [
     'Saldo_Interes_Corriente',
     # --- Personal Asignado ---
     'Zona',
+    'Cobrador',
+    'Telefono_Cobrador',
     'Centro_Costos',
     'Codigo_Centro_Costos',
     'Activo_Centro_Costos',
@@ -212,7 +191,9 @@ ORDEN_COLUMNAS_FINAL = [
     'Movil_Vendedor',
     'Lider_Zona',
     'Movil_Lider',
-    'Nombre_Cobrador',
+    "Regional",
+    "Gestor",
+    "Telefono_Gestor",
     # --- Información de Call Center ---
     'Call_Center_Apoyo',
     'Nombre_Call_Center',
