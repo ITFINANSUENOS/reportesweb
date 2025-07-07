@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Este archivo centraliza toda la configuración del proyecto, incluyendo:
-- La estructura y reglas de mapeo para cada tipo de archivo.
-- Las rutas de los archivos de entrada.
-"""
-
 # --- 1. CONFIGURACIÓN DE PROCESAMIENTO POR TIPO DE ARCHIVO ---
 configuracion = {
     "ANALISIS": {
@@ -48,7 +41,7 @@ configuracion = {
                        "VINTELEFON" : "Telefono", 
                        "SALDODOC": "Valor_Cuota_Vigente", 
                        "MCNCUOCRU1": "Cuota_Vigente", 
-                       "VENCE": "Fecha_Vencimiento" }
+                       "VENCE": "Fecha_Cuota_Vigente" }
     },
     "R03":{
         "usecols": ["CODEUDOR1","NOMBRE1","VINTELEFON","CIUNOMBRE1","CODEUDOR2","NOMBRE2","VINTELEFO2","CIUNOMBRE2","CEDULA"],
@@ -154,7 +147,6 @@ ORDEN_COLUMNAS_FINAL = [
     'Nombre_Cliente',
     # --- Fechas ---
     'Fecha_Facturada',
-    'Fecha_Vencimiento',
     # --- Información de Contacto y Ubicación ---
     'Direccion',
     'Barrio',
@@ -174,6 +166,7 @@ ORDEN_COLUMNAS_FINAL = [
     'Cuotas_Pagadas',
     'Cuota_Vigente',
     'Valor_Cuota_Vigente',
+    'Fecha_Cuota_Vigente',
     # --- Saldos ---
     'Saldo_Factura',
     'Saldo_Capital',

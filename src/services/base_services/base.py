@@ -130,6 +130,54 @@ class ReportService:
 
         return reporte_df
     
+    # --- NUEVO MÉTODO PARA PROCESAR FECHAS DE VENCIMIENTOS ---
+    def _process_vencimientos_data(self, vencimientos_df):
+        """
+        Filtra el dataframe de vencimientos para mantener una única entrada por 'Credito'.
+        Prioriza las fechas dentro del mes y año en curso. Si no existen,
+        selecciona la fecha más reciente disponible para ese crédito.
+        """
+        print("⚙️  Procesando fechas de VENCIMIENTOS con lógica de prioridad...")
+
+        # Si el dataframe está vacío, no hay nada que hacer
+        if vencimientos_df.empty:
+            return pd.DataFrame()
+
+        # 1. Crear una copia y asegurar que los datos clave existen y tienen el formato correcto
+        df = vencimientos_df.copy()
+        df['Fecha_Cuota_Vigente'] = pd.to_datetime(df['Fecha_Cuota_Vigente'], errors='coerce')
+        df.dropna(subset=['Credito', 'Fecha_Cuota_Vigente'], inplace=True)
+
+        # 2. Obtener el mes y año actual
+        today = pd.Timestamp.now()
+        current_month = today.month
+        current_year = today.year
+
+        # 3. Prioridad 1: Filtrar créditos con fechas en el mes y año actual
+        df_current_month = df[
+            (df['Fecha_Cuota_Vigente'].dt.month == current_month) &
+            (df['Fecha_Cuota_Vigente'].dt.year == current_year)
+        ]
+        
+        # De las fechas del mes actual, nos quedamos con la más reciente por cada crédito
+        df_current_month = df_current_month.sort_values('Fecha_Cuota_Vigente', ascending=False)
+        result_current_month = df_current_month.drop_duplicates(subset='Credito', keep='first')
+
+        # 4. Prioridad 2: Procesar los créditos que NO se encontraron en el paso anterior
+        credits_found = result_current_month['Credito'].unique()
+        df_fallback = df[~df['Credito'].isin(credits_found)]
+        
+        # De los créditos restantes, nos quedamos con la fecha más reciente (la última)
+        df_fallback = df_fallback.sort_values('Fecha_Cuota_Vigente', ascending=False)
+        result_fallback = df_fallback.drop_duplicates(subset='Credito', keep='first')
+
+        # 5. Combinar los dos resultados para obtener el dataframe final
+        final_vencimientos_df = pd.concat([result_current_month, result_fallback], ignore_index=True)
+
+        print(f"✅ Fechas de VENCIMIENTOS procesadas. Se seleccionaron {len(final_vencimientos_df)} registros únicos.")
+        
+        return final_vencimientos_df
+    
     # --- NUEVO MÉTODO PARA CORREGIR VALORES DE CUOTAS ---
     def _clean_installment_data(self, reporte_df):
         """
@@ -440,25 +488,25 @@ class ReportService:
             return None
 
         # ... (toda la creación del reporte_final y los merges se quedan igual)
-        print("\n🔗 Creando el reporte base y estandarizando llaves...")
-        reporte_final = self._create_credit_key(r91_df.copy())
-        analisis_df = self._create_credit_key(analisis_df)
-        vencimientos_df = self._create_credit_key(vencimientos_df)
-        crtmp_df = self._create_credit_key(crtmp_df)
+        vencimientos_df = self._process_vencimientos_data(vencimientos_df)
+        # --- FIN DE LA MODIFICACIÓN ---
 
         reporte_final['Empresa'] = np.where(reporte_final['Tipo_Credito'] == 'DF', 'FINANSUEÑOS', 'ARPESOD')
         
         for df, col_name in [(reporte_final, 'Cedula_Cliente'), (vencimientos_df, 'Cedula_Cliente'), (r03_df, 'Cedula_Cliente')]:
-             if col_name in df.columns:
-                df[col_name] = df[col_name].astype(str).str.strip()
+                if col_name in df.columns:
+                    df[col_name] = df[col_name].astype(str).str.strip()
 
         print("🔍 Uniendo información de todos los archivos...")
         if not analisis_df.empty:
             columnas_a_excluir = ['Total_Cuotas', 'Valor_Cuota']
             columnas_analisis = [col for col in analisis_df.columns if col not in columnas_a_excluir]
             reporte_final = pd.merge(reporte_final, analisis_df[columnas_analisis].drop_duplicates('Credito'), on='Credito', how='left', suffixes=('', '_Analisis'))
+        
         if not vencimientos_df.empty:
-            reporte_final = pd.merge(reporte_final, vencimientos_df.drop_duplicates('Credito'), on='Credito', how='left', suffixes=('', '_Venc'))
+            # El merge ahora usa el dataframe ya procesado y no necesita drop_duplicates aquí
+            reporte_final = pd.merge(reporte_final, vencimientos_df, on='Credito', how='left', suffixes=('', '_Venc'))
+            
         if not r03_df.empty:
             reporte_final = pd.merge(reporte_final, r03_df.drop_duplicates('Cedula_Cliente'), on='Cedula_Cliente', how='left', suffixes=('', '_R03'))
         if not matriz_cartera_df.empty:
@@ -476,18 +524,10 @@ class ReportService:
                 reporte_final[merge_key] = reporte_final[merge_key].astype(str).str.strip()
                 reporte_final = pd.merge(reporte_final, info_df.drop_duplicates(merge_key), on=merge_key, how='left')
         
-        # --- CORRECCIÓN: LLAMADAS A LOS MÉTODOS DE TRANSFORMACIÓN EN ORDEN CORRECTO ---
-        
-        # 1. Primero, asignamos la factura de venta para que la columna exista.
+        # ... (el resto del método, con las llamadas a _assign_sales_invoice, _enrich_credit_details, etc., permanece igual)
         reporte_final = self._assign_sales_invoice(reporte_final, crtmp_df)
-        
-        # 2. Ahora, enriquecemos los detalles usando la columna 'Factura_Venta' que ya existe.
         reporte_final = self._enrich_credit_details(reporte_final, sc04_df, desembolsos_df)
-        
-        # 3. Limpiamos los datos de cuotas que acabamos de poblar.
         reporte_final = self._clean_installment_data(reporte_final)
-        
-        # 4. Continuamos con el resto de transformaciones.
         reporte_final = self._map_call_center_data(reporte_final)
         reporte_final = self._calculate_balances(reporte_final, fnz003_df)
         reporte_final = self._calculate_goal_metrics(reporte_final, metas_franjas_df)
