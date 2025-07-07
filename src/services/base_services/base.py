@@ -534,3 +534,5 @@ class ReportService:
         reporte_final = self._finalize_report(reporte_final, orden_columnas)
 
         return reporte_final
+    
+    
