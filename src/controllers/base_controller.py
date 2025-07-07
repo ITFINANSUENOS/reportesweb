@@ -1,29 +1,31 @@
 
 import time
 import os
-from src.models.base_config import configuracion, archivos_a_procesar
+from src.models.base_config import configuracion, archivos_a_procesar, ORDEN_COLUMNAS_FINAL
 from src.services.base_services.base import ReportService
 
 def main():
-    """
-    Función principal que ejecuta el proceso de generación de reportes.
-    """
-    print("🚀 Iniciando el proceso de consolidación de reportes...")
+ 
     start_time = time.time()
 
     # 1. Instanciar el servicio, pasándole la configuración.
     service = ReportService(config=configuracion)
 
-    # 2. Llamar al método principal del servicio para que haga todo el trabajo.
-    reporte_final = service.generate_consolidated_report(file_paths=archivos_a_procesar)
+     # 2. Llamar al método principal del servicio, pasándole ahora el orden de las columnas
+    reporte_final = service.generate_consolidated_report(
+        file_paths=archivos_a_procesar,
+        orden_columnas=ORDEN_COLUMNAS_FINAL 
+    )
 
-    # 3. Manejar el resultado final (la "Vista").
+    # 3. Manejar el resultado final
     if reporte_final is not None and not reporte_final.empty:
         print("\n--- 📊 Vista Previa del Reporte Final ---")
         print(reporte_final.head())
         print(f"\n--- Total de registros: {len(reporte_final)} ---")
         
-        columnas_finales = sorted(reporte_final.columns.tolist())
+        # --- CAMBIO AQUÍ: Ya no se ordenan alfabéticamente ---
+        # Ahora se muestran en el orden personalizado que definiste.
+        columnas_finales = reporte_final.columns.tolist() 
         print(f"\n--- Columnas finales en el reporte ({len(columnas_finales)}) ---")
         print(columnas_finales)
 
