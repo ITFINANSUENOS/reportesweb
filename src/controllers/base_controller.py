@@ -20,7 +20,7 @@ class BaseMensualController:
 
     def seleccionar_archivo(self, tipo_archivo):
         """Abre un diálogo para seleccionar uno o varios archivos."""
-        filetypes = [("Excel files", "*.xlsx *.xls")]
+        filetypes = [("Excel files", "*.xlsx *.XLSX *.xls *.XLS")]
         
         # Permitir seleccionar múltiples archivos para estas categorías
         if tipo_archivo in ["ANALISIS", "R91", "VENCIMIENTOS", "R03"]:

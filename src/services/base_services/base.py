@@ -58,11 +58,12 @@ class ReportService:
 
     def _get_file_type(self, filename):
         """Determina el tipo de archivo basado en su nombre y las claves de configuración."""
+        
         nombre_base = filename.split('.')[0].upper().replace(" ", "_")
-        palabras_en_nombre = set(nombre_base.split('_'))
+        
         for tipo in self.config.keys():
-            palabras_en_clave = set(tipo.split('_'))
-            if palabras_en_clave.issubset(palabras_en_nombre):
+            clave_config = tipo.upper().replace(" ", "_")
+            if nombre_base.startswith(clave_config):
                 return tipo
         return None
 
@@ -487,15 +488,25 @@ class ReportService:
             print("\n❌ No se encontraron archivos R91 para construir el reporte base. Proceso detenido.")
             return None
 
-        # ... (toda la creación del reporte_final y los merges se quedan igual)
+        print("\n🔗 Creando el reporte base y estandarizando llaves...")
+        
+        # 1. Crear el reporte final y la llave 'Credito'
+        reporte_final = self._create_credit_key(r91_df.copy())
+        
+        # 2. Crear la llave 'Credito' en los otros dataframes ANTES de usarlos
+        analisis_df = self._create_credit_key(analisis_df)
+        vencimientos_df = self._create_credit_key(vencimientos_df)
+        crtmp_df = self._create_credit_key(crtmp_df)
+        
+        # 3. AHORA SÍ, procesar los vencimientos, ya que 'Credito' existe
         vencimientos_df = self._process_vencimientos_data(vencimientos_df)
-        # --- FIN DE LA MODIFICACIÓN ---
+        # --- FIN DE LA CORRECCIÓN ---
 
         reporte_final['Empresa'] = np.where(reporte_final['Tipo_Credito'] == 'DF', 'FINANSUEÑOS', 'ARPESOD')
         
         for df, col_name in [(reporte_final, 'Cedula_Cliente'), (vencimientos_df, 'Cedula_Cliente'), (r03_df, 'Cedula_Cliente')]:
-                if col_name in df.columns:
-                    df[col_name] = df[col_name].astype(str).str.strip()
+            if col_name in df.columns:
+                df[col_name] = df[col_name].astype(str).str.strip()
 
         print("🔍 Uniendo información de todos los archivos...")
         if not analisis_df.empty:

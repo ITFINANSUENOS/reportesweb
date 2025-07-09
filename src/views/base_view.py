@@ -15,7 +15,7 @@ class BaseMensualView(tk.Toplevel):
 
         # Configuración de la ventana
         self.title("Generar Base Mensual")
-        self.geometry("700x600")
+        self.geometry("800x600")
         self.configure(bg="#F0F0F0")
 
         # --- Frame principal con scroll para manejar muchos archivos ---
