@@ -1,4 +1,4 @@
-# --- 1. CONFIGURACIÓN DE PROCESAMIENTO POR TIPO DE ARCHIVO ---
+# CONFIGURACIÓN DE PROCESAMIENTO POR TIPO DE ARCHIVO
 configuracion = {
     "ANALISIS": {
         "usecols": ["direccion", "barrio", "nomciudad",

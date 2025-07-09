@@ -1,3 +1,4 @@
+from pathlib import Path                                                                                                                                                                                                                                                                                                                                                                                                                     
 import pandas as pd
 import numpy as np
 
@@ -15,7 +16,9 @@ class ReportService:
         print("--- 🔄 Iniciando lectura de archivos ---")
         for ruta_archivo in file_paths:
             try:
-                nombre_archivo = ruta_archivo.split('/')[-1]
+                # CORRECCIÓN CLAVE: Usar pathlib para funcionar en cualquier sistema operativo.
+                nombre_archivo = Path(ruta_archivo).name
+                
                 tipo_archivo_actual = self._get_file_type(nombre_archivo)
                 
                 if not tipo_archivo_actual:
@@ -25,7 +28,6 @@ class ReportService:
                 config_actual = self.config[tipo_archivo_actual]
                 
                 if "sheets" in config_actual:
-                    # Lógica para archivos con múltiples hojas
                     xls = pd.ExcelFile(ruta_archivo, engine='openpyxl')
                     for sheet_config in config_actual["sheets"]:
                         if sheet_config["sheet_name"] in xls.sheet_names:
@@ -35,11 +37,9 @@ class ReportService:
                             df_filtrado = df_hoja[columnas_a_usar].rename(columns=sheet_config["rename_map"])
                             dataframes_por_tipo[tipo_archivo_actual].append({"data": df_filtrado, "config": sheet_config})
                 elif "new_names" in config_actual:
-                    # Lógica para archivos con formato especial (ej. MATRIZ_CARTERA)
                     df = pd.read_excel(ruta_archivo, header=config_actual.get("header"), skiprows=config_actual.get("skiprows"), names=config_actual.get("new_names"))
                     dataframes_por_tipo[tipo_archivo_actual].append(df)
                 else:
-                    # Lógica para archivos estándar
                     engine = 'xlrd' if ruta_archivo.upper().endswith('.XLS') else 'openpyxl'
                     df = pd.read_excel(ruta_archivo, engine=engine)
                     df.columns = df.columns.str.strip()
@@ -57,14 +57,25 @@ class ReportService:
         return dataframes_por_tipo
 
     def _get_file_type(self, filename):
-        """Determina el tipo de archivo basado en su nombre y las claves de configuración."""
-        
+        """
+        Determina el tipo de archivo usando múltiples estrategias para máxima robustez.
+        """
         nombre_base = filename.split('.')[0].upper().replace(" ", "_")
-        
-        for tipo in self.config.keys():
+
+        # Ordenar claves de la más larga a la más corta para priorizar la más específica.
+        sorted_keys = sorted(self.config.keys(), key=len, reverse=True)
+
+        for tipo in sorted_keys:
             clave_config = tipo.upper().replace(" ", "_")
+
             if nombre_base.startswith(clave_config):
                 return tipo
+            palabras_en_nombre = set(nombre_base.split('_'))
+            palabras_en_clave = set(clave_config.split('_'))
+            
+            if palabras_en_clave.issubset(palabras_en_nombre):
+                return tipo
+        
         return None
 
     def _create_credit_key(self, df):
@@ -429,14 +440,12 @@ class ReportService:
         cols_a_borrar = [col for col in reporte_df.columns if any(sufijo in col for sufijo in ['_Venc', '_R03', '_Analisis'])]
         reporte_df = reporte_df.drop(columns=cols_a_borrar, errors='ignore')
         
-        print("📅 Formateando fechas a DD/MM/YY...")
-        for col_fecha in ['Fecha_Vencimiento', 'Fecha_Facturada']:
+        columnas_de_fecha = ['Fecha_Cuota_Vigente', 'Fecha_Facturada']
+
+        for col_fecha in columnas_de_fecha:
             if col_fecha in reporte_df.columns:
-                # Se asegura que la columna de fecha sea tipo texto antes de aplicar formato
-                if pd.api.types.is_datetime64_any_dtype(reporte_df[col_fecha]):
-                     reporte_df[col_fecha] = reporte_df[col_fecha].dt.strftime('%d/%m/%y')
-                else:
-                     reporte_df[col_fecha] = pd.to_datetime(reporte_df[col_fecha], errors='coerce').dt.strftime('%d/%m/%y')
+                print(f"   - Formateando columna: '{col_fecha}'")
+                reporte_df[col_fecha] = pd.to_datetime(reporte_df[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
                 reporte_df[col_fecha] = reporte_df[col_fecha].fillna('')
 
 
@@ -545,5 +554,3 @@ class ReportService:
         reporte_final = self._finalize_report(reporte_final, orden_columnas)
 
         return reporte_final
-    
-    
