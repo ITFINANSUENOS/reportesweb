@@ -16,9 +16,7 @@ class ReportService:
         print("--- 🔄 Iniciando lectura de archivos ---")
         for ruta_archivo in file_paths:
             try:
-                # CORRECCIÓN CLAVE: Usar pathlib para funcionar en cualquier sistema operativo.
                 nombre_archivo = Path(ruta_archivo).name
-                
                 tipo_archivo_actual = self._get_file_type(nombre_archivo)
                 
                 if not tipo_archivo_actual:
@@ -57,38 +55,30 @@ class ReportService:
         return dataframes_por_tipo
 
     def _get_file_type(self, filename):
-        """
-        Determina el tipo de archivo usando múltiples estrategias para máxima robustez.
-        """
+        """Determina el tipo de archivo usando múltiples estrategias para máxima robustez."""
         nombre_base = filename.split('.')[0].upper().replace(" ", "_")
-
-        # Ordenar claves de la más larga a la más corta para priorizar la más específica.
         sorted_keys = sorted(self.config.keys(), key=len, reverse=True)
 
         for tipo in sorted_keys:
             clave_config = tipo.upper().replace(" ", "_")
-
             if nombre_base.startswith(clave_config):
                 return tipo
+            
             palabras_en_nombre = set(nombre_base.split('_'))
             palabras_en_clave = set(clave_config.split('_'))
-            
             if palabras_en_clave.issubset(palabras_en_nombre):
                 return tipo
         
         return None
 
     def _create_credit_key(self, df):
-        """
-        Crea una llave 'Credito' robusta, limpiando espacios y estandarizando tipos.
-        """
-        if 'Numero_Credito' in df.columns and 'Tipo_Credito' in df.columns:
-            # Limpieza agresiva de las columnas base para asegurar consistencia
-            df['Tipo_Credito'] = df['Tipo_Credito'].astype(str).str.strip().str.upper()
-            df['Numero_Credito'] = pd.to_numeric(df['Numero_Credito'], errors='coerce').astype('Int64')
+        """Crea una llave 'Credito' robusta, limpiando espacios y estandarizando tipos."""
+        if df.empty or not all(col in df.columns for col in ['Numero_Credito', 'Tipo_Credito']):
+            return df
             
-            # Crear la llave estandarizada
-            df['Credito'] = df['Tipo_Credito'] + '-' + df['Numero_Credito'].astype(str).str.replace('<NA>', '', regex=False)
+        df['Tipo_Credito'] = df['Tipo_Credito'].astype(str).str.strip().str.upper()
+        df['Numero_Credito'] = pd.to_numeric(df['Numero_Credito'], errors='coerce').astype('Int64')
+        df['Credito'] = df['Tipo_Credito'] + '-' + df['Numero_Credito'].astype(str).str.replace('<NA>', '', regex=False)
         return df
     
     def _add_products_and_gifts(self, reporte_df, crtmp_df):
@@ -220,7 +210,6 @@ class ReportService:
         """
         Procesa el dataframe de vencimientos de forma aislada para devolver un
         resumen con una fila por crédito y todas las columnas calculadas.
-        Esta versión es a prueba de fallos.
         """
         print("⚙️  Procesando datos de VENCIMIENTOS de forma aislada...")
 
@@ -234,8 +223,7 @@ class ReportService:
 
         today = pd.Timestamp.now().normalize()
         
-        # DataFrame base con todos los créditos únicos
-        resumen_creditos = pd.DataFrame(df['Credito'].unique(), columns=['Credito'])
+        resumen_creditos = pd.DataFrame(df['Credito'].unique(), columns=['Credito']).set_index('Credito')
         
         # --- Cálculos de Atraso ---
         df_atrasados = df[df['Fecha_Cuota_Vigente'] < today].copy()
@@ -244,9 +232,10 @@ class ReportService:
             idx_primera_mora = df_atrasados.groupby('Credito')['Fecha_Cuota_Vigente'].idxmin()
             mapa_primera_mora = df.loc[idx_primera_mora].set_index('Credito')
 
-            resumen_creditos = pd.merge(resumen_creditos, mapa_valor_vencido.rename('Valor_Vencido'), on='Credito', how='left')
-            resumen_creditos = pd.merge(resumen_creditos, mapa_primera_mora[['Fecha_Cuota_Vigente', 'Cuota_Vigente', 'Valor_Cuota_Vigente']], on='Credito', how='left')
-            resumen_creditos.rename(columns={'Fecha_Cuota_Vigente': 'Fecha_Cuota_Atraso', 'Cuota_Vigente': 'Primera_Cuota_Mora', 'Valor_Cuota_Vigente': 'Valor_Cuota_Atraso'}, inplace=True)
+            resumen_creditos['Valor_Vencido'] = resumen_creditos.index.map(mapa_valor_vencido)
+            resumen_creditos['Fecha_Cuota_Atraso'] = resumen_creditos.index.map(mapa_primera_mora['Fecha_Cuota_Vigente'])
+            resumen_creditos['Primera_Cuota_Mora'] = resumen_creditos.index.map(mapa_primera_mora['Cuota_Vigente'])
+            resumen_creditos['Valor_Cuota_Atraso'] = resumen_creditos.index.map(mapa_primera_mora['Valor_Cuota_Vigente'])
 
         # --- Cálculos de Vigencia ---
         df_vigentes = df[(df['Fecha_Cuota_Vigente'].dt.year == today.year) & (df['Fecha_Cuota_Vigente'].dt.month == today.month)].copy()
@@ -254,71 +243,39 @@ class ReportService:
             idx_ultima_vigente = df_vigentes.groupby('Credito')['Fecha_Cuota_Vigente'].idxmax()
             mapa_vigentes = df.loc[idx_ultima_vigente].set_index('Credito')
             
-            # Usamos un merge para añadir las columnas vigentes
-            resumen_creditos = pd.merge(resumen_creditos, mapa_vigentes[['Fecha_Cuota_Vigente', 'Cuota_Vigente', 'Valor_Cuota_Vigente']], on='Credito', how='left', suffixes=('_atraso', ''))
+            resumen_creditos['Fecha_Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Fecha_Cuota_Vigente'])
+            resumen_creditos['Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Cuota_Vigente'])
+            resumen_creditos['Valor_Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Valor_Cuota_Vigente'])
 
-        # --- Formateo Final y Relleno de Nulos ---
-        # Asegurarse de que todas las columnas existan
-        columnas_esperadas = ['Fecha_Cuota_Vigente', 'Cuota_Vigente', 'Valor_Cuota_Vigente', 'Fecha_Cuota_Atraso', 'Primera_Cuota_Mora', 'Valor_Cuota_Atraso', 'Valor_Vencido']
-        for col in columnas_esperadas:
-            if col not in resumen_creditos.columns:
-                resumen_creditos[col] = np.nan
+        print("✅ Resumen de vencimientos creado.")
+        return resumen_creditos.reset_index()
 
-        # Formatear fechas válidas
-        resumen_creditos['Fecha_Cuota_Vigente'] = pd.to_datetime(resumen_creditos['Fecha_Cuota_Vigente'], errors='coerce').dt.strftime('%d/%m/%Y')
-        resumen_creditos['Fecha_Cuota_Atraso'] = pd.to_datetime(resumen_creditos['Fecha_Cuota_Atraso'], errors='coerce').dt.strftime('%d/%m/%Y')
-
-        # Aplicar lógica de VIGENCIA EXPIRADA
-        resumen_creditos.loc[resumen_creditos['Fecha_Cuota_Vigente'].isnull(), ['Fecha_Cuota_Vigente', 'Cuota_Vigente', 'Valor_Cuota_Vigente']] = 'VIGENCIA EXPIRADA'
-        
-        # Rellenar todos los nulos restantes
-        resumen_creditos.fillna({
-            'Valor_Vencido': 0, 'Valor_Cuota_Atraso': 0,
-            'Primera_Cuota_Mora': 'SIN MORA', 'Fecha_Cuota_Atraso': 'SIN MORA'
-        }, inplace=True)
-        
-        print("✅ Resumen de vencimientos creado y formateado.")
-        return resumen_creditos
     
     # --- NUEVO MÉTODO PARA AJUSTAR ESTADO DE MORA ---
     def _adjust_arrears_status(self, reporte_df):
-        """
-        Ajusta el estado de mora basado en la columna 'Dias_Atraso' del reporte final.
-        """
+        """Ajusta el estado de mora basado en la columna 'Dias_Atraso' del reporte final."""
         print("🔧 Ajustando estado final de la mora...")
         if 'Dias_Atraso' in reporte_df.columns:
-            # Máscara para créditos que están al día (Dias_Atraso es 0 o nulo)
             sin_mora_mask = (pd.to_numeric(reporte_df['Dias_Atraso'], errors='coerce').fillna(0) == 0)
             
             columnas_mora_a_limpiar = ['Fecha_Cuota_Atraso', 'Primera_Cuota_Mora', 'Valor_Cuota_Atraso', 'Valor_Vencido']
-            
             for col in columnas_mora_a_limpiar:
                 if col in reporte_df.columns:
                     valor_a_poner = 0 if 'Valor' in col else 'SIN MORA'
                     reporte_df.loc[sin_mora_mask, col] = valor_a_poner
-        
         return reporte_df
     
     # --- NUEVO MÉTODO PARA CORREGIR VALORES DE CUOTAS ---
     def _clean_installment_data(self, reporte_df):
-        """
-        Corrige valores erróneos en las columnas de cuotas.
-        Si un valor es > 100, se asume que es un error y se toman los 2 últimos dígitos.
-        """
+        """Corrige valores erróneos en las columnas de cuotas."""
         print("🧼 Limpiando datos de cuotas...")
-        columnas_a_limpiar = ['Cuotas_Pagadas', 'Cuota_Vigente','Primera_Cuota_Mora']
+        columnas_a_limpiar = ['Cuotas_Pagadas', 'Cuota_Vigente', 'Primera_Cuota_Mora']
         
         for col in columnas_a_limpiar:
             if col in reporte_df.columns:
-                # Asegurar que la columna sea numérica para poder comparar
                 reporte_df[col] = pd.to_numeric(reporte_df[col], errors='coerce')
-                
-                # Definir la condición: valores mayores a 100 y que no sean nulos
                 mask = (reporte_df[col] > 100) & (reporte_df[col].notna())
-                
-                # Aplicar la corrección usando el módulo 100
                 reporte_df.loc[mask, col] = reporte_df.loc[mask, col] % 100
-        
         return reporte_df
     
      # --- NUEVO MÉTODO PARA ASIGNAR FACTURA DE VENTA ---
@@ -580,45 +537,52 @@ class ReportService:
     def _finalize_report(self, reporte_df, orden_columnas):
         """Realiza la limpieza, formato y reordenamiento final del reporte."""
         print("🧹 Realizando transformaciones y limpieza final...")
-        columnas_a_eliminar = ['Saldo_Factura'] + [
-            col for col in reporte_df.columns if any(sufijo in col for sufijo in ['_Venc', '_R03', '_Analisis'])
-        ]
+        
+        # Formatear y rellenar columnas de vencimientos
+        columnas_vencimiento = {
+            'Fecha_Cuota_Vigente': 'VIGENCIA EXPIRADA',
+            'Cuota_Vigente': 'VIGENCIA EXPIRADA',
+            'Valor_Cuota_Vigente': 'VIGENCIA EXPIRADA',
+            'Fecha_Cuota_Atraso': 'SIN MORA',
+            'Primera_Cuota_Mora': 'SIN MORA',
+            'Valor_Cuota_Atraso': 0,
+            'Valor_Vencido': 0
+        }
+        for col, default_value in columnas_vencimiento.items():
+            if col not in reporte_df.columns:
+                reporte_df[col] = default_value
+            else:
+                if 'Fecha' in col:
+                    reporte_df[col] = pd.to_datetime(reporte_df[col], errors='coerce').dt.strftime('%d/%m/%Y')
+                reporte_df[col].fillna(default_value, inplace=True)
+
+        # Formatear otras fechas
+        if 'Fecha_Facturada' in reporte_df.columns:
+             reporte_df['Fecha_Facturada'] = pd.to_datetime(reporte_df['Fecha_Facturada'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
+
+        # Formatear columnas de porcentaje
+        print("✨ Formateando columnas de porcentaje...")
+        columnas_porcentaje = ['Meta_%', 'Meta_T.R_%']
+        for col in columnas_porcentaje:
+            if col in reporte_df.columns:
+                numeric_col = pd.to_numeric(reporte_df[col], errors='coerce')
+                reporte_df[col] = numeric_col.apply(lambda x: f'{(x * 100):.2f}%' if pd.notna(x) else '')
+        
+        # Eliminar columnas temporales y reordenar
+        print("🏗️  Reordenando columnas según la configuración...")
+        columnas_a_eliminar = ['Saldo_Factura'] + [col for col in reporte_df.columns if '_Analisis' in col or '_R03' in col or '_Venc' in col]
         reporte_df.drop(columns=columnas_a_eliminar, inplace=True, errors='ignore')
         
-        columnas_de_fecha = ['Fecha_Cuota_Vigente', 'Fecha_Facturada']
-
-        for col_fecha in columnas_de_fecha:
-            if col_fecha in reporte_df.columns:
-                print(f"   - Formateando columna: '{col_fecha}'")
-                reporte_df[col_fecha] = pd.to_datetime(reporte_df[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
-                reporte_df[col_fecha] = reporte_df[col_fecha].fillna('')
-
-
-        # --- NUEVA SECCIÓN: Formatear columnas de porcentaje para presentación ---
-        print("✨ Formateando columnas de porcentaje...")
-        columnas_porcentaje_a_formatear = ['Meta_%', 'Meta_T.R_%']
-        for col in columnas_porcentaje_a_formatear:
-            if col in reporte_df.columns:
-                # Asegura que la columna es numérica antes de formatear
-                numeric_col = pd.to_numeric(reporte_df[col], errors='coerce')
-                # Aplica el formato de texto de porcentaje
-                reporte_df[col] = numeric_col.apply(
-                    lambda x: f'{(x * 100):.2f}%' if pd.notna(x) else ''
-                )
-
-        print("🏗️  Reordenando columnas según la configuración...")
         columnas_actuales = reporte_df.columns.tolist()
         columnas_ordenadas = [col for col in orden_columnas if col in columnas_actuales]
         columnas_restantes = [col for col in columnas_actuales if col not in columnas_ordenadas]
-        reporte_df = reporte_df[columnas_ordenadas + columnas_restantes]
         
-        return reporte_df
+        return reporte_df[columnas_ordenadas + columnas_restantes]
 
 
     def generate_consolidated_report(self, file_paths, orden_columnas, start_date=None, end_date=None):
         """
-        Orquesta todo el proceso de ETL con la arquitectura correcta:
-        "Limpiar Llaves -> Procesar Aislado -> Unir Resúmenes -> Transformar Final".
+        Orquesta todo el proceso de ETL con la arquitectura correcta y de mejor rendimiento.
         """
         dataframes_por_tipo = self._load_dataframes(file_paths)
 
@@ -627,7 +591,6 @@ class ReportService:
             df_list = [item["data"] if isinstance(item, dict) else item for item in items]
             return pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
 
-        # --- 1. Cargar y LIMPIAR LLAVES en todos los dataframes ---
         print("\n🔗 Limpiando y estandarizando llaves de todos los archivos...")
         r91_df = self._create_credit_key(safe_concat(dataframes_por_tipo.get("R91", [])))
         analisis_df = self._create_credit_key(safe_concat(dataframes_por_tipo.get("ANALISIS", [])))
@@ -639,18 +602,15 @@ class ReportService:
         r03_df = safe_concat(dataframes_por_tipo.get("R03", []))
         matriz_cartera_df = safe_concat(dataframes_por_tipo.get("MATRIZ_CARTERA", []))
         metas_franjas_df = safe_concat(dataframes_por_tipo.get("METAS_FRANJAS", []))
+        asesores_sheets = dataframes_por_tipo.get("ASESORES", [])
         
-        if r91_df.empty:
-            return None
+        if r91_df.empty: return None
 
-        # --- 2. Crear el reporte final. Se respeta el total de registros de R91. ---
         reporte_final = r91_df.copy()
-        print(f"📄 Reporte base creado con {len(reporte_final)} registros de R91.")
+        print(f"📄 Reporte base creado con {len(reporte_final)} registros de R91 (sin eliminar duplicados).")
 
-        # --- 3. Procesar dataframes secundarios para resumirlos a 1 fila por llave ---
         processed_vencimientos = self._process_vencimientos_data(vencimientos_df)
         
-        # --- 4. Unir toda la información resumida al reporte base ---
         print("\n🔍 Uniendo resúmenes de información al reporte base...")
         if not processed_vencimientos.empty:
             reporte_final = pd.merge(reporte_final, processed_vencimientos, on='Credito', how='left')
@@ -665,8 +625,19 @@ class ReportService:
             reporte_final['Zona'] = reporte_final['Zona'].astype(str).str.strip()
             matriz_cartera_df['Zona'] = matriz_cartera_df['Zona'].astype(str).str.strip()
             reporte_final = pd.merge(reporte_final, matriz_cartera_df.drop_duplicates('Zona'), on='Zona', how='left')
+        
+        if not crtmp_df.empty:
+            reporte_final = pd.merge(reporte_final, crtmp_df[['Credito', 'Correo', 'Fecha_Facturada']].drop_duplicates('Credito'), on='Credito', how='left')
+        
+        if asesores_sheets:
+            for item in asesores_sheets:
+                info_df = item["data"]
+                merge_key = item["config"]["merge_on"]
+                if not info_df.empty and merge_key in reporte_final.columns:
+                    info_df[merge_key] = info_df[merge_key].astype(str).str.strip()
+                    reporte_final[merge_key] = reporte_final[merge_key].astype(str).str.strip()
+                    reporte_final = pd.merge(reporte_final, info_df.drop_duplicates(subset=merge_key), on=merge_key, how='left')
 
-        # --- 5. Ejecutar el resto de transformaciones en el orden correcto ---
         print("\n🚀 Iniciando transformaciones finales...")
         reporte_final['Empresa'] = np.where(reporte_final['Tipo_Credito'] == 'DF', 'FINANSUEÑOS', 'ARPESOD')
         

@@ -117,7 +117,7 @@ configuracion = {
               "merge_on": "Nombre_Vendedor"
               },
             { 
-                "sheet_name": "Centro Costos",
+              "sheet_name": "Centro Costos",
               "usecols": ["CENTRO DE COSTOS", "ACTIVO"], 
               "rename_map": { "CENTRO DE COSTOS": "Codigo_Centro_Costos",
                               "ACTIVO": "Activo_Centro_Costos" }, 
