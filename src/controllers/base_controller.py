@@ -22,7 +22,6 @@ class BaseMensualController:
         """Abre un diálogo para seleccionar uno o varios archivos."""
         filetypes = [("Excel files", "*.xlsx *.XLSX *.xls *.XLS")]
         
-        # Permitir seleccionar múltiples archivos para estas categorías
         if tipo_archivo in ["ANALISIS", "R91", "VENCIMIENTOS", "R03"]:
             rutas = filedialog.askopenfilenames(title=f"Seleccione archivos para {tipo_archivo}", filetypes=filetypes)
         else:
@@ -31,7 +30,6 @@ class BaseMensualController:
 
         if rutas:
             self.rutas_archivos[tipo_archivo] = list(rutas)
-            # Mostramos solo el nombre del primer archivo o un conteo si son varios
             display_text = Path(rutas[0]).name
             if len(rutas) > 1:
                 display_text = f"{len(rutas)} archivos seleccionados"
@@ -41,18 +39,20 @@ class BaseMensualController:
 
     def procesar_archivos(self):
         """Inicia el procesamiento de los archivos en un hilo separado para no congelar la UI."""
-        # Desactivar botón para evitar múltiples clics
         self.view.procesar_button.config(state="disabled")
         self.view.actualizar_estado("Iniciando proceso...", 0)
         
-        # Ejecutar el proceso pesado en otro hilo
         thread = threading.Thread(target=self._ejecutar_proceso)
         thread.start()
 
     def _ejecutar_proceso(self):
         """Lógica de procesamiento que se ejecuta en segundo plano."""
         try:
-            # Aplanar la lista de rutas de archivos
+            # --- INICIO: LEER FECHAS DEL FILTRO ---
+            start_date = self.view.start_date_entry.get() or None
+            end_date = self.view.end_date_entry.get() or None
+            # --- FIN: LEER FECHAS DEL FILTRO ---
+
             lista_final_rutas = []
             for lista_rutas in self.rutas_archivos.values():
                 lista_final_rutas.extend(lista_rutas)
@@ -65,31 +65,32 @@ class BaseMensualController:
             service = ReportService(config=configuracion)
 
             self.view.actualizar_estado("Generando reporte consolidado...", 30)
+            
+            # --- MODIFICADO: Pasar las fechas al servicio ---
             reporte_final = service.generate_consolidated_report(
                 file_paths=lista_final_rutas,
-                orden_columnas=ORDEN_COLUMNAS_FINAL
+                orden_columnas=ORDEN_COLUMNAS_FINAL,
+                start_date=start_date,
+                end_date=end_date
             )
 
             if reporte_final is None or reporte_final.empty:
-                raise Exception("El reporte final está vacío o no se generó. Revise los archivos de entrada.")
+                raise Exception("El reporte final está vacío o no se generó. Verifique los archivos de entrada y el rango de fechas.")
 
             self.view.actualizar_estado("Esperando para guardar el archivo...", 90)
 
-            # --- NUEVO: Preguntar al usuario dónde guardar el archivo ---
             nombre_archivo_salida = filedialog.asksaveasfilename(
                 title="Guardar reporte como...",
                 defaultextension=".xlsx",
                 filetypes=[("Archivos de Excel", "*.xlsx"), ("Todos los archivos", "*.*")],
-                initialfile="Reporte_Consolidado_Final.xlsx"  # Nombre sugerido
+                initialfile="Reporte_Consolidado_Final.xlsx"
             )
 
-            # Si el usuario cancela el diálogo, la ruta estará vacía
             if not nombre_archivo_salida:
                 self.view.actualizar_estado("Guardado cancelado por el usuario.", 0)
                 messagebox.showinfo("Cancelado", "La operación de guardado fue cancelada.")
                 return
 
-            # Si el usuario seleccionó una ruta, procedemos a guardar
             reporte_final.to_excel(nombre_archivo_salida, index=False, sheet_name='Reporte Consolidado')
             self.view.actualizar_estado("¡Éxito! Reporte guardado.", 100)
             messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}")
@@ -98,5 +99,4 @@ class BaseMensualController:
             messagebox.showerror("Error en el Proceso", f"Ocurrió un error: {str(e)}")
             self.view.actualizar_estado(f"Error: {str(e)}", 0)
         finally:
-            # Reactivar el botón al finalizar, sin importar el resultado
             self.view.procesar_button.config(state="normal")

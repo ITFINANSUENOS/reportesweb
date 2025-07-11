@@ -15,10 +15,10 @@ class BaseMensualView(tk.Toplevel):
 
         # Configuración de la ventana
         self.title("Generar Base Mensual")
-        self.geometry("800x600")
+        self.geometry("800x650") # Aumentamos un poco la altura
         self.configure(bg="#F0F0F0")
 
-        # --- Frame principal con scroll para manejar muchos archivos ---
+        # --- Frame principal con scroll ---
         main_frame = ttk.Frame(self, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -68,13 +68,30 @@ class BaseMensualView(tk.Toplevel):
             label = ttk.Label(frame_archivo, text=f"{desc}:", width=35, background="#FFFFFF")
             label.pack(side=tk.LEFT, padx=5)
 
-            # Etiqueta que mostrará el estado del archivo
             ruta_label = ttk.Label(frame_archivo, text="No seleccionado", relief="sunken", width=40, anchor="w", padding=5)
             ruta_label.pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
             self.rutas_labels[key] = ruta_label
 
             boton = ttk.Button(frame_archivo, text="Seleccionar...", command=lambda k=key: self.controller.seleccionar_archivo(k))
             boton.pack(side=tk.LEFT, padx=5)
+
+        # --- INICIO: NUEVA SECCIÓN PARA FILTRO DE FECHAS ---
+        date_filter_frame = ttk.LabelFrame(scrollable_frame, text=" Filtro por Fecha (Opcional) ", padding="10")
+        date_filter_frame.pack(fill=tk.X, padx=20, pady=(20, 10))
+
+        start_date_label = ttk.Label(date_filter_frame, text="Fecha de Inicio (dd/mm/yyyy):")
+        start_date_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.start_date_entry = ttk.Entry(date_filter_frame, width=20)
+        self.start_date_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+        end_date_label = ttk.Label(date_filter_frame, text="Fecha de Fin (dd/mm/yyyy):")
+        end_date_label.grid(row=0, column=2, padx=15, pady=5, sticky="w")
+        self.end_date_entry = ttk.Entry(date_filter_frame, width=20)
+        self.end_date_entry.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
+        
+        date_filter_frame.columnconfigure(1, weight=1)
+        date_filter_frame.columnconfigure(3, weight=1)
+        # --- FIN DE LA NUEVA SECCIÓN ---
 
         # --- Botón de Procesar y Estado ---
         action_frame = ttk.Frame(scrollable_frame, padding="10", style='Card.TFrame')
@@ -100,7 +117,7 @@ class BaseMensualView(tk.Toplevel):
                 text=display_text, 
                 background="#D4EDDA",  # Un fondo verde claro para indicar éxito
                 foreground="#155724",  # Texto oscuro para buena legibilidad
-                relief="flat"          # Borde plano
+                relief="flat"        # Borde plano
             )
             self.update_idletasks()
     
