@@ -85,6 +85,73 @@ class ReportService:
             df['Credito'] = df['Tipo_Credito'].astype(str) + '-' + df['Numero_Credito'].astype(str).str.replace('<NA>', '', regex=False)
         return df
     
+    def _add_products_and_gifts(self, reporte_df, crtmp_df):
+        """
+        Añade columnas de productos/obsequios y sus cantidades al reporte final, 
+        usando una llave de agrupación diferente por empresa.
+        """
+        print("🎁 Agregando productos, obsequios y cantidades al reporte final...")
+        
+        if crtmp_df.empty:
+            reporte_df['Nombre_Producto'] = 'NO DISPONIBLE'
+            reporte_df['Obsequio'] = 'NO DISPONIBLE'
+            reporte_df['Cantidad_Producto'] = 0
+            reporte_df['Cantidad_Obsequio'] = 0
+            reporte_df['Cantidad_Total_Producto'] = 0
+            return reporte_df
+
+        df_items = crtmp_df.copy()
+        # Limpiar datos de venta y cantidad para los cálculos
+        df_items['Total_Venta'] = pd.to_numeric(df_items['Total_Venta'], errors='coerce')
+        df_items['Cantidad_Item'] = pd.to_numeric(df_items['Cantidad_Item'], errors='coerce').fillna(0)
+
+        def join_unique(series):
+            items = series.dropna().astype(str).unique()
+            return ', '.join(items) if len(items) > 0 else 'NO APLICA'
+
+        # 1. Crear mapas de nombres y cantidades desde CRTMP
+        # La llave de estos mapas es el ID del documento ('Credito' o 'Factura_Venta')
+        es_producto = df_items['Total_Venta'] > 6000
+        es_obsequio = df_items['Total_Venta'] <= 6000
+
+        mapa_nombres_productos = df_items[es_producto].groupby('Credito')['Nombre_Producto'].apply(join_unique)
+        mapa_nombres_obsequios = df_items[es_obsequio].groupby('Credito')['Nombre_Producto'].apply(join_unique)
+        
+        mapa_cantidad_productos = df_items[es_producto].groupby('Credito')['Cantidad_Item'].sum()
+        mapa_cantidad_obsequios = df_items[es_obsequio].groupby('Credito')['Cantidad_Item'].sum()
+
+        # 2. Asignar los valores al reporte final usando la llave correcta por empresa
+        es_arpesod = reporte_df['Empresa'] == 'ARPESOD'
+        es_finansuenos = reporte_df['Empresa'] == 'FINANSUEÑOS'
+
+        # Asignar nombres
+        reporte_df.loc[es_arpesod, 'Nombre_Producto'] = reporte_df.loc[es_arpesod, 'Credito'].map(mapa_nombres_productos)
+        reporte_df.loc[es_arpesod, 'Obsequio'] = reporte_df.loc[es_arpesod, 'Credito'].map(mapa_nombres_obsequios)
+        reporte_df.loc[es_finansuenos, 'Nombre_Producto'] = reporte_df.loc[es_finansuenos, 'Factura_Venta'].map(mapa_nombres_productos)
+        reporte_df.loc[es_finansuenos, 'Obsequio'] = reporte_df.loc[es_finansuenos, 'Factura_Venta'].map(mapa_nombres_obsequios)
+        
+        # Asignar cantidades
+        reporte_df.loc[es_arpesod, 'Cantidad_Producto'] = reporte_df.loc[es_arpesod, 'Credito'].map(mapa_cantidad_productos)
+        reporte_df.loc[es_arpesod, 'Cantidad_Obsequio'] = reporte_df.loc[es_arpesod, 'Credito'].map(mapa_cantidad_obsequios)
+        reporte_df.loc[es_finansuenos, 'Cantidad_Producto'] = reporte_df.loc[es_finansuenos, 'Factura_Venta'].map(mapa_cantidad_productos)
+        reporte_df.loc[es_finansuenos, 'Cantidad_Obsequio'] = reporte_df.loc[es_finansuenos, 'Factura_Venta'].map(mapa_cantidad_obsequios)
+        
+        # 3. Rellenar vacíos y calcular el total
+        reporte_df['Nombre_Producto'].fillna('NO APLICA', inplace=True)
+        reporte_df['Obsequio'].fillna('NO APLICA', inplace=True)
+        reporte_df['Cantidad_Producto'].fillna(0, inplace=True)
+        reporte_df['Cantidad_Obsequio'].fillna(0, inplace=True)
+        
+        # Convertir a enteros para que no se muestren decimales (ej. 1.0)
+        reporte_df['Cantidad_Producto'] = reporte_df['Cantidad_Producto'].astype(int)
+        reporte_df['Cantidad_Obsequio'] = reporte_df['Cantidad_Obsequio'].astype(int)
+        
+        # Calcular la cantidad total
+        reporte_df['Cantidad_Total_Producto'] = reporte_df['Cantidad_Producto'] + reporte_df['Cantidad_Obsequio']
+        
+        print("✅ Productos, obsequios y cantidades asignados correctamente.")
+        return reporte_df
+
      # --- NUEVO MÉTODO PARA ENRIQUECER DETALLES DEL CRÉDITO ---
     def _enrich_credit_details(self, reporte_df, sc04_df, desembolsos_df):
         """
@@ -143,52 +210,85 @@ class ReportService:
         return reporte_df
     
     # --- NUEVO MÉTODO PARA PROCESAR FECHAS DE VENCIMIENTOS ---
-    def _process_vencimientos_data(self, vencimientos_df):
+    def _calculate_due_date_details(self, reporte_df):
         """
-        Filtra el dataframe de vencimientos para mantener una única entrada por 'Credito'.
-        Prioriza las fechas dentro del mes y año en curso. Si no existen,
-        selecciona la fecha más reciente disponible para ese crédito.
+        Calcula todas las columnas de vigencia y atraso directamente sobre el
+        reporte final. Esta versión es más robusta y clara.
         """
-        print("⚙️  Procesando fechas de VENCIMIENTOS con lógica de prioridad...")
+        print("⚙️  Calculando detalles de cuotas vigentes y atrasadas...")
 
-        # Si el dataframe está vacío, no hay nada que hacer
-        if vencimientos_df.empty:
-            return pd.DataFrame()
+        if 'Fecha_Cuota_Vigente' not in reporte_df.columns:
+            print("⚠️ No se encontraron datos de vencimientos para procesar.")
+            return reporte_df.drop_duplicates(subset='Credito').copy()
 
-        # 1. Crear una copia y asegurar que los datos clave existen y tienen el formato correcto
-        df = vencimientos_df.copy()
+        # 1. Preparar una copia y limpiar los datos necesarios
+        df = reporte_df.copy()
         df['Fecha_Cuota_Vigente'] = pd.to_datetime(df['Fecha_Cuota_Vigente'], errors='coerce')
-        df.dropna(subset=['Credito', 'Fecha_Cuota_Vigente'], inplace=True)
-
-        # 2. Obtener el mes y año actual
-        today = pd.Timestamp.now()
-        current_month = today.month
-        current_year = today.year
-
-        # 3. Prioridad 1: Filtrar créditos con fechas en el mes y año actual
-        df_current_month = df[
-            (df['Fecha_Cuota_Vigente'].dt.month == current_month) &
-            (df['Fecha_Cuota_Vigente'].dt.year == current_year)
-        ]
+        df['Valor_Cuota_Vigente'] = pd.to_numeric(df['Valor_Cuota_Vigente'], errors='coerce')
+        today = pd.Timestamp.now().normalize()
         
-        # De las fechas del mes actual, nos quedamos con la más reciente por cada crédito
-        df_current_month = df_current_month.sort_values('Fecha_Cuota_Vigente', ascending=False)
-        result_current_month = df_current_month.drop_duplicates(subset='Credito', keep='first')
+        # Eliminar filas donde la fecha es inválida para evitar errores en los cálculos
+        df.dropna(subset=['Fecha_Cuota_Vigente'], inplace=True)
 
-        # 4. Prioridad 2: Procesar los créditos que NO se encontraron en el paso anterior
-        credits_found = result_current_month['Credito'].unique()
-        df_fallback = df[~df['Credito'].isin(credits_found)]
+        # --- Parte 2: Calcular todos los datos necesarios en mapas ---
         
-        # De los créditos restantes, nos quedamos con la fecha más reciente (la última)
-        df_fallback = df_fallback.sort_values('Fecha_Cuota_Vigente', ascending=False)
-        result_fallback = df_fallback.drop_duplicates(subset='Credito', keep='first')
+        # Mapa para la última cuota vigente del mes
+        df_vigentes = df[(df['Fecha_Cuota_Vigente'].dt.year == today.year) & (df['Fecha_Cuota_Vigente'].dt.month == today.month)].copy()
+        idx_ultima_vigente = df_vigentes.groupby('Credito')['Fecha_Cuota_Vigente'].idxmax()
+        mapa_vigentes = df.loc[idx_ultima_vigente].set_index('Credito')
 
-        # 5. Combinar los dos resultados para obtener el dataframe final
-        final_vencimientos_df = pd.concat([result_current_month, result_fallback], ignore_index=True)
+        # Mapa para la primera cuota en mora (la más antigua)
+        df_atrasados = df[df['Fecha_Cuota_Vigente'] < today].copy()
+        idx_primera_mora = df_atrasados.groupby('Credito')['Fecha_Cuota_Vigente'].idxmin()
+        mapa_primera_mora = df.loc[idx_primera_mora].set_index('Credito')
 
-        print(f"✅ Fechas de VENCIMIENTOS procesadas. Se seleccionaron {len(final_vencimientos_df)} registros únicos.")
+        # Mapa para el valor total vencido
+        mapa_valor_vencido = df_atrasados.groupby('Credito')['Valor_Cuota_Vigente'].sum()
+
+        # --- Parte 3: Construir el reporte final sin duplicados ---
+        reporte_final = reporte_df.drop_duplicates(subset='Credito').copy()
+
+        # --- Parte 4: Asignar todos los valores usando los mapas ---
+        reporte_final['Fecha_Cuota_Vigente'] = reporte_final['Credito'].map(mapa_vigentes['Fecha_Cuota_Vigente'])
+        reporte_final['Cuota_Vigente'] = reporte_final['Credito'].map(mapa_vigentes['Cuota_Vigente'])
+        reporte_final['Valor_Cuota_Vigente'] = reporte_final['Credito'].map(mapa_vigentes['Valor_Cuota_Vigente'])
         
-        return final_vencimientos_df
+        reporte_final['Fecha_Cuota_Atraso'] = reporte_final['Credito'].map(mapa_primera_mora['Fecha_Cuota_Vigente'])
+        reporte_final['Primera_Cuota_Mora'] = reporte_final['Credito'].map(mapa_primera_mora['Cuota_Vigente'])
+        reporte_final['Valor_Cuota_Atraso'] = reporte_final['Credito'].map(mapa_primera_mora['Valor_Cuota_Vigente'])
+        reporte_final['Valor_Vencido'] = reporte_final['Credito'].map(mapa_valor_vencido)
+
+        # --- Parte 5: Formatear y rellenar ---
+        expirada_mask = reporte_final['Fecha_Cuota_Vigente'].isnull()
+        reporte_final['Fecha_Cuota_Vigente'] = reporte_final['Fecha_Cuota_Vigente'].dt.strftime('%d/%m/%Y')
+        reporte_final['Fecha_Cuota_Atraso'] = reporte_final['Fecha_Cuota_Atraso'].dt.strftime('%d/%m/%Y')
+        
+        reporte_final.loc[expirada_mask, ['Fecha_Cuota_Vigente', 'Cuota_Vigente', 'Valor_Cuota_Vigente']] = 'VIGENCIA EXPIRADA'
+        
+        reporte_final.fillna({
+            'Valor_Vencido': 0, 'Valor_Cuota_Atraso': 0,
+            'Primera_Cuota_Mora': 'SIN MORA', 'Fecha_Cuota_Atraso': 'SIN MORA'
+        }, inplace=True)
+        
+        print("✅ Detalles de cuotas calculados correctamente.")
+        return reporte_final
+    def _adjust_arrears_status(self, reporte_df):
+        """
+        Ajusta el estado de mora basado en la columna 'Dias_Atraso' del reporte final.
+        """
+        print("🔧 Ajustando estado final de la mora...")
+        if 'Dias_Atraso' in reporte_df.columns:
+            # Máscara para créditos que están al día (Dias_Atraso es 0 o nulo)
+            sin_mora_mask = (pd.to_numeric(reporte_df['Dias_Atraso'], errors='coerce').fillna(0) == 0)
+            
+            columnas_mora_a_limpiar = ['Fecha_Cuota_Atraso', 'Primera_Cuota_Mora', 'Valor_Cuota_Atraso', 'Valor_Vencido']
+            
+            for col in columnas_mora_a_limpiar:
+                if col in reporte_df.columns:
+                    valor_a_poner = 0 if 'Valor' in col else 'SIN MORA'
+                    reporte_df.loc[sin_mora_mask, col] = valor_a_poner
+        
+        return reporte_df
     
     # --- NUEVO MÉTODO PARA CORREGIR VALORES DE CUOTAS ---
     def _clean_installment_data(self, reporte_df):
@@ -437,8 +537,10 @@ class ReportService:
     def _finalize_report(self, reporte_df, orden_columnas):
         """Realiza la limpieza, formato y reordenamiento final del reporte."""
         print("🧹 Realizando transformaciones y limpieza final...")
-        cols_a_borrar = [col for col in reporte_df.columns if any(sufijo in col for sufijo in ['_Venc', '_R03', '_Analisis'])]
-        reporte_df = reporte_df.drop(columns=cols_a_borrar, errors='ignore')
+        columnas_a_eliminar = ['Saldo_Factura'] + [
+            col for col in reporte_df.columns if any(sufijo in col for sufijo in ['_Venc', '_R03', '_Analisis'])
+        ]
+        reporte_df.drop(columns=columnas_a_eliminar, inplace=True, errors='ignore')
         
         columnas_de_fecha = ['Fecha_Cuota_Vigente', 'Fecha_Facturada']
 
@@ -481,7 +583,6 @@ class ReportService:
             df_list = [item["data"] if isinstance(item, dict) else item for item in items]
             return pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
 
-        # ... (toda la carga de dataframes: analisis_df, r91_df, etc. se queda igual)
         analisis_df = safe_concat(dataframes_por_tipo.get("ANALISIS", []))
         r91_df = safe_concat(dataframes_por_tipo.get("R91", []))
         vencimientos_df = safe_concat(dataframes_por_tipo.get("VENCIMIENTOS", []))
@@ -506,10 +607,6 @@ class ReportService:
         analisis_df = self._create_credit_key(analisis_df)
         vencimientos_df = self._create_credit_key(vencimientos_df)
         crtmp_df = self._create_credit_key(crtmp_df)
-        
-        # 3. AHORA SÍ, procesar los vencimientos, ya que 'Credito' existe
-        vencimientos_df = self._process_vencimientos_data(vencimientos_df)
-        # --- FIN DE LA CORRECCIÓN ---
 
         reporte_final['Empresa'] = np.where(reporte_final['Tipo_Credito'] == 'DF', 'FINANSUEÑOS', 'ARPESOD')
         
@@ -544,13 +641,17 @@ class ReportService:
                 reporte_final[merge_key] = reporte_final[merge_key].astype(str).str.strip()
                 reporte_final = pd.merge(reporte_final, info_df.drop_duplicates(merge_key), on=merge_key, how='left')
         
+        
         # ... (el resto del método, con las llamadas a _assign_sales_invoice, _enrich_credit_details, etc., permanece igual)
+        reporte_final = self._calculate_due_date_details(reporte_final)
         reporte_final = self._assign_sales_invoice(reporte_final, crtmp_df)
+        reporte_final = self._add_products_and_gifts(reporte_final, crtmp_df)        
         reporte_final = self._enrich_credit_details(reporte_final, sc04_df, desembolsos_df)
         reporte_final = self._clean_installment_data(reporte_final)
         reporte_final = self._map_call_center_data(reporte_final)
         reporte_final = self._calculate_balances(reporte_final, fnz003_df)
         reporte_final = self._calculate_goal_metrics(reporte_final, metas_franjas_df)
+        reporte_final = self._adjust_arrears_status(reporte_final)
         reporte_final = self._finalize_report(reporte_final, orden_columnas)
 
         return reporte_final

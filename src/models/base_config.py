@@ -9,9 +9,9 @@ configuracion = {
                         "diasatras": "Dias_Atraso", 
                         "cuotaspag": "Cuotas_Pagadas", 
                         "cedula" : "Cedula_Cliente", 
-                        "saldofac":"Saldo_Factura", 
                         "tipo":"Tipo_Credito", 
-                        "numero":"Numero_Credito" }
+                        "numero":"Numero_Credito",
+                        "saldofac":"Saldo_Factura" }
     },
     "R91": {
         "usecols": ["VINNOMBRE", "VENNOMBRE", "MCDZONA", "MCDVINCULA", "MCDNUMCRU1", 
@@ -65,13 +65,16 @@ configuracion = {
         }
     },
     "CRTMPCONSULTA1":{
-        "usecols":["CORREO","FECHA_FACT","TIPO_DOCUM","NUMERO_DOC","IDENTIFICA"],
+        "usecols":["CORREO","FECHA_FACT","TIPO_DOCUM","NUMERO_DOC","IDENTIFICA","NOMBRE_PRO","TOTVENTA","CANTIDAD"],
         "rename_map":{ 
                       "CORREO": "Correo", 
                       "FECHA_FACT":"Fecha_Facturada", 
                       "TIPO_DOCUM":"Tipo_Credito", 
                       "NUMERO_DOC":"Numero_Credito", 
-                      "IDENTIFICA":"Cedula_Cliente" }
+                      "IDENTIFICA":"Cedula_Cliente",
+                      "NOMBRE_PRO":"Nombre_Producto",
+                      "TOTVENTA":"Total_Venta",
+                      "CANTIDAD": "Cantidad_Item" }
     },
     "FNZ003":{
         "usecols":["CONCEPTO","SALDO","DESEMBOLSO", "NUMERO"],
@@ -140,58 +143,41 @@ configuracion = {
 
 ORDEN_COLUMNAS_FINAL = [
     # --- Identificadores Principales ---
-    'Credito',
-    'Factura_Venta',
     'Empresa',
+    'Tipo_Credito',
+    'Numero_Credito',
+    'Credito',
+    'Fecha_Facturada',
+    'Factura_Venta',
+    'Nombre_Producto',
+    'Cantidad_Producto',
+    'Obsequio',
+    'Cantidad_Obsequio',
+    'Cantidad_Total_Producto',
     'Cedula_Cliente',
     'Nombre_Cliente',
-    # --- Fechas ---
-    'Fecha_Facturada',
-    # --- Información de Contacto y Ubicación ---
+    'Correo',
+    'Telefono',
     'Direccion',
     'Barrio',
     'Nombre_Ciudad',
-    'Telefono',
-    'Celular',
-    'Correo',
-    # --- Detalles del Crédito ---
-    'Tipo_Credito',
-    'Numero_Credito',
-    'Total_Cuotas',
-    'Valor_Cuota',
-    'Valor_Desembolso',
-    # --- Estado de Mora ---
-    'Dias_Atraso',
-    'Franja_Mora',
-    'Cuotas_Pagadas',
-    'Cuota_Vigente',
-    'Valor_Cuota_Vigente',
-    'Fecha_Cuota_Vigente',
-    # --- Saldos ---
-    'Saldo_Factura',
-    'Saldo_Capital',
-    'Saldo_Avales',
-    'Saldo_Interes_Corriente',
-    # --- Personal Asignado ---
     'Zona',
     'Cobrador',
     'Telefono_Cobrador',
-    'Centro_Costos',
-    'Codigo_Centro_Costos',
-    'Activo_Centro_Costos',
+    'Call_Center_Apoyo',
+    'Nombre_Call_Center',
+    'Telefono_Call_Center',
+    'Regional',
     'Codigo_Vendedor',
     'Nombre_Vendedor',
     'Movil_Vendedor',
     'Lider_Zona',
     'Movil_Lider',
-    "Regional",
-    "Gestor",
-    "Telefono_Gestor",
-    # --- Información de Call Center ---
-    'Call_Center_Apoyo',
-    'Nombre_Call_Center',
-    'Telefono_Call_Center',
-    # --- Codeudores ---
+    'Gestor',
+    'Telefono_Gestor',
+    'Codigo_Centro_Costos',
+    'Centro_Costos',
+    'Activo_Centro_Costos',
     'Codeudor1',
     'Nombre_Codeudor1',
     'Telefono_Codeudor1',
@@ -200,14 +186,30 @@ ORDEN_COLUMNAS_FINAL = [
     'Nombre_Codeudor2',
     'Telefono_Codeudor2',
     'Ciudad_Codeudor2',
-    # --- Datos Internos/Metas ---
+    'Valor_Desembolso',
+    'Total_Cuotas',
+    'Valor_Cuota',
+    'Dias_Atraso',
+    'Franja_Mora',
+    'Saldo_Capital',
+    'Saldo_Interes_Corriente',
+    'Saldo_Avales',
     'Meta_Intereses',
-    'Meta_DC_Al_Dia',
-    'Meta_DC_Atraso',
-    'Meta_Atraso',
     'Meta_General',
     'Meta_%',
     'Meta_$',
     'Meta_T.R_%',
-    'Meta_T.R_$' 
+    'Meta_T.R_$',
+    'Cuotas_Pagadas',
+    'Cuota_Vigente',
+    'Fecha_Cuota_Vigente',
+    'Valor_Cuota_Vigente',
+    'Fecha_Cuota_Atraso',      # <-- NUEVA
+    'Primera_Cuota_Mora',      # <-- NUEVA
+    'Valor_Cuota_Atraso',      # <-- NUEVA
+    'Valor_Vencido',
+    'Meta_DC_Al_Dia',
+    'Meta_DC_Atraso',
+    'Meta_Atraso',
+
 ]
