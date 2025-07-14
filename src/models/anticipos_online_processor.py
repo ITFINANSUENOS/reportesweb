@@ -75,28 +75,40 @@ class AnticiposOnlineProcessor:
                     cell_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
 
                     col_indices = {cell.value: i for i, cell in enumerate(worksheet[1], 1)}
-
                     for cell in worksheet[1]: cell.font = header_font; cell.fill = header_fill; cell.alignment = header_alignment; cell.border = cell_border
                     
                     for row_idx, row in enumerate(worksheet.iter_rows(min_row=2, values_only=True), 2):
                         
-                        if col_indices.get('OBSERVACIONES') and row[col_indices['OBSERVACIONES'] - 1] == 'PAGO TOTAL':
+                        # Obtener valores clave de la fila actual
+                        factura_fs_val = row[col_indices.get('FACTURA_FS', 0) - 1] if 'FACTURA_FS' in col_indices else None
+                        factura_arp_val = row[col_indices.get('FACTURA_ARP', 0) - 1] if 'FACTURA_ARP' in col_indices else None
+                        obs_val = row[col_indices.get('OBSERVACIONES', 0) - 1] if 'OBSERVACIONES' in col_indices else None
+
+                        # Regla 1 (Prioridad Alta): Si la factura indica múltiples carteras, pintar la fila de rojo.
+                        if factura_fs_val == 'MAS DE UNA CARTERA' or factura_arp_val == 'MAS DE UNA CARTERA':
+                            for cell in worksheet[row_idx]:
+                                cell.fill = light_red_fill
+                        
+                        # Regla 2: Si la observación es 'PAGO TOTAL', pintar la fila de amarillo.
+                        elif obs_val == 'PAGO TOTAL':
                             for cell in worksheet[row_idx]:
                                 cell.fill = yellow_fill
 
-                        
-                        elif col_indices.get('OBSERVACIONES') and row[col_indices['OBSERVACIONES'] - 1] == 'REVISAR TIENE 2 CARTERAS':
-                            worksheet.cell(row=row_idx, column=col_indices['OBSERVACIONES']).fill = blue_fill
-                        
-                        # Regla 3: Duplicados pintan celdas específicas de rojo
+                        # Regla 3: Duplicados de cédula o factura dentro de la misma hoja (pinta celdas específicas de rojo)
+                        # Esto se mantiene para detectar otro tipo de duplicados.
                         if duplicates_config:
-                            if col_indices.get('CEDULA') and row[col_indices['CEDULA'] - 1] in duplicates_config.get('cedulas', set()):
+                            cedula_val = row[col_indices.get('CEDULA', 0) - 1] if 'CEDULA' in col_indices else None
+                            if cedula_val in duplicates_config.get('cedulas', set()):
                                 worksheet.cell(row=row_idx, column=col_indices['CEDULA']).fill = light_red_fill
-                            if col_indices.get('FACTURA_FS') and row[col_indices['FACTURA_FS'] - 1] in duplicates_config.get('facturas', set()):
+                            
+                            # Solo marcar si la factura no es el texto 'MAS DE UNA CARTERA'
+                            if factura_fs_val and factura_fs_val != 'MAS DE UNA CARTERA' and factura_fs_val in duplicates_config.get('facturas', set()):
                                 worksheet.cell(row=row_idx, column=col_indices['FACTURA_FS']).fill = light_red_fill
-                            if col_indices.get('FACTURA_ARP') and row[col_indices['FACTURA_ARP'] - 1] in duplicates_config.get('facturas', set()):
+                            
+                            if factura_arp_val and factura_arp_val != 'MAS DE UNA CARTERA' and factura_arp_val in duplicates_config.get('facturas', set()):
                                 worksheet.cell(row=row_idx, column=col_indices['FACTURA_ARP']).fill = light_red_fill
                         
+                        # Aplicar bordes a todas las celdas de la fila
                         for cell in worksheet[row_idx]:
                             cell.border = cell_border
 

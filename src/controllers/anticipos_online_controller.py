@@ -83,6 +83,9 @@ class AnticiposController:
                 ]
             
             final_df['OBSERVACIONES'] = np.select(condiciones, opciones, default='REVISAR SI ES CODEUDOR') 
+            
+            multi_cartera_mask = final_df['OBSERVACIONES'] == 'REVISAR TIENE 2 CARTERAS'
+            final_df.loc[multi_cartera_mask, ['FACTURA_FS', 'FACTURA_ARP']] = 'MAS DE UNA CARTERA'
         
             self.view.update_status("Solicitando ubicación para guardar...")
             default_filename = self.data_processor.config.output_filename
