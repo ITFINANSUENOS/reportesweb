@@ -5,7 +5,7 @@ from pathlib import Path
 # Importaciones de tu proyecto
 from src.views.base_view import BaseMensualView
 from src.services.base_services.base import ReportService
-from src.models.base_config import configuracion, ORDEN_COLUMNAS_FINAL
+from src.models.base_model import configuracion, ORDEN_COLUMNAS_FINAL
 
 class BaseMensualController:
     def __init__(self):

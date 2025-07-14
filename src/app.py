@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src.controllers.financiero_controller import FinancieroController
-from src.controllers.anticipos_online_controller import AnticiposController
+from src.controllers.anticipos_controller import AnticiposController
 from src.controllers.base_controller import BaseMensualController
 from src.views.main_window import MainWindow
 

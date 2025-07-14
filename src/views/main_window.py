@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter.font import Font
-from src.models.data_models import AppConfig
+from src.views.config_view.config_view import AppConfig
 
 class MainWindow:
     def __init__(self, root, controller_financiero, controller_anticipos, controller_base_mensual):
@@ -75,7 +75,7 @@ class MainWindow:
         self.action2_button = ttk.Button(
             self.buttons_frame,
             text="Anticipos Online",
-            command=self.anticipos_controller.select_file,  # Debes implementar este método en el controlador
+            command=self.anticipos_controller.start_report_generation,  # Debes implementar este método en el controlador
             style='Accent.TButton'
         )
         self.action2_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
@@ -124,14 +124,20 @@ class MainWindow:
         )
         self.footer_label.pack(side=tk.BOTTOM, pady=(20, 0))
     
-    def update_status(self, message):
-        """Actualiza el mensaje de estado."""
+    def update_status(self, message: str):
+        """Actualiza solo el texto de estado."""
         self.status_label.config(text=message)
         self.root.update_idletasks()
+
     
-    def update_progress(self, value):
-        """Actualiza la barra de progreso."""
-        self.progress_bar['value'] = value
-        self.progress_bar.pack(pady=(0, 20))
+    def update_progress(self, progress: int):
+        """Actualiza solo la barra de progreso."""
+        self.progress_bar['value'] = progress
+        if progress > 0 and not self.progress_bar.winfo_viewable():
+            self.progress_bar.pack(pady=(10, 0))
         self.root.update_idletasks()
-        
+    
+    def update_display(self, message: str, progress: int):
+        """Método unificado que actualiza tanto el texto de estado como la barra de progreso."""
+        self.update_status(message)
+        self.update_progress(progress)    
