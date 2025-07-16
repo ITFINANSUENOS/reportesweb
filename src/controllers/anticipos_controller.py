@@ -22,7 +22,7 @@ class AnticiposController:
                 self.view.update_display(message, progress)
 
             # 1. Llama al servicio para que haga el trabajo pesado
-            final_sheets = self.service.generate_report(file_path, status_update_callback)
+            final_sheets = self.service.generate_report_data(file_path, status_update_callback)
 
             output_path = filedialog.asksaveasfilename(
                 title="Guardar reporte de Anticipos como...",
@@ -35,7 +35,7 @@ class AnticiposController:
             
             # 2. Llama a un método del servicio para guardar el archivo
             self.view.update_display("Guardando archivo formateado...", 95)
-            self.service.save_formatted_excel(output_path, final_sheets)
+            self.service.save_report(output_path, final_sheets,status_update_callback)
             
             messagebox.showinfo("Éxito", f"Reporte generado exitosamente en:\n{output_path}")
 
