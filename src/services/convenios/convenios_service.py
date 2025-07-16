@@ -12,7 +12,7 @@ class ConveniosService:
         self.config = config if config else ConveniosConfig()
         self.loader = DataLoader(self.config)
         self.processor = DataProcessor(self.config)
-        self.writer = ReportWriter() # No necesita config si las columnas están hardcodeadas
+        self.writer = ReportWriter()
 
     def generate_report(self, file_path: str, status_callback):
         """
