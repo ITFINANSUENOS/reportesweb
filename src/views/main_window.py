@@ -4,9 +4,9 @@ from tkinter.font import Font
 from src.views.config_view.config_view import AppConfig
 
 class MainWindow:
-    def __init__(self, root, controller_financiero, controller_anticipos, controller_base_mensual):
+    def __init__(self, root, controller_convenios, controller_anticipos, controller_base_mensual):
         self.root = root
-        self.financiero_controller = controller_financiero
+        self.convenios_controller = controller_convenios
         self.anticipos_controller = controller_anticipos
         self.base_mensual_controller = controller_base_mensual # Guardamos el nuevo controlador
         self.config = AppConfig()
@@ -66,7 +66,7 @@ class MainWindow:
         self.action1_button = ttk.Button(
             self.buttons_frame,
             text="Cruce de convenios",
-            command=self.financiero_controller.select_file,  # Puedes cambiar esto a la acción específica
+            command=self.convenios_controller.start_report_generation,  # Puedes cambiar esto a la acción específica
             style='Accent.TButton'
         )
         self.action1_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
