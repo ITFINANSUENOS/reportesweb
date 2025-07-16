@@ -1,6 +1,7 @@
 # CONFIGURACIÓN DE PROCESAMIENTO POR TIPO DE ARCHIVO
 configuracion = {
     "ANALISIS": {
+        "engine": "xlrd",
         "usecols": ["direccion", "barrio", "nomciudad",
                      "diasatras", "cuotaspag","cedula","saldofac","tipo","numero"],
         "rename_map": { "direccion": "Direccion",
@@ -14,6 +15,7 @@ configuracion = {
                         "saldofac":"Saldo_Factura" }
     },
     "R91": {
+        "engine": "xlrd",
         "usecols": ["VINNOMBRE", "VENNOMBRE", "MCDZONA", "MCDVINCULA", "MCDNUMCRU1", 
                     "MCDTIPCRU1","VENOMBRE","VENCODIGO", "MCDCCOSTO", "CCONOMBRE", 
                     "META_INTER", "META_DC_AL", "META_DC_AT", "META_ATRAS"],
@@ -33,6 +35,7 @@ configuracion = {
                        "META_ATRAS" : "Meta_Atraso" }
     },
     "VENCIMIENTOS": {
+        "engine": "xlrd",
         "usecols": ["MCNVINCULA", "VINTELEFO3", "SALDODOC", "VENCE", "VINTELEFON", "MCNCUOCRU1","MCNTIPCRU1","MCNNUMCRU1"],
         "rename_map": {"MCNTIPCRU1":"Tipo_Credito", 
                        "MCNNUMCRU1":"Numero_Credito", 
