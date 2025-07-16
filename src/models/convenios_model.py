@@ -41,3 +41,5 @@ class ConveniosConfig:
             })
     output_filename: str = "reporte_cruce_convenios.xlsx"
     
+
+    
