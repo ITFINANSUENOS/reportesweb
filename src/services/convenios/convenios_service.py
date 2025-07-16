@@ -1,6 +1,8 @@
+from pathlib import Path
+import os
 import pandas as pd
 import numpy as np
-from typing import Dict, List
+from typing import Dict
 from src.models.convenios_model import ConveniosConfig
 
 class ConveniosService:
@@ -146,7 +148,8 @@ class ConveniosService:
                 main_df=df, 
                 to_merge=counts_df, 
                 left_on=key_col_name, 
-                right_on=id_col_name
+                right_on=id_col_name,
+                how = 'left'
             )
             df[count_col_name] = df[count_col_name].fillna(0).astype(int)
 
@@ -154,6 +157,7 @@ class ConveniosService:
         df['TOTAL_CUENTAS'] = df['CANTIDAD CUENTAS FS'] + df['CANTIDAD CUENTAS ARP']
         factura_original = np.where(df['FACTURA_FS'].notna(), df['FACTURA_FS'], df['FACTURA_ARP'])
         df['FACTURA FINAL'] = np.where(df['TOTAL_CUENTAS'] > 1, 'Mas de una cartera', factura_original).astype(str)
+        df['FACTURA FINAL'].replace('nan', 'SIN CARTERA', inplace=True)
         df.drop_duplicates(subset=list(dfs[f'PAGOS {payment_type.upper()}'].columns), keep='first', inplace=True)
 
         # Fusión de saldos unificados
@@ -207,7 +211,13 @@ class ConveniosService:
 
     def _cleanup_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Elimina columnas temporales y renombra las finales para presentación."""
-        cols_to_drop = ['ESTADO_EMPLEADO', 'CEDULA_FS', 'FACTURA_FS', 'CEDULA_ARP', 'FACTURA_ARP', 'TOTAL_CUENTAS']
+        # Lista exhaustiva de columnas a eliminar, incluyendo las generadas por los merges
+        cols_to_drop = [
+            'ESTADO_EMPLEADO', 'CEDULA_FS', 'FACTURA_FS', 'CEDULA_ARP', 'FACTURA_ARP', 
+            'TOTAL_CUENTAS', 'SALDO_FS', 'SALDO_ARP', 'CENTRO_COSTO_FS', 'CENTRO_COSTO_ARP',
+            'vincedula', 'FACTURA', 'DOCUMENTO_CODEUDOR', 'FACTURA_x', 'FACTURA_y',
+            'CEDULA_FS_x', 'CEDULA_ARP_x', 'CEDULA_FS_y', 'CEDULA_ARP_y'
+        ]
         df.drop(columns=[col for col in cols_to_drop if col in df.columns], inplace=True, errors='ignore')
         
         df.rename(columns={
@@ -218,7 +228,6 @@ class ConveniosService:
 
         return df
 
-    # --- MÉTODOS DE AYUDA PARA FORMATO EN EXCEL ---
     def _clean_reference(self, value):
         try: return str(int(float(value))) if pd.notna(value) and value != '' else ''
         except (ValueError, TypeError): return ''
@@ -233,22 +242,32 @@ class ConveniosService:
     def _highlight_employees_and_duplicates(self, df_styled):
         styles = pd.DataFrame('', index=df_styled.index, columns=df_styled.columns)
         empleado_mask = df_styled['Empleado'].str.upper().str.strip() == 'SI'
-        styles.loc[empleado_mask, 'Empleado'] = 'background-color: lightblue'
+        styles.loc[empleado_mask, :] = 'background-color: lightblue'
         dup_mask = df_styled.duplicated('Documento Cartera', keep=False) & (df_styled['Documento Cartera'] != 'SIN CARTERA')
-        styles.loc[dup_mask, 'Documento Cartera'] = 'background-color: yellow'
+        styles.loc[dup_mask, :] = 'background-color: yellow'
         return styles
     
     def save_report(self, output_path: str, df_bancolombia: pd.DataFrame, df_efecty: pd.DataFrame):
-        """
-        VERSIÓN DE PRUEBA: Guarda los DataFrames directamente sin aplicar estilos.
-        """
-        print("DEBUG: Entrando a save_report. Bancolombia tiene", len(df_bancolombia), "filas. Efecty tiene", len(df_efecty), "filas.")
         
-        # Validación para evitar el error si, por alguna razón, ambos llegan vacíos.
         if df_bancolombia.empty and df_efecty.empty:
-            raise ValueError("No se encontraron datos de pago para generar el reporte.")
+            raise ValueError("No se encontraron datos de pago (Bancolombia o Efecty) para generar el reporte.")
 
-        # Definimos el orden de las columnas como antes
+        # --- INICIO DE CAMBIOS ---
+
+        # 1. FORMATEAR FECHAS a dd/mm/yyyy
+        for df in [df_bancolombia, df_efecty]:
+            if 'Fecha' in df.columns:
+                # errors='coerce' previene errores si alguna fecha no es válida
+                df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce').dt.strftime('%d/%m/%Y')
+
+        # --- FIN DE CAMBIOS ---
+
+        # El resto del método se mantiene como lo tenías...
+        if 'Referencia 1' in df_bancolombia.columns:
+            df_bancolombia['Referencia 1'] = df_bancolombia['Referencia 1'].apply(self._clean_reference)
+        if 'Referencia 2' in df_bancolombia.columns:
+            df_bancolombia['Referencia 2'] = df_bancolombia['Referencia 2'].apply(self._clean_reference)
+
         COLUMN_ORDER_EFECTY = [
             'No', 'Identificación', 'Valor', 'N° de Autorización', 'Fecha', 'Documento Cartera', 
             'C. Costo', 'Empresa', 'Valor Aplicar', 'Valor Anticipos', 'Valor Aprovechamientos', 
@@ -261,21 +280,44 @@ class ConveniosService:
             'Cuentas FS','SALDOS','VALIDACION ULTIMO SALDO'
         ]
 
-        df_efecty = df_efecty.reindex(columns=COLUMN_ORDER_EFECTY)
+        print("DEBUG columnas FALTANTES BANCOLOMBIA:", set(COLUMN_ORDER_BANCOLOMBIA) - set(df_bancolombia.columns))
+        print("DEBUG columnas FALTANTES EFECTY:", set(COLUMN_ORDER_EFECTY) - set(df_efecty.columns))
         df_bancolombia = df_bancolombia.reindex(columns=COLUMN_ORDER_BANCOLOMBIA)
-    
+        df_efecty = df_efecty.reindex(columns=COLUMN_ORDER_EFECTY)
+
+        def is_valid(df):
+            return not df.empty and df.dropna(how='all').shape[0] > 0 and df.dropna(axis=1, how='all').shape[1] > 0
+
         try:
-            # Guardamos directamente, sin la cadena .style.apply()
-            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                print("DEBUG: Guardando hoja Bancolombia...")
-                if not df_bancolombia.empty:
-                    df_bancolombia.to_excel(writer, sheet_name='Bancolombia', index=False)
-                
-                print("DEBUG: Guardando hoja Efecty...")
-                if not df_efecty.empty:
-                    df_efecty.to_excel(writer, sheet_name='Efecty', index=False)
-            
-            print("DEBUG: Archivo guardado con éxito (sin estilos).")
+            temp_path = Path(output_path)
+            temp_dir = temp_path.parent
+            temp_file = temp_dir / ("temp_" + temp_path.name)
+
+            with pd.ExcelWriter(temp_file, engine='openpyxl') as writer:
+                wrote = False
+
+                if is_valid(df_bancolombia):
+                    styled_bancolombia = df_bancolombia.style \
+                        .apply(self._highlight_accounts, axis=1) \
+                        .apply(self._highlight_employees_and_duplicates, axis=None)
+                    styled_bancolombia.to_excel(writer, sheet_name='Bancolombia', index=False)
+                    wrote = True
+
+                if is_valid(df_efecty):
+                    styled_efecty = df_efecty.style \
+                        .apply(self._highlight_accounts, axis=1) \
+                        .apply(self._highlight_employees_and_duplicates, axis=None)
+                    styled_efecty.to_excel(writer, sheet_name='Efecty', index=False)
+                    wrote = True
+
+                if not wrote:
+                    pd.DataFrame({'Mensaje': ['No hay datos para mostrar']}).to_excel(writer, sheet_name='Diagnóstico')
+
+            os.replace(temp_file, output_path)
+            print(f"✅ Reporte guardado exitosamente en {Path(output_path).resolve()}")
 
         except Exception as e:
-            raise ValueError(f"Error al guardar archivo Excel (versión simple): {str(e)}")
+            raise ValueError(f"❌ Error al guardar archivo Excel con estilos: {str(e)}")
+        
+
+        
