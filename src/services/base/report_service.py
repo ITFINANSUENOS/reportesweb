@@ -67,6 +67,36 @@ class ReportService:
             reporte_final = pd.merge(reporte_final, crtmp_df[['Credito', 'Correo', 'Fecha_Facturada']].drop_duplicates('Credito'), on='Credito', how='left')
         
         if asesores_sheets:
+            # Primero obtenemos todos los códigos de vendedor activos
+            codigos_activos = []
+            for item in asesores_sheets:
+                if 'Codigo_Vendedor' in item["data"].columns:
+                    # Convertimos a string, eliminamos espacios y decimales (.0)
+                    codigos = item["data"]['Codigo_Vendedor'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                    codigos_activos.extend(codigos.dropna().unique())
+            
+            # Convertimos a set para eliminar duplicados
+            codigos_activos = set(codigos_activos)
+            print(f"🔍 Total de vendedores activos encontrados: {len(codigos_activos)}")
+            
+            # 2. Preparamos la columna Codigo_Vendedor en el reporte para comparar
+            reporte_final['Codigo_Vendedor_clean'] = (
+                reporte_final['Codigo_Vendedor']
+                .astype(str)
+                .str.strip()
+                .str.replace(r'\.0$', '', regex=True)
+            )
+            
+            # 3. Creamos la columna Vendedor_Activo
+            reporte_final['Vendedor_Activo'] = np.where(
+                reporte_final['Codigo_Vendedor_clean'].isin(codigos_activos),
+                'SI',
+                'INACTIVO'
+            )
+            
+            # 4. Eliminamos la columna temporal
+            reporte_final.drop('Codigo_Vendedor_clean', axis=1, inplace=True)
+    
             for item in asesores_sheets:
                 info_df = item["data"]
                 merge_key = item["config"]["merge_on"]
@@ -81,6 +111,7 @@ class ReportService:
                     
                     reporte_final = pd.merge(reporte_final, info_df.drop_duplicates(subset=merge_key), 
                                         on=merge_key, how='left')
+        
 
         # 5. Aplicar transformaciones
         print("\n🚀 Iniciando transformaciones finales...")

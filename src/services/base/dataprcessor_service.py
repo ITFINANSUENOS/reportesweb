@@ -49,19 +49,24 @@ class ReportProcessorService:
         # 2. Unir metas por franja al reporte principal por 'Zona'
         metas_franjas_df['Zona'] = metas_franjas_df['Zona'].astype(str).str.strip()
         reporte_df['Zona'] = reporte_df['Zona'].astype(str).str.strip()
-        # Guardamos los nombres de las columnas que vamos a borrar al final
         columnas_metas_a_borrar = [col for col in metas_franjas_df.columns if col != 'Zona']
         reporte_df = pd.merge(reporte_df, metas_franjas_df, on='Zona', how='left')
 
-        # --- NUEVO: 3. Convertir las columnas de porcentaje a números ---
+        # 3. Convertir las columnas de porcentaje a números decimales correctamente
         print("   - Convirtiendo porcentajes a números...")
         columnas_porcentaje = ['Meta_1_A_30', 'Meta_31_A_90', 'Meta_91_A_180', 'Meta_181_A_360', 'Total_Recaudo']
         for col in columnas_porcentaje:
             if col in reporte_df.columns:
-                reporte_df[col] = reporte_df[col].astype(str) \
-                                                 .str.replace(',', '.', regex=False) \
-                                                 .str.strip('%')
-                reporte_df[col] = pd.to_numeric(reporte_df[col], errors='coerce') / 100
+                # Primero convertimos a string y limpiamos
+                reporte_df[col] = reporte_df[col].astype(str).str.replace('%', '').str.strip()
+                # Luego convertimos a numérico
+                numeric_col = pd.to_numeric(reporte_df[col], errors='coerce')
+                # Dividimos por 100 solo si el valor es >1 (para manejar ambos casos)
+                reporte_df[col] = np.where(
+                    numeric_col > 1,
+                    numeric_col / 100,
+                    numeric_col
+                )
                 reporte_df[col] = reporte_df[col].fillna(0)
 
 
@@ -126,15 +131,15 @@ class ReportProcessorService:
             reporte_df['Dias_Atraso'].between(31, 90),
             reporte_df['Dias_Atraso'] > 90
         ]
-        valores_mora = ['AL DIA', '1 A 30 DIAS', '31 A 90 DIAS', '91 A 360 DIAS']
+        valores_mora = ['AL DIA', '1 A 30', '31 A 90', '91 A 360']
         reporte_df['Franja_Mora'] = np.select(condiciones_mora, valores_mora, default='SIN INFO')
 
         # 3. Mapear datos del Call Center según la 'Franja_Mora'
         # Se definen las columnas de origen para cada franja
         mapa_columnas = {
-            '1 A 30 DIAS': ('call_center_1_30_dias', 'call_center_nombre_1_30', 'call_center_telefono_1_30'),
-            '31 A 90 DIAS': ('call_center_31_90_dias', 'call_center_nombre_31_90', 'call_center_telefono_31_90'),
-            '91 A 360 DIAS': ('call_center_91_360_dias', 'call_center_nombre_91_360', 'call_center_telefono_91_360')
+            '1 A 30': ('call_center_1_30_dias', 'call_center_nombre_1_30', 'call_center_telefono_1_30'),
+            '31 A 90': ('call_center_31_90_dias', 'call_center_nombre_31_90', 'call_center_telefono_31_90'),
+            '91 A 360': ('call_center_91_360_dias', 'call_center_nombre_91_360', 'call_center_telefono_91_360')
         }
 
         # Se crean las nuevas columnas vacías
@@ -223,19 +228,37 @@ class ReportProcessorService:
 
         # Formatear otras fechas
         if 'Fecha_Facturada' in reporte_df.columns:
-             reporte_df['Fecha_Facturada'] = pd.to_datetime(reporte_df['Fecha_Facturada'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
+            reporte_df['Fecha_Facturada'] = pd.to_datetime(reporte_df['Fecha_Facturada'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
 
-        # Formatear columnas de porcentaje
+        # Formatear columnas de porcentaje (SOLUCIÓN MODIFICADA)
         print("✨ Formateando columnas de porcentaje...")
         columnas_porcentaje = ['Meta_%', 'Meta_T.R_%']
         for col in columnas_porcentaje:
             if col in reporte_df.columns:
-                numeric_col = pd.to_numeric(reporte_df[col], errors='coerce')
-                reporte_df[col] = numeric_col.apply(lambda x: f'{(x * 100):.2f}%' if pd.notna(x) else '')
-        
+                # Convertimos a string y limpiamos
+                str_col = reporte_df[col].astype(str).str.replace('%', '').str.strip()
+                # Convertimos a numérico
+                numeric_col = pd.to_numeric(str_col, errors='coerce')
+                # Aseguramos que sea decimal correcto (19 -> 0.19)
+                numeric_col = np.where(
+                    numeric_col > 1,
+                    numeric_col / 100,
+                    numeric_col
+                ).round(4)  # Redondeamos a 4 decimales para precisión
+                
+                # Guardamos el valor formateado directamente en la columna original
+                reporte_df[col] = (numeric_col * 100).round(0).astype(int).astype(str) + '%'
+                
+                # Para los cálculos que necesiten el valor decimal, usamos numeric_col directamente
+                # (pero no lo guardamos en el dataframe final)
+
         # Eliminar columnas temporales y reordenar
         print("🏗️  Reordenando columnas según la configuración...")
-        columnas_a_eliminar = ['Saldo_Factura'] + [col for col in reporte_df.columns if '_Analisis' in col or '_R03' in col or '_Venc' in col]
+        columnas_a_eliminar = [
+            'Saldo_Factura',
+            *[col for col in reporte_df.columns if '_Analisis' in col or '_R03' in col or '_Venc' in col],
+            *[col for col in reporte_df.columns if col.endswith('_display')]  # Eliminar columnas display si existen
+        ]
         reporte_df.drop(columns=columnas_a_eliminar, inplace=True, errors='ignore')
         
         columnas_actuales = reporte_df.columns.tolist()

@@ -33,7 +33,7 @@ try:
     # --- PASO 2: LECTURA Y PREPARACIÓN INICIAL ---
     print("\n--- PASO 2: Leyendo y preparando el archivo principal ---")
     df = pd.read_fwf(
-        input_file_path, colspecs=colspecs, names=names, encoding='latin-1',
+        input_file_path, colspecs=colspecs, names=names, encoding='cp1252',
         skiprows=1, skipfooter=1, engine='python'
     )
     df['NUMERO DE IDENTIFICACION'] = df['NUMERO DE IDENTIFICACION'].astype(str).str.strip()
