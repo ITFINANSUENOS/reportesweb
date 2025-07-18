@@ -14,18 +14,16 @@ configuracion = {
                         "saldofac":"Saldo_Factura" }
     },
     "R91": {
-        "usecols": ["VINNOMBRE", "VENNOMBRE", "MCDZONA", "MCDVINCULA", "MCDNUMCRU1", 
-                    "MCDTIPCRU1","VENOMBRE","VENCODIGO", "MCDCCOSTO", "CCONOMBRE", 
+        "usecols": ["VINNOMBRE", "MCDZONA", "MCDVINCULA", "MCDNUMCRU1", 
+                    "MCDTIPCRU1","VENCODIGO", "MCDCCOSTO", 
                     "META_INTER", "META_DC_AL", "META_DC_AT", "META_ATRAS"],
         "rename_map": { 
                        "MCDTIPCRU1": "Tipo_Credito", 
                        "MCDNUMCRU1": "Numero_Credito", 
                        "MCDVINCULA" : "Cedula_Cliente", 
                        "VINNOMBRE": "Nombre_Cliente", 
-                       "MCDZONA" : "Zona", 
-                       "VENNOMBRE" : "Nombre_Vendedor", 
-                       "VENCODIGO" : "Codigo_Vendedor", 
-                       "CCONOMBRE" : "Centro_Costos", 
+                       "MCDZONA" : "Zona",  
+                       "VENCODIGO" : "Codigo_Vendedor",  
                        "MCDCCOSTO" : "Codigo_Centro_Costos", 
                        "META_INTER" : "Meta_Intereses", 
                        "META_DC_AL" : "Meta_DC_Al_Dia", 
@@ -33,12 +31,11 @@ configuracion = {
                        "META_ATRAS" : "Meta_Atraso" }
     },
     "VENCIMIENTOS": {
-        "usecols": ["MCNVINCULA", "VINTELEFO3", "SALDODOC", "VENCE", "VINTELEFON", "MCNCUOCRU1","MCNTIPCRU1","MCNNUMCRU1"],
+        "usecols": ["MCNVINCULA", "SALDODOC", "VENCE", "VINTELEFON", "MCNCUOCRU1","MCNTIPCRU1","MCNNUMCRU1"],
         "rename_map": {"MCNTIPCRU1":"Tipo_Credito", 
                        "MCNNUMCRU1":"Numero_Credito", 
                        "MCNVINCULA": "Cedula_Cliente", 
-                       "VINTELEFO3": "Celular", 
-                       "VINTELEFON" : "Telefono", 
+                       "VINTELEFON" : "Celular", 
                        "SALDODOC": "Valor_Cuota_Vigente", 
                        "MCNCUOCRU1": "Cuota_Vigente", 
                        "VENCE": "Fecha_Cuota_Vigente" }
@@ -109,18 +106,21 @@ configuracion = {
     "ASESORES": {
         "sheets": [{ 
               "sheet_name": "ASESORES", 
-              "usecols": ["NOMBRE ASESOR", "MOVIL ASESOR", "LIDER ZONA", "MOVIL LIDER"], 
-              "rename_map": { "NOMBRE ASESOR": "Nombre_Vendedor",
+              "usecols": ["NOMBRE ASESOR","CODIGO_VENDEDOR","JEFE VENTAS", "MOVIL ASESOR", "LIDER ZONA", "MOVIL LIDER"], 
+              "rename_map": { 
+                              "CODIGO_VENDEDOR":"Codigo_Vendedor",
+                              "NOMBRE ASESOR": "Nombre_Vendedor",
                               "MOVIL ASESOR": "Movil_Vendedor", 
                               "LIDER ZONA": "Lider_Zona", 
-                              "MOVIL LIDER": "Movil_Lider" }, 
-              "merge_on": "Nombre_Vendedor"
+                              "MOVIL LIDER": "Movil_Lider",
+                              "JEFE VENTAS":"Jefe_ventas" }, 
+              "merge_on": "Codigo_Vendedor"
               },
             { 
               "sheet_name": "Centro Costos",
-              "usecols": ["CENTRO DE COSTOS", "ACTIVO"], 
+              "usecols": ["CENTRO DE COSTOS", "REGIONAL"], 
               "rename_map": { "CENTRO DE COSTOS": "Codigo_Centro_Costos",
-                              "ACTIVO": "Activo_Centro_Costos" }, 
+                              "REGIONAL": "Centro_Costos" }, 
               "merge_on": "Codigo_Centro_Costos" 
               }
         ]
@@ -173,6 +173,7 @@ ORDEN_COLUMNAS_FINAL = [
     'Movil_Vendedor',
     'Lider_Zona',
     'Movil_Lider',
+    'Jefe_ventas',
     'Gestor',
     'Telefono_Gestor',
     'Codigo_Centro_Costos',
