@@ -4,11 +4,12 @@ from tkinter.font import Font
 from src.views.config_view.config_view import AppConfig
 
 class MainWindow:
-    def __init__(self, root, controller_convenios, controller_anticipos, controller_base_mensual):
+    def __init__(self, root, controller_convenios, controller_anticipos, controller_base_mensual,controller_datacredito):
         self.root = root
         self.convenios_controller = controller_convenios
         self.anticipos_controller = controller_anticipos
-        self.base_mensual_controller = controller_base_mensual # Guardamos el nuevo controlador
+        self.base_mensual_controller = controller_base_mensual
+        self.datacredito_controller = controller_datacredito
         self.config = AppConfig()
         self.setup_ui()
         
@@ -89,6 +90,15 @@ class MainWindow:
             style='Accent.TButton'
         )
         self.base_mensual_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
+
+         # --- 3. ¡AQUÍ VA EL NUEVO BOTÓN! ---
+        self.datacredito_button = ttk.Button(
+            self.buttons_frame,
+            text="Centrales Datacredito",
+            command=lambda: self.datacredito_controller.abrir_vista_datacredito(self.root),
+            style='Accent.TButton'
+        )
+        self.datacredito_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
         
         # Barra de progreso (inicialmente oculta)
         self.progress_bar = ttk.Progressbar(
