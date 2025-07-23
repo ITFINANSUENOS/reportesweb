@@ -146,8 +146,6 @@ configuracion = {
 ORDEN_COLUMNAS_FINAL = [
     # --- Identificadores Principales ---
     'Empresa',
-    'Tipo_Credito',
-    'Numero_Credito',
     'Credito',
     'Fecha_Facturada',
     'Factura_Venta',

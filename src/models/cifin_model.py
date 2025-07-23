@@ -35,11 +35,14 @@ class CifinModel:
         try:
             print("Modelo: Cargando archivo plano...")
             self.df = pd.read_fwf(
-                file_path, colspecs=self.colspecs, names=self.names, 
+                file_path, colspecs=self.colspecs, names=self.names,dtype=str,
                 encoding='cp1252', skiprows=1, skipfooter=1, engine='python'
             )
+            
+            self.df.replace(['nan', 'NaN'], '', inplace=True)
             # Normalizamos el nombre de la columna de identificación para que coincida con el mapa
             self.df.rename(columns={'Nº_identificacion': 'NUMERO DE IDENTIFICACION'}, inplace=True)
+            
             print("Modelo: Archivo plano cargado exitosamente.")
             return self.df
         except Exception as e:
@@ -60,9 +63,13 @@ class CifinModel:
 # --- CONFIGURACIÓN PRINCIPAL ---
 if __name__ == "__main__":
     # 1. Definir rutas
-    ruta_txt_entrada = '/home/balvin/dev/CIFIN MARZO FS.TXT'
-    ruta_excel_correcciones = '/home/balvin/dev/Cédulas a revisar.xlsx' # Asegúrate que este archivo exista
-    ruta_excel_salida = '/home/balvin/dev/Resultado_Cifin_Transformado.xlsx'
+    # ruta_txt_entrada = '/home/balvin/dev/CIFIN MARZO FS.TXT'
+    # ruta_excel_correcciones = '/home/balvin/dev/Cédulas a revisar.xlsx' # Asegúrate que este archivo exista
+    # ruta_excel_salida = '/home/balvin/dev/Resultado_Cifin_Transformado.xlsx'
+    
+    ruta_txt_entrada = 'c:/Users/usuario\Desktop/Reporte LV/cifin/CIFIN MARZO FS.TXT'
+    ruta_excel_correcciones = 'c:/Users/usuario/Desktop/Reporte LV/datacredito/Cédulas a revisar.xlsx' # Asegúrate que este archivo exista
+    ruta_excel_salida = 'c:/Users/usuario/Desktop/Reporte LV/cifin/Resultado_Cifin_Transformado.xlsx'
 
     # 2. Definir el MAPA DE COLUMNAS para CifinModel
     # Clave: Nombre genérico que usa el servicio. Valor: Nombre real de la columna en tu DataFrame.
@@ -79,12 +86,14 @@ if __name__ == "__main__":
         'open_date': 'fecha_inicio',
         'due_date': 'fecha_terminacion',
         'city': 'ciudad_casa',
+        'department': 'departamento_casa',
         'balance_due': 'valor_saldo',
-        'available_value': 'valor_real_pagado', # Asumiendo que este es el campo correcto
+        'available_value': 'cargo_fijo', # Asumiendo que este es el campo correcto
         'monthly_fee': 'valor_cuota',
         'arrears_value': 'valor_mora',
         'arrears_age': 'edad_mora', 
         'periodicity': 'periodicidad',
+        'actual_value_paid':'valor_real_pagado'
         # ... completa con las demás columnas que use el servicio si es necesario
     }
 

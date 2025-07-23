@@ -255,7 +255,7 @@ class ReportProcessorService:
         # Eliminar columnas temporales y reordenar
         print("🏗️  Reordenando columnas según la configuración...")
         columnas_a_eliminar = [
-            'Saldo_Factura',
+            'Saldo_Factura','Tipo_Credito' , 'Numero_Credito',
             *[col for col in reporte_df.columns if '_Analisis' in col or '_R03' in col or '_Venc' in col],
             *[col for col in reporte_df.columns if col.endswith('_display')]  # Eliminar columnas display si existen
         ]

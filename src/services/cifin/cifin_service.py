@@ -12,50 +12,97 @@ class DataProcessorService:
         self._update_data_from_sheets()
         self._clean_and_validate_data()
         self._apply_final_formatting()
+        self._final_cleanup()         
+        self._apply_padding_formats()
+            
         print("Servicio: Transformaciones completadas.")
         return self.df
-
-    # Las funciones ahora usan self.map['nombre_generico'] en lugar de un nombre fijo
     
     def _correct_data_from_excel(self):
-        print("  - Corrigiendo desde Excel...")
+        print("  - Corrigiendo desde Excel...")
+
+        # --- Parte A: Corregir Cédulas ---
+        
+        # Asegura que la columna de identificación en el DataFrame principal sea texto sin espacios.
+        self.df['NUMERO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].astype(int)
+        self.df[self.map['id_number']] = self.df[self.map['id_number']].astype(str).str.strip()
+
         df_cedulas = pd.read_excel(self.ruta_correcciones, sheet_name='Cedulas a corregir')
-        mapa_cedulas = pd.Series(df_cedulas['CEDULA CORRECTA'].astype(str).str.strip().values, index=df_cedulas['CEDULA MAL'].astype(str).str.strip()).to_dict()
+        
+        # Estandariza las columnas en el archivo de corrección también.
+        cedulas_malas = df_cedulas['CEDULA MAL'].astype(str).str.strip()
+        cedulas_buenas = df_cedulas['CEDULA CORRECTA'].astype(str).str.strip()
+        
+        mapa_cedulas = pd.Series(cedulas_buenas.values, index=cedulas_malas).to_dict()
         self.df[self.map['id_number']] = self.df[self.map['id_number']].replace(mapa_cedulas)
 
-        df_vinculado = pd.read_excel(self.ruta_correcciones, sheet_name='Vinculado').set_index(pd.read_excel(self.ruta_correcciones, sheet_name='Vinculado')['CODIGO'].astype(str).str.strip())
-        mapa_vinc = {self.map['full_name']: 'NOMBRE', self.map['address']: 'DIRECCI', self.map['email']: 'VINEMAIL', self.map['phone']: 'TELEFONO'}
+        # --- Parte B: Actualizar campos 'CORREGIR' ---
+        
+        # <-- CORRECCIÓN: Lee el archivo una sola vez.
+        df_vinculado = pd.read_excel(self.ruta_correcciones, sheet_name='Vinculado')
+        # <-- CORRECCIÓN: Estandariza la columna de código antes de usarla como índice.
+        df_vinculado['CODIGO'] = df_vinculado['CODIGO'].astype(str).str.strip()
+        df_vinculado = df_vinculado.set_index('CODIGO')
+        
+        mapa_vinc = {
+            self.map['full_name']: 'NOMBRE', 
+            self.map['address']: 'DIRECCI', 
+            self.map['email']: 'VINEMAIL', 
+            self.map['phone']: 'TELEFONO'
+        }
+        
         for col_df, col_vinc in mapa_vinc.items():
             mascara = self.df[col_df].astype(str).str.strip().str.contains('CORREGIR', case=False, na=False)
             if mascara.any():
+                # La columna 'id_number' ya está limpia y corregida gracias a los pasos anteriores.
                 ids_a_buscar = self.df.loc[mascara, self.map['id_number']]
                 valores_nuevos = ids_a_buscar.map(df_vinculado[col_vinc])
                 self.df.loc[mascara, col_df] = valores_nuevos
 
-        self.df[self.map['id_type']] = 2
+        # --- Parte C: Actualizar Tipos de Identificación ---
+        
+        self.df[self.map['id_type']] = 1 # Valor por defecto
         df_tipos = pd.read_excel(self.ruta_correcciones, sheet_name='Tipos de identificacion')
-        mapa_tipos = pd.Series(df_tipos['CODIGO CIFIN'].values, index=df_tipos['CEDULA CORRECTA'].astype(str).str.strip()).to_dict()
+        
+        # Estandariza la columna de cédulas en el archivo de tipos.
+        cedulas_tipos = df_tipos['CEDULA CORRECTA'].astype(str).str.strip()
+        
+        mapa_tipos = pd.Series(df_tipos['CODIGO CIFIN'].values, index=cedulas_tipos).to_dict()
+        
+        # La columna 'id_number' ya está limpia y corregida.
         self.df[self.map['id_type']] = self.df[self.map['id_number']].map(mapa_tipos).combine_first(self.df[self.map['id_type']])
-        self.df[self.map['id_type']] = self.df[self.map['id_type']].astype(str).str.zfill(2)
+        self.df[self.map['id_type']] = pd.to_numeric(self.df[self.map['id_type']], errors='coerce').astype('Int64').astype(str).str[:2].str.zfill(2)
 
     def _update_data_from_sheets(self):
         print("  - Actualizando desde FNZ001 y R05...")
         self.df[self.map['account_number']] = self.df[self.map['account_number']].astype(str).str.replace(' ', '').str[:20].str.ljust(20)
         
         df_fnz = pd.read_excel(self.ruta_correcciones, sheet_name='FNZ001', usecols=['DSM_TP', 'DSM_NUM', 'VLR_FNZ'])
+        df_fnz['VLR_FNZ'] = (pd.to_numeric(df_fnz['VLR_FNZ'], errors='coerce').fillna(0) / 1000).astype(int)
         df_fnz['llave_base'] = df_fnz['DSM_TP'].astype(str).str.replace(' ', '') + df_fnz['DSM_NUM'].astype(str).str.replace(' ', '')
         tabla_fnz = pd.concat([pd.DataFrame({'FACTURA': df_fnz['llave_base'], 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C1', 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C2', 'VALOR': df_fnz['VLR_FNZ']})])
         mapa_fnz = pd.Series(tabla_fnz.VALOR.values, index=tabla_fnz.FACTURA.astype(str).str.ljust(20)).to_dict()
         self.df[self.map['initial_value']] = self.df[self.map['account_number']].map(mapa_fnz).combine_first(self.df[self.map['initial_value']])
 
-        df_r05 = pd.read_excel(self.ruta_correcciones, sheet_name='R05', usecols=['MCNTIPCRU2', 'MCNNUMCRU2', 'MCNFECHA'])
-        df_r05['FECHA_NUEVA'] = pd.to_datetime(df_r05['MCNFECHA'], format='%d/%m/%Y', errors='coerce').dt.strftime('%Y%m%d')
-        df_r05.dropna(subset=['FECHA_NUEVA'], inplace=True)
+        # 1. Leer las columnas correctas, incluyendo 'ABONO'
+        df_r05 = pd.read_excel(self.ruta_correcciones, sheet_name='R05', usecols=['MCNTIPCRU2', 'MCNNUMCRU2', 'ABONO'])
+        df_r05['ABONO'] = pd.to_numeric(df_r05['ABONO'], errors='coerce').fillna(0)
         df_r05['llave_base'] = df_r05['MCNTIPCRU2'].astype(str).str.replace(' ', '') + df_r05['MCNNUMCRU2'].astype(str).str.replace(' ', '')
-        tabla_r05 = pd.concat([pd.DataFrame({'LLAVE': df_r05['llave_base'], 'FECHA': df_r05['FECHA_NUEVA']}), pd.DataFrame({'LLAVE': df_r05['llave_base'] + 'C1', 'FECHA': df_r05['FECHA_NUEVA']}), pd.DataFrame({'LLAVE': df_r05['llave_base'] + 'C2', 'FECHA': df_r05['FECHA_NUEVA']})])
-        mapa_r05 = tabla_r05.groupby(tabla_r05.LLAVE.astype(str).str.ljust(20))['FECHA'].max().to_dict()
-        self.df[self.map['payment_date']] = self.df[self.map['account_number']].map(mapa_r05).fillna('00000000')
+        abonos_sumados = df_r05.groupby('llave_base')['ABONO'].sum().reset_index()
+        abonos_sumados['ABONO'] = (abonos_sumados['ABONO'] / 1000).astype(int)
+        # 6. Crear la tabla final con C1 y C2
+        tabla_r05 = pd.concat([
+            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'], 'VALOR_ABONO': abonos_sumados['ABONO']}),
+            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C1', 'VALOR_ABONO': abonos_sumados['ABONO']}),
+            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C2', 'VALOR_ABONO': abonos_sumados['ABONO']})
+        ])
 
+        mapa_r05 = pd.Series(tabla_r05.VALOR_ABONO.values, index=tabla_r05.LLAVE.astype(str).str.ljust(20)).to_dict()
+        columna_destino_key = 'actual_value_paid' 
+        nuevos_valores = self.df[self.map['account_number']].map(mapa_r05).fillna(0).astype(int)
+        self.df[self.map[columna_destino_key]] = nuevos_valores
+        
+        
     def _clean_and_validate_data(self):
         print("  - Limpiando y validando datos...")
         letter_replacements = {'Ñ':'N','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U'}
@@ -72,24 +119,56 @@ class DataProcessorService:
         self.df.loc[self.df[self.map['payment_date']].str.upper().str.contains('NA') | (self.df[self.map['payment_date']] == '0'), self.map['payment_date']] = '00000000'
 
         numeric_cols_keys = ['initial_value', 'balance_due', 'available_value', 'monthly_fee', 'arrears_value']
-        columnas_numericas = [self.map[k] for k in numeric_cols_keys]
+        # Obtiene los nombres reales de las columnas desde el mapa
+        columnas_numericas = [self.map[k] for k in numeric_cols_keys if k in self.map]
+
         for col in columnas_numericas:
             self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
-            if col != self.map['available_value']:
-                self.df.loc[self.df[col] < 10000, col] = 0
-        self.df[self.map['available_value']] = 0
+            self.df.loc[self.df[col] <= 10, col] = 0
         self.df[columnas_numericas] = self.df[columnas_numericas].astype(int)
+        
+    def _final_cleanup(self):
+        """
+        Limpia CUALQUIER valor nulo o texto 'nan' restante en todas las
+        columnas no numéricas justo antes de entregar el resultado.
+        """
+        print("  - Realizando limpieza final de valores nulos...")
+        
+        # 1. Define tus columnas numéricas para excluirlas
+        numeric_keys = ['initial_value', 'balance_due', 'available_value', 'monthly_fee', 'arrears_value', 'actual_value_paid']
+        columnas_numericas = [self.map[k] for k in numeric_keys if k in self.map]
+        
+        # 2. Identifica las columnas de texto a limpiar
+        columnas_a_limpiar = self.df.columns.drop(columnas_numericas)
+        
+        # 3. Itera y limpia cada columna de texto de forma robusta
+        for col in columnas_a_limpiar:
+            # Esta cadena de comandos es muy potente:
+            # a. Asegura que todo sea texto.
+            # b. Quita espacios al inicio y al final.
+            # c. Reemplaza 'nan' (en cualquier mayúscula/minúscula) si es el único texto.
+            # d. Reemplaza los NaN de pandas.
+            self.df[col] = self.df[col].astype(str).str.strip()
+            self.df[col] = self.df[col].replace(r'(?i)^nan$', '', regex=True).fillna('')    
+            
 
     def _apply_final_formatting(self):
         print("  - Aplicando formatos finales...")
+        
+        col_ciudad = self.map['city']
+        mascara_ciudad = self.df[col_ciudad].astype(str).str.strip().isin(['', '0']) | self.df[col_ciudad].str.isdigit().fillna(False) | self.df[col_ciudad].isnull()
+        self.df.loc[mascara_ciudad, col_ciudad] = 'POPAYAN'
+
+        col_depto = self.map['department']
+        mascara_depto = self.df[col_depto].astype(str).str.strip().isin(['', '0']) | self.df[col_depto].str.isdigit().fillna(False) | self.df[col_depto].isnull()
+        self.df.loc[mascara_depto, col_depto] = 'CAUCA'
+        
         self.df[self.map['full_name']] = self.df[self.map['full_name']].astype(str).str.replace(r'\s+', ' ', regex=True).str.strip().str.upper()
         self.df[self.map['id_number']] = self.df[self.map['id_number']].astype(str)
         
         self.df.loc[self.df[self.map['id_number']] == '1118291452', self.map['full_name']] = 'FANDINO LAYNE ASTRID'
         self.df.loc[self.df[self.map['id_number']] == '1025529458', self.map['full_name']] = 'MARTINEZ MUNOZ JOSE MANUEL'
         self.df.loc[self.df[self.map['id_number']] == '25559122', self.map['full_name']] = 'RAMIREZ DE CASTRO MARIA ESTELLA'
-
-        self.df.loc[self.df[self.map['city']].astype(str).str.strip().isin(['', 'N/A', '0']), self.map['city']] = 'POPAYAN'
         
         self.df[self.map['phone']] = self.df[self.map['phone']].astype(str).str.replace(r'\D', '', regex=True)
         es_fijo = self.df[self.map['phone']].str.len() == 7
@@ -100,14 +179,45 @@ class DataProcessorService:
         for placeholder in ['CORREGIR', 'PENDIENTE', 'NOTIENE', 'SINC', 'NN@', 'AAA@']:
             self.df.loc[self.df[self.map['email']].str.contains(placeholder, case=False, na=False), self.map['email']] = ''
         self.df.loc[~self.df[self.map['email']].str.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', na=False), self.map['email']] = ''
-
-        # Formatos finales
-        # ... (y así sucesivamente para todos los formatos de longitud y valores fijos)
+        
         self.df[self.map['periodicity']] = '05'
-        self.df[self.map['arrears_age']] = self.df[self.map['arrears_age']].astype(str).str.zfill(2)
+        
+    def _final_cleanup(self):
+        """
+        Limpia CUALQUIER valor nulo o texto 'nan' restante en todas las
+        columnas no numéricas justo antes de aplicar el padding.
+        """
+        print("  - Realizando limpieza final de valores nulos...")
+        numeric_keys = ['initial_value', 'balance_due', 'available_value', 'monthly_fee', 'arrears_value', 'actual_value_paid']
+        columnas_numericas = [self.map[k] for k in numeric_keys if k in self.map]
+        columnas_a_limpiar = self.df.columns.drop(columnas_numericas)
+        
+        for col in columnas_a_limpiar:
+            self.df[col] = self.df[col].astype(str).str.strip()
+            self.df[col] = self.df[col].replace(r'(?i)^nan$', '', regex=True).fillna('')  
+    
+    def _apply_padding_formats(self):
+        """
+        Aplica los formatos de longitud fija (.ljust y .zfill) como último paso.
+        """
+        print("  - Aplicando formatos de longitud y relleno finales...")
+        
+        # Primero nos aseguramos que todas las columnas a rellenar sean de texto
+        # para evitar errores.
+        cols_to_pad = [
+            'arrears_age', 'full_name', 'address', 'city', 'department',
+            'email', 'phone', 'id_number'
+        ]
+        for key in cols_to_pad:
+            if key in self.map:
+                self.df[self.map[key]] = self.df[self.map[key]].astype(str)
+
+        # Ahora aplicamos los formatos de longitud
+        self.df[self.map['arrears_age']] = self.df[self.map['arrears_age']].str.zfill(2)
         self.df[self.map['full_name']] = self.df[self.map['full_name']].str.ljust(60)
-        self.df[self.map['address']] = self.df[self.map['address']].astype(str).str.ljust(60)
+        self.df[self.map['address']] = self.df[self.map['address']].str.ljust(60)
         self.df[self.map['city']] = self.df[self.map['city']].str.ljust(20)
+        self.df[self.map['department']] = self.df[self.map['department']].str.ljust(20)
         self.df[self.map['email']] = self.df[self.map['email']].str.ljust(60)
         self.df[self.map['phone']] = self.df[self.map['phone']].str.zfill(12)
-        self.df[self.map['id_number']] = self.df[self.map['id_number']].str.zfill(15)
+        self.df[self.map['id_number']] = self.df[self.map['id_number']].str.zfill(15)          
