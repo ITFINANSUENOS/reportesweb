@@ -125,7 +125,7 @@ class DataProcessorService:
         self.df[col_celular] = self.df[col_celular].astype(str).str.replace(r'\D', '', regex=True)
         es_fijo_valido = (self.df[col_celular].str.len() == 7)
         es_celular_valido = (self.df[col_celular].str.len() == 10) & (self.df[col_celular].str.startswith('3'))
-        self.df.loc[~(es_fijo_valido | es_celular_valido), col_celular] = '0'
+        self.df.loc[~(es_fijo_valido | es_celular_valido), col_celular] = ''
         
         col_email = 'CORREO ELECTRONICO'
         self.df[col_email] = self.df[col_email].astype(str).str.strip()

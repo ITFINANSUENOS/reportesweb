@@ -105,18 +105,22 @@ class DataProcessorService:
         
     def _clean_and_validate_data(self):
         print("  - Limpiando y validando datos...")
-        letter_replacements = {'Ñ':'N','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U'}
-        chars_to_remove = ['@','°','|','¬','¡','“','#','$','%','&','/','(',')','=','‘','\\','¿','+','~','´','[','{','^','-','_','.',':',',',';','<','>']
+        letter_replacements = {'Ñ':'N','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U','Ü':'U','Ÿ':'Y','Â':'A','Ã':'A','š':'S','©':'C',
+                               'ñ':'N','á':'A','é':'E','í':'I','ó':'O','ú':'U','ü':'U','ÿ':'Y','â':'A','ã':'A'}
+        
+        chars_to_remove = ['@','°','|','¬','¡','“','#','$','%','&','/','(',')','=','‘','\\','¿','+','~','´´','´','[','{','^','-',
+                           '_','.',':',',',';','<','>','Æ','±']
+
         string_cols = self.df.select_dtypes(include='object').columns.drop(self.map['email'], errors='ignore')
         for col in string_cols:
             self.df[col] = self.df[col].astype(str)
             for old, new in letter_replacements.items(): self.df[col] = self.df[col].str.replace(old, new, regex=False)
             for char in chars_to_remove: self.df[col] = self.df[col].str.replace(char, '', regex=False)
         
-        for col_name in [self.map['open_date'], self.map['due_date'], self.map['payment_date']]:
+        for col_name in [self.map['open_date'], self.map['due_date']]:
             self.df[col_name] = pd.to_numeric(self.df[col_name], errors='coerce').fillna(0).astype('Int64').astype(str)
         self.df.loc[self.df[self.map['due_date']] < self.df[self.map['open_date']], self.map['due_date']] = self.df[self.map['open_date']]
-        self.df.loc[self.df[self.map['payment_date']].str.upper().str.contains('NA') | (self.df[self.map['payment_date']] == '0'), self.map['payment_date']] = '00000000'
+        
 
         numeric_cols_keys = ['initial_value', 'balance_due', 'available_value', 'monthly_fee', 'arrears_value']
         # Obtiene los nombres reales de las columnas desde el mapa
@@ -143,11 +147,7 @@ class DataProcessorService:
         
         # 3. Itera y limpia cada columna de texto de forma robusta
         for col in columnas_a_limpiar:
-            # Esta cadena de comandos es muy potente:
-            # a. Asegura que todo sea texto.
-            # b. Quita espacios al inicio y al final.
-            # c. Reemplaza 'nan' (en cualquier mayúscula/minúscula) si es el único texto.
-            # d. Reemplaza los NaN de pandas.
+
             self.df[col] = self.df[col].astype(str).str.strip()
             self.df[col] = self.df[col].replace(r'(?i)^nan$', '', regex=True).fillna('')    
             
@@ -156,12 +156,23 @@ class DataProcessorService:
         print("  - Aplicando formatos finales...")
         
         col_ciudad = self.map['city']
-        mascara_ciudad = self.df[col_ciudad].astype(str).str.strip().isin(['', '0']) | self.df[col_ciudad].str.isdigit().fillna(False) | self.df[col_ciudad].isnull()
-        self.df.loc[mascara_ciudad, col_ciudad] = 'POPAYAN'
-
+        self.df[col_ciudad] = self.df[col_ciudad].astype(str).str.strip().str.upper()
+        cond_ciudad_invalida = (
+            self.df[col_ciudad].isin(['', '0', 'NAN', 'NONE']) |  # Valores vacíos/inválidos
+            self.df[col_ciudad].str.isdigit() |                   # Solo números
+            self.df[col_ciudad].isnull()                          # Valores nulos
+        )
+        self.df.loc[cond_ciudad_invalida, col_ciudad] = 'POPAYAN'
+        
+        # Departamento - siempre Cauca si no hay valor válido
         col_depto = self.map['department']
-        mascara_depto = self.df[col_depto].astype(str).str.strip().isin(['', '0']) | self.df[col_depto].str.isdigit().fillna(False) | self.df[col_depto].isnull()
-        self.df.loc[mascara_depto, col_depto] = 'CAUCA'
+        self.df[col_depto] = self.df[col_depto].astype(str).str.strip().str.upper()
+        cond_depto_invalido = (
+            self.df[col_depto].isin(['', '0', 'NAN', 'NONE']) |   # Valores vacíos/inválidos
+            self.df[col_depto].str.isdigit() |                    # Solo números
+            self.df[col_depto].isnull()                           # Valores nulos
+        )
+        self.df.loc[cond_depto_invalido, col_depto] = 'CAUCA'
         
         self.df[self.map['full_name']] = self.df[self.map['full_name']].astype(str).str.replace(r'\s+', ' ', regex=True).str.strip().str.upper()
         self.df[self.map['id_number']] = self.df[self.map['id_number']].astype(str)
@@ -170,17 +181,39 @@ class DataProcessorService:
         self.df.loc[self.df[self.map['id_number']] == '1025529458', self.map['full_name']] = 'MARTINEZ MUNOZ JOSE MANUEL'
         self.df.loc[self.df[self.map['id_number']] == '25559122', self.map['full_name']] = 'RAMIREZ DE CASTRO MARIA ESTELLA'
         
-        self.df[self.map['phone']] = self.df[self.map['phone']].astype(str).str.replace(r'\D', '', regex=True)
-        es_fijo = self.df[self.map['phone']].str.len() == 7
-        es_celular = (self.df[self.map['phone']].str.len() == 10) & (self.df[self.map['phone']].str.startswith('3'))
-        self.df.loc[~(es_fijo | es_celular), self.map['phone']] = '0'
+        for key in ['home_phone', 'company_phone']:
+            if key in self.map:
+                col = self.map[key]
+                # 1. Limpiar y dejar solo números
+                self.df[col] = self.df[col].astype(str).str.replace(r'\D', '', regex=True)
+                
+                # 2. Definir condiciones de validez
+                es_fijo_valido = self.df[col].str.len() == 7
+                es_celular_valido = (self.df[col].str.len() == 10) & (self.df[col].str.startswith('3'))
+                
+                # 3. Marcar como inválido si no cumple NINGUNA de las dos condiciones
+                mascara_invalida = ~(es_fijo_valido | es_celular_valido)
+                self.df.loc[mascara_invalida, col] = '' # Reemplaza por vacío
 
-        self.df[self.map['email']] = self.df[self.map['email']].astype(str).str.strip()
-        for placeholder in ['CORREGIR', 'PENDIENTE', 'NOTIENE', 'SINC', 'NN@', 'AAA@']:
-            self.df.loc[self.df[self.map['email']].str.contains(placeholder, case=False, na=False), self.map['email']] = ''
-        self.df.loc[~self.df[self.map['email']].str.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', na=False), self.map['email']] = ''
-        
-        self.df[self.map['periodicity']] = '05'
+
+        if 'phone' in self.map:
+            col_celular = self.map['phone']
+            # 1. Limpiar y dejar solo números
+            self.df[col_celular] = self.df[col_celular].astype(str).str.replace(r'\D', '', regex=True)
+            
+            # 2. Definir la única condición de validez
+            es_celular_valido = (self.df[col_celular].str.len() == 10) & (self.df[col_celular].str.startswith('3'))
+            
+            # 3. Marcar como inválido si NO cumple la condición
+            mascara_invalida = ~es_celular_valido
+            self.df.loc[mascara_invalida, col_celular] = ''
+
+            self.df[self.map['email']] = self.df[self.map['email']].astype(str).str.strip()
+            for placeholder in ['CORREGIR', 'PENDIENTE', 'NOTIENE', 'SINC', 'NN@', 'AAA@']:
+                self.df.loc[self.df[self.map['email']].str.contains(placeholder, case=False, na=False), self.map['email']] = ''
+            self.df.loc[~self.df[self.map['email']].str.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', na=False), self.map['email']] = ''
+            
+            self.df[self.map['periodicity']] = '05'
         
     def _final_cleanup(self):
         """
@@ -206,7 +239,7 @@ class DataProcessorService:
         # para evitar errores.
         cols_to_pad = [
             'arrears_age', 'full_name', 'address', 'city', 'department',
-            'email', 'phone', 'id_number'
+            'email', 'phone', 'id_number','cellular'
         ]
         for key in cols_to_pad:
             if key in self.map:
@@ -215,9 +248,12 @@ class DataProcessorService:
         # Ahora aplicamos los formatos de longitud
         self.df[self.map['arrears_age']] = self.df[self.map['arrears_age']].str.zfill(2)
         self.df[self.map['full_name']] = self.df[self.map['full_name']].str.ljust(60)
+        self.df[self.map['account_number']] = self.df[self.map['account_number']].str.ljust(20)
         self.df[self.map['address']] = self.df[self.map['address']].str.ljust(60)
         self.df[self.map['city']] = self.df[self.map['city']].str.ljust(20)
         self.df[self.map['department']] = self.df[self.map['department']].str.ljust(20)
         self.df[self.map['email']] = self.df[self.map['email']].str.ljust(60)
-        self.df[self.map['phone']] = self.df[self.map['phone']].str.zfill(12)
+        self.df[self.map['phone']] = self.df[self.map['phone']].str.ljust(60)
+        self.df[self.map['home_phone']] = self.df[self.map['home_phone']].str.ljust(20)
+        self.df[self.map['company_phone']] = self.df[self.map['company_phone']].str.ljust(20)
         self.df[self.map['id_number']] = self.df[self.map['id_number']].str.zfill(15)          

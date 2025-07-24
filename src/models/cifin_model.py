@@ -63,13 +63,13 @@ class CifinModel:
 # --- CONFIGURACIÓN PRINCIPAL ---
 if __name__ == "__main__":
     # 1. Definir rutas
-    # ruta_txt_entrada = '/home/balvin/dev/CIFIN MARZO FS.TXT'
-    # ruta_excel_correcciones = '/home/balvin/dev/Cédulas a revisar.xlsx' # Asegúrate que este archivo exista
-    # ruta_excel_salida = '/home/balvin/dev/Resultado_Cifin_Transformado.xlsx'
+    ruta_txt_entrada = '/home/balvin/dev/CIFIN MARZO FS.TXT'
+    ruta_excel_correcciones = '/home/balvin/dev/Cédulas a revisar.xlsx' 
+    ruta_excel_salida = '/home/balvin/dev/Resultado_Cifin_Transformado.xlsx'
     
-    ruta_txt_entrada = 'c:/Users/usuario\Desktop/Reporte LV/cifin/CIFIN MARZO FS.TXT'
-    ruta_excel_correcciones = 'c:/Users/usuario/Desktop/Reporte LV/datacredito/Cédulas a revisar.xlsx' # Asegúrate que este archivo exista
-    ruta_excel_salida = 'c:/Users/usuario/Desktop/Reporte LV/cifin/Resultado_Cifin_Transformado.xlsx'
+    # ruta_txt_entrada = 'c:/Users/usuario\Desktop/Reporte LV/cifin/CIFIN MARZO FS.TXT'
+    # ruta_excel_correcciones = 'c:/Users/usuario/Desktop/Reporte LV/datacredito/Cédulas a revisar.xlsx' 
+    # ruta_excel_salida = 'c:/Users/usuario/Desktop/Reporte LV/cifin/Resultado_Cifin_Transformado.xlsx'
 
     # 2. Definir el MAPA DE COLUMNAS para CifinModel
     # Clave: Nombre genérico que usa el servicio. Valor: Nombre real de la columna en tu DataFrame.
@@ -80,6 +80,8 @@ if __name__ == "__main__":
         'address': 'direccion_casa',
         'email': 'correo_electronico',
         'phone': 'numero_celular',
+        'home_phone':'telefono_casa',
+        'company_phone':'telefono_empresa',
         'account_number': 'numero_obligacion',
         'initial_value': 'valor_inicial',
         'payment_date': 'fecha_pago',
