@@ -4,12 +4,15 @@ from tkinter.font import Font
 from src.views.config_view.config_view import AppConfig
 
 class MainWindow:
-    def __init__(self, root, controller_convenios, controller_anticipos, controller_base_mensual,controller_datacredito):
+    def __init__(self, root, controller_convenios, controller_anticipos, controller_base_mensual,
+                 controller_datacredito,controller_cifin):
+        
         self.root = root
         self.convenios_controller = controller_convenios
         self.anticipos_controller = controller_anticipos
         self.base_mensual_controller = controller_base_mensual
         self.datacredito_controller = controller_datacredito
+        self.cifin_controller = controller_cifin
         self.config = AppConfig()
         self.setup_ui()
         
@@ -35,7 +38,8 @@ class MainWindow:
         self.main_frame.configure(style='Card.TFrame')
         
         # Estilo para el marco
-        self.style.configure('Card.TFrame', background=self.config.bg_color, borderwidth=2, relief="groove")
+        # Estilo para el marco
+        self.style.configure('Card.TFrame', background=self.config.bg_color)
         
         # Título
         self.title_label = ttk.Label(
@@ -59,65 +63,59 @@ class MainWindow:
         self.desc_label.pack(pady=(0, 30))
         
         
-        # Frame para contener los botones en una disposición horizontal
-        self.buttons_frame = ttk.Frame(self.main_frame)
-        self.buttons_frame.pack(pady=(0, 20))
+        # Frame principal que contendrá las dos filas de botones
+        self.buttons_container_frame = ttk.Frame(self.main_frame, style='Card.TFrame')
+        self.buttons_container_frame.pack(pady=(0, 20))
+
+        # Frame para la fila SUPERIOR de botones
+        self.top_row_frame = ttk.Frame(self.buttons_container_frame, style='Card.TFrame')
+        self.top_row_frame.pack(pady=(0, 10))
+
+        # Frame para la fila INFERIOR de botones
+        self.bottom_row_frame = ttk.Frame(self.buttons_container_frame, style='Card.TFrame')
+        self.bottom_row_frame.pack()
         
-        # Primer botón de acción
+        # --- Botones de la Fila Superior (3 botones) ---
         self.action1_button = ttk.Button(
-            self.buttons_frame,
+            self.top_row_frame, # <-- Se añade al marco superior
             text="Cruce de convenios",
-            command=self.convenios_controller.start_report_generation,  # Puedes cambiar esto a la acción específica
+            command=self.convenios_controller.start_report_generation,
             style='Accent.TButton'
         )
         self.action1_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
         
-        # Segundo botón de acción
         self.action2_button = ttk.Button(
-            self.buttons_frame,
+            self.top_row_frame, # <-- Se añade al marco superior
             text="Anticipos Online",
-            command=self.anticipos_controller.start_report_generation,  # Debes implementar este método en el controlador
+            command=self.anticipos_controller.start_report_generation,
             style='Accent.TButton'
         )
         self.action2_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
         
-        # --- NUEVO BOTÓN: Base Mensual ---
         self.base_mensual_button = ttk.Button(
-            self.buttons_frame,
+            self.top_row_frame, # <-- Se añade al marco superior
             text="Base Mensual",
-            # El comando llama al método del nuevo controlador para abrir la ventana
             command=lambda: self.base_mensual_controller.abrir_vista(self.root),
             style='Accent.TButton'
         )
         self.base_mensual_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
 
-         # --- 3. ¡AQUÍ VA EL NUEVO BOTÓN! ---
+        # --- Botones de la Fila Inferior (2 botones) ---
         self.datacredito_button = ttk.Button(
-            self.buttons_frame,
+            self.bottom_row_frame, # <-- Se añade al marco inferior
             text="Centrales Datacredito",
             command=lambda: self.datacredito_controller.abrir_vista_datacredito(self.root),
             style='Accent.TButton'
         )
         self.datacredito_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
-        
-        # Barra de progreso (inicialmente oculta)
-        self.progress_bar = ttk.Progressbar(
-            self.main_frame,
-            orient=tk.HORIZONTAL,
-            length=300,
-            mode='determinate'
+
+        self.cifin_button = ttk.Button(
+            self.bottom_row_frame, # <-- Se añade al marco inferior
+            text="Centrales CIFIN",
+            command=lambda: self.cifin_controller.open_cifin_window(self.root),
+            style='Accent.TButton'
         )
-        # No la empaquetamos todavía, se mostrará cuando sea necesario
-        
-        # Información de estado
-        self.status_label = ttk.Label(
-            self.main_frame,
-            text="Seleccione una opción para comenzar...",
-            font=self.label_font,
-            background=self.config.bg_color,
-            foreground=self.config.text_color
-        )
-        self.status_label.pack(pady=(10, 0))
+        self.cifin_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
         
         # Configurar estilo para el botón de acento
         self.style.configure('Accent.TButton', font=self.button_font, foreground='white', background=self.config.accent_color)

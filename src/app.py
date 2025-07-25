@@ -9,18 +9,22 @@ from src.controllers.convenios_controller import ConveniosController
 from src.controllers.anticipos_controller import AnticiposController
 from src.controllers.base_controller import BaseMensualController
 from src.controllers.datacredito_controller import DataCreditoController
+from src.controllers.cifin_contoller import CifinController
 from src.views.main_window import MainWindow
 
 def main():
     try:
         root = tk.Tk()
-        controller_convenios = ConveniosController(None)  # Pasamos None temporalmente
+        controller_convenios = ConveniosController(None)
         controller_anticipos = AnticiposController(None)
-        controller_base_mensual = BaseMensualController()# Placeholder para el controlador de anticipos si es necesario
+        controller_base_mensual = BaseMensualController()
         controller_datacredito = DataCreditoController(None)
+        controller_cifin = CifinController()
 
         
-        view= MainWindow(root, controller_convenios, controller_anticipos, controller_base_mensual,controller_datacredito)
+        view= MainWindow(root, controller_convenios, controller_anticipos,
+                         controller_base_mensual,controller_datacredito,controller_cifin)
+        
         controller_anticipos.view = view
         controller_convenios.view = view
         controller_datacredito.view = view

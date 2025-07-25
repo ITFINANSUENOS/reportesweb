@@ -33,16 +33,13 @@ class CifinModel:
 
     def load_plano_file(self, file_path):
         try:
-            print("Modelo: Cargando archivo plano...")
+            print("Modelo: Cargando archivo plano como texto...")
             self.df = pd.read_fwf(
-                file_path, colspecs=self.colspecs, names=self.names,dtype=str,
+                file_path, colspecs=self.colspecs, names=self.names, dtype=str,
                 encoding='cp1252', skiprows=1, skipfooter=1, engine='python'
             )
-            
             self.df.replace(['nan', 'NaN'], '', inplace=True)
-            # Normalizamos el nombre de la columna de identificación para que coincida con el mapa
             self.df.rename(columns={'Nº_identificacion': 'NUMERO DE IDENTIFICACION'}, inplace=True)
-            
             print("Modelo: Archivo plano cargado exitosamente.")
             return self.df
         except Exception as e:
@@ -55,66 +52,69 @@ class CifinModel:
                 print(f"Modelo: Guardando archivo en {output_path}...")
                 self.df.to_excel(output_path, index=False)
                 print(f"✅ ¡Éxito! Archivo guardado correctamente.")
+                return True
             except Exception as e:
                 print(f"❌ ERROR al guardar el archivo de Excel: {e}")
+                return False
         else:
             print("⚠️ Advertencia: No hay datos para guardar.")
+            return False
 
-# --- CONFIGURACIÓN PRINCIPAL ---
-if __name__ == "__main__":
-    # 1. Definir rutas
-    ruta_txt_entrada = '/home/balvin/dev/CIFIN MARZO FS.TXT'
-    ruta_excel_correcciones = '/home/balvin/dev/Cédulas a revisar.xlsx' 
-    ruta_excel_salida = '/home/balvin/dev/Resultado_Cifin_Transformado.xlsx'
+# # --- CONFIGURACIÓN PRINCIPAL ---
+# if __name__ == "__main__":
+#     # 1. Definir rutas
+#     # ruta_txt_entrada = '/home/balvin/dev/CIFIN MARZO FS.TXT'
+#     # ruta_excel_correcciones = '/home/balvin/dev/Cédulas a revisar.xlsx' 
+#     # ruta_excel_salida = '/home/balvin/dev/Resultado_Cifin_Transformado.xlsx'
     
-    # ruta_txt_entrada = 'c:/Users/usuario\Desktop/Reporte LV/cifin/CIFIN MARZO FS.TXT'
-    # ruta_excel_correcciones = 'c:/Users/usuario/Desktop/Reporte LV/datacredito/Cédulas a revisar.xlsx' 
-    # ruta_excel_salida = 'c:/Users/usuario/Desktop/Reporte LV/cifin/Resultado_Cifin_Transformado.xlsx'
+#     ruta_txt_entrada = 'c:/Users/usuario\Desktop/Reporte LV/cifin/CIFIN MARZO FS.TXT'
+#     ruta_excel_correcciones = 'c:/Users/usuario/Desktop/Reporte LV/datacredito/Cédulas a revisar.xlsx' 
+#     ruta_excel_salida = 'c:/Users/usuario/Desktop/Reporte LV/cifin/Resultado_Cifin_Transformado.xlsx'
 
-    # 2. Definir el MAPA DE COLUMNAS para CifinModel
-    # Clave: Nombre genérico que usa el servicio. Valor: Nombre real de la columna en tu DataFrame.
-    CIFIN_COLUMN_MAP = {
-        'id_number': 'NUMERO DE IDENTIFICACION', # Renombramos 'Nº_identificacion' a este nombre al cargar
-        'id_type': 'tipo_identificacion',
-        'full_name': 'nombre_tercero',
-        'address': 'direccion_casa',
-        'email': 'correo_electronico',
-        'phone': 'numero_celular',
-        'home_phone':'telefono_casa',
-        'company_phone':'telefono_empresa',
-        'account_number': 'numero_obligacion',
-        'initial_value': 'valor_inicial',
-        'payment_date': 'fecha_pago',
-        'open_date': 'fecha_inicio',
-        'due_date': 'fecha_terminacion',
-        'city': 'ciudad_casa',
-        'department': 'departamento_casa',
-        'balance_due': 'valor_saldo',
-        'available_value': 'cargo_fijo', # Asumiendo que este es el campo correcto
-        'monthly_fee': 'valor_cuota',
-        'arrears_value': 'valor_mora',
-        'arrears_age': 'edad_mora', 
-        'periodicity': 'periodicidad',
-        'actual_value_paid':'valor_real_pagado'
-        # ... completa con las demás columnas que use el servicio si es necesario
-    }
+#     # 2. Definir el MAPA DE COLUMNAS para CifinModel
+#     # Clave: Nombre genérico que usa el servicio. Valor: Nombre real de la columna en tu DataFrame.
+#     CIFIN_COLUMN_MAP = {
+#         'id_number': 'NUMERO DE IDENTIFICACION', # Renombramos 'Nº_identificacion' a este nombre al cargar
+#         'id_type': 'tipo_identificacion',
+#         'full_name': 'nombre_tercero',
+#         'address': 'direccion_casa',
+#         'email': 'correo_electronico',
+#         'phone': 'numero_celular',
+#         'home_phone':'telefono_casa',
+#         'company_phone':'telefono_empresa',
+#         'account_number': 'numero_obligacion',
+#         'initial_value': 'valor_inicial',
+#         'payment_date': 'fecha_pago',
+#         'open_date': 'fecha_inicio',
+#         'due_date': 'fecha_terminacion',
+#         'city': 'ciudad_casa',
+#         'department': 'departamento_casa',
+#         'balance_due': 'valor_saldo',
+#         'available_value': 'cargo_fijo', # Asumiendo que este es el campo correcto
+#         'monthly_fee': 'valor_cuota',
+#         'arrears_value': 'valor_mora',
+#         'arrears_age': 'edad_mora', 
+#         'periodicity': 'periodicidad',
+#         'actual_value_paid':'valor_real_pagado'
+#         # ... completa con las demás columnas que use el servicio si es necesario
+#     }
 
-    # 3. Proceso de ejecución
-    print("--- INICIANDO PROCESO DE TRANSFORMACIÓN DE DATOS ---")
+#     # 3. Proceso de ejecución
+#     print("--- INICIANDO PROCESO DE TRANSFORMACIÓN DE DATOS ---")
     
-    # Cargar los datos usando CifinModel
-    modelo = CifinModel()
-    df_cargado = modelo.load_plano_file(ruta_txt_entrada)
+#     # Cargar los datos usando CifinModel
+#     modelo = CifinModel()
+#     df_cargado = modelo.load_plano_file(ruta_txt_entrada)
 
-    if df_cargado is not None:
-        # Crear una instancia del servicio, pasándole el DataFrame y el mapa de columnas
-        procesador = DataProcessorService(df_cargado, ruta_excel_correcciones, CIFIN_COLUMN_MAP)
+#     if df_cargado is not None:
+#         # Crear una instancia del servicio, pasándole el DataFrame y el mapa de columnas
+#         procesador = DataProcessorService(df_cargado, ruta_excel_correcciones, CIFIN_COLUMN_MAP)
         
-        # Ejecutar todas las transformaciones
-        df_transformado = procesador.run_all_transformations()
+#         # Ejecutar todas las transformaciones
+#         df_transformado = procesador.run_all_transformations()
         
-        # Guardar el resultado
-        modelo.df = df_transformado # Actualizamos el df del modelo con el transformado
-        modelo.guardar_en_excel(ruta_excel_salida)
+#         # Guardar el resultado
+#         modelo.df = df_transformado # Actualizamos el df del modelo con el transformado
+#         modelo.guardar_en_excel(ruta_excel_salida)
         
-    print("--- PROCESO FINALIZADO ---")
+#     print("--- PROCESO FINALIZADO ---")
