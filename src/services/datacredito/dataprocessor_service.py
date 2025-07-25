@@ -61,9 +61,7 @@ class DataProcessorService:
         df_r05['ABONO'] = pd.to_numeric(df_r05['ABONO'], errors='coerce').fillna(0)
         df_r05['llave_base'] = df_r05['MCNTIPCRU2'].astype(str).str.strip() + df_r05['MCNNUMCRU2'].astype(str).str.strip()
         abonos_sumados = df_r05.groupby('llave_base')['ABONO'].sum().reset_index()
-        # Ahora 'abonos_sumados' es un DataFrame con llaves únicas y la suma total de sus abonos.
 
-        # 5. Crear la tabla final con C1 y C2, usando el valor ya sumado
         tabla_r05 = pd.concat([
             pd.DataFrame({'LLAVE': abonos_sumados['llave_base'], 'VALOR_ABONO': abonos_sumados['ABONO']}),
             pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C1', 'VALOR_ABONO': abonos_sumados['ABONO']}),
@@ -72,12 +70,7 @@ class DataProcessorService:
 
         # 6. Crear el mapa final: Llave -> Suma Total del Abono
         mapa_r05 = pd.Series(tabla_r05.VALOR_ABONO.values, index=tabla_r05.LLAVE.astype(str).str.ljust(20)).to_dict()
-
-        # 7. Actualizar la columna de destino en tu DataFrame principal
-        # ¡OJO! Debes decidir a qué columna quieres llevar este valor (ej: 'valor_saldo').
-        # Reemplaza 'valor_abono_total' con la llave correcta de tu 'CIFIN_COLUMN_MAP'.
-        columna_destino_key = 'arrears_value' # Ejemplo: actualiza el valor en mora
-        self.df[self.map[columna_destino_key]] = self.df[self.map['account_number']].map(mapa_r05).combine_first(self.df[self.map[columna_destino_key]])
+        self.df['VALOR SALDO MORA'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(mapa_r05).combine_first(self.df['VALOR SALDO MORA'])
 
     def _clean_and_validate_data(self):
         """PASO 5: Realiza limpieza y validaciones generales."""

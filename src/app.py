@@ -18,7 +18,7 @@ def main():
         controller_convenios = ConveniosController(None)
         controller_anticipos = AnticiposController(None)
         controller_base_mensual = BaseMensualController()
-        controller_datacredito = DataCreditoController(None)
+        controller_datacredito = DataCreditoController()
         controller_cifin = CifinController()
 
         
@@ -27,7 +27,6 @@ def main():
         
         controller_anticipos.view = view
         controller_convenios.view = view
-        controller_datacredito.view = view
         root.mainloop()
     except Exception as e:
         print(f"Error inesperado en la aplicación: {str(e)}")
