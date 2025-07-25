@@ -122,6 +122,27 @@ class MainWindow:
         self.style.map('Accent.TButton',
                      background=[('active', self.config.secondary_color), ('pressed', self.config.secondary_color)])
         
+        
+        self.progress_bar = ttk.Progressbar(
+            self.main_frame,
+            orient=tk.HORIZONTAL,
+            length=300,
+            mode='determinate'
+        )
+        self.progress_bar.pack(pady=(10, 0))
+        self.progress_bar['value'] = 0
+        self.progress_bar.pack_forget()  # Ocultarla inicialmente
+
+        # Estado del proceso (status_label)
+        self.status_label = ttk.Label(
+            self.main_frame,
+            text="Estado: Inactivo",
+            font=self.label_font,
+            background=self.config.bg_color,
+            foreground=self.config.secondary_color
+        )
+        self.status_label.pack(pady=(10, 0))
+        
         # Pie de página
         self.footer_label = ttk.Label(
             self.main_frame,
