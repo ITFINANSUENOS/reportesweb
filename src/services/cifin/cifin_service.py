@@ -181,11 +181,16 @@ class DataProcessorService:
         self.df.loc[self.df[self.map['id_number']] == '1025529458', self.map['full_name']] = 'MARTINEZ MUNOZ JOSE MANUEL'
         self.df.loc[self.df[self.map['id_number']] == '25559122', self.map['full_name']] = 'RAMIREZ DE CASTRO MARIA ESTELLA'
         
+        
         for key in ['home_phone', 'company_phone']:
             if key in self.map:
                 col = self.map[key]
-                # 1. Limpiar y dejar solo números
-                self.df[col] = self.df[col].astype(str).str.replace(r'\D', '', regex=True)
+                self.df[col] = (
+                    self.df[col].astype(str)
+                    .str.replace(r'\D', '', regex=True)  # Elimina todo lo que no sea dígito
+                    .replace('^0+$', ' ', regex=True)    # Reemplaza puros ceros por espacio
+                    .str.strip()                         # Elimina espacios sobrantes
+                )
                 
                 # 2. Definir condiciones de validez
                 es_fijo_valido = self.df[col].str.len() == 7
