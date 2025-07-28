@@ -1,0 +1,27 @@
+# Entorno virtual (cambia el nombre si usas otro)
+entorno/
+.venv/
+env/
+
+# Archivos de Python generados
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Cache y otros
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Archivos de IDE
+.vscode/
+.idea/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de instalación
+*.egg-info/
+dist/
+build/
