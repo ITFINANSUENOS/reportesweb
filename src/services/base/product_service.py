@@ -74,60 +74,103 @@ class ProductsSalesService:
     def assign_sales_invoice(self, reporte_df, crtmp_df):
         """
         Crea la columna 'Factura_Venta' asignando el valor según la empresa.
-        Para FINANSUEÑOS, busca la factura correspondiente en el archivo CRTMPCONSULTA1.
+        - Para FINANSUEÑOS, busca la factura por proximidad de fecha.
+        - Para ARPESOD, diferencia entre créditos normales y especiales.
+            - Créditos especiales (RTC, PR, NC, NT, NF): Busca la factura en CRTMPCONSULTA1
+            coincidiendo por número de crédito y cédula.
+            - Créditos normales: La factura es el mismo número de crédito.
         """
         print("🧾 Asignando facturas de venta...")
-        
-        # Si no hay datos de donde buscar, no se puede continuar
+
+        # --- Verificación inicial del DataFrame de búsqueda ---
         if crtmp_df.empty:
-            print("⚠️ Archivo CRTMPCONSULTA1 no encontrado o vacío. No se pueden asignar facturas para FINANSUEÑOS.")
+            print("⚠️ Archivo CRTMPCONSULTA1 no encontrado o vacío. No se pueden asignar facturas para FINANSUEÑOS ni para créditos especiales de ARPESOD.")
+            # Asigna 'NO DISPONIBLE' a todos y 'Credito' a ARPESOD como fallback.
             reporte_df['Factura_Venta'] = np.where(reporte_df['Empresa'] == 'ARPESOD', reporte_df['Credito'], 'NO DISPONIBLE')
             return reporte_df
 
-        # Lógica para ARPESOD (simple)
+        # Inicializar la columna de facturas
         reporte_df['Factura_Venta'] = np.nan
-        reporte_df.loc[reporte_df['Empresa'] == 'ARPESOD', 'Factura_Venta'] = reporte_df['Credito']
 
-        # --- Lógica avanzada para FINANSUEÑOS ---
-        
-        # 1. Preparar el DataFrame de búsqueda (crtmp_df)
-        crtmp_df_copy = crtmp_df.copy() # Hacemos una copia para no modificar el original
-        crtmp_df_copy['Fecha_Facturada'] = pd.to_datetime(crtmp_df_copy['Fecha_Facturada'], dayfirst=True, errors='coerce')
-        
-        # Si después de la conversión todas las fechas son nulas, detenemos.
-        if crtmp_df_copy['Fecha_Facturada'].isnull().all():
-            print("❌ Error crítico: No se pudo interpretar ninguna fecha en CRTMPCONSULTA1. Verifique el formato.")
-            reporte_df['Factura_Venta'].fillna('ERROR DE FECHA', inplace=True)
-            return reporte_df
-
-        # 2. Separar créditos de FINANSUEÑOS y facturas de venta
-        creditos_fns = crtmp_df_copy[crtmp_df_copy['Credito'].str.startswith('DF', na=False)].copy()
-        facturas_fns = crtmp_df_copy[~crtmp_df_copy['Credito'].str.startswith('DF', na=False)].copy()
-
-        # 3. Cruzar créditos y facturas por 'Cedula_Cliente'
-        merged_df = pd.merge(
-            creditos_fns,
-            facturas_fns,
-            on='Cedula_Cliente',
-            suffixes=('_credito', '_factura')
-        )
-        
-        # 4. Filtrar por la condición de fecha (diferencia de <= 30 días)
-        merged_df['dias_diferencia'] = (merged_df['Fecha_Facturada_factura'] - merged_df['Fecha_Facturada_credito']).dt.days.abs()
-        coincidencias_validas = merged_df[merged_df['dias_diferencia'] <= 30].copy()
-
-        # 5. En caso de múltiples coincidencias, elegir la más cercana en tiempo
-        coincidencias_validas.sort_values(by=['Credito_credito', 'dias_diferencia'], inplace=True)
-        mapeo_final = coincidencias_validas.drop_duplicates(subset='Credito_credito', keep='first')
-        
-        # 6. Crear un mapa (diccionario) para la asignación: {Credito: Factura}
-        mapa_facturas = pd.Series(mapeo_final['Credito_factura'].values, index=mapeo_final['Credito_credito']).to_dict()
-
-        # 7. Asignar los valores al reporte final usando el mapa
+        # --- Lógica para FINANSUEÑOS (sin cambios) ---
         filtro_fns = reporte_df['Empresa'] == 'FINANSUEÑOS'
-        reporte_df.loc[filtro_fns, 'Factura_Venta'] = reporte_df.loc[filtro_fns, 'Credito'].map(mapa_facturas)
+        if filtro_fns.any():
+            print("   - Procesando FINANSUEÑOS...")
+            crtmp_df_copy = crtmp_df.copy()
+            crtmp_df_copy['Fecha_Facturada'] = pd.to_datetime(crtmp_df_copy['Fecha_Facturada'], dayfirst=True, errors='coerce')
 
-        # 8. Rellenar los valores no encontrados
+            if crtmp_df_copy['Fecha_Facturada'].isnull().all():
+                print("❌ Error crítico: No se pudo interpretar ninguna fecha en CRTMPCONSULTA1. Verifique el formato.")
+                reporte_df.loc[filtro_fns, 'Factura_Venta'] = 'ERROR DE FECHA'
+            else:
+                creditos_fns = crtmp_df_copy[crtmp_df_copy['Credito'].str.startswith('DF', na=False)].copy()
+                facturas_fns = crtmp_df_copy[~crtmp_df_copy['Credito'].str.startswith('DF', na=False)].copy()
+                merged_df = pd.merge(creditos_fns, facturas_fns, on='Cedula_Cliente', suffixes=('_credito', '_factura'))
+                merged_df['dias_diferencia'] = (merged_df['Fecha_Facturada_factura'] - merged_df['Fecha_Facturada_credito']).dt.days.abs()
+                coincidencias_validas = merged_df[merged_df['dias_diferencia'] <= 30].copy()
+                coincidencias_validas.sort_values(by=['Credito_credito', 'dias_diferencia'], inplace=True)
+                mapeo_final = coincidencias_validas.drop_duplicates(subset='Credito_credito', keep='first')
+                mapa_facturas_fns = pd.Series(mapeo_final['Credito_factura'].values, index=mapeo_final['Credito_credito']).to_dict()
+                reporte_df.loc[filtro_fns, 'Factura_Venta'] = reporte_df.loc[filtro_fns, 'Credito'].map(mapa_facturas_fns)
+
+        # --- Lógica avanzada para ARPESOD (créditos especiales) ---
+        print("   - Procesando ARPESOD...")
+        prefijos_busqueda = ['RTC', 'PR', 'NC', 'NT', 'NF']
+        filtro_arpesod_especial = (reporte_df['Empresa'] == 'ARPESOD') & \
+                                (reporte_df['Credito'].str.startswith(tuple(prefijos_busqueda), na=False))
+
+        if filtro_arpesod_especial.any():
+            print(f"      -> Encontrados {filtro_arpesod_especial.sum()} créditos especiales de ARPESOD para buscar.")
+            # 1. Preparar datos para el cruce
+            # Extraemos el número del crédito (ej. 'RTC-12576' -> '12576')
+            reporte_df['Numero_Busqueda'] = reporte_df['Credito'].str.split('-').str[1].str.strip()
+            
+            # Copia de crtmp_df para no modificar el original, asegurando tipos de datos
+            crtmp_busqueda = crtmp_df[['Cedula_Cliente', 'Tipo_Credito', 'Numero_Credito']].copy()
+            crtmp_busqueda['Numero_Credito'] = crtmp_busqueda['Numero_Credito'].astype(str).str.strip()
+            crtmp_busqueda['Cedula_Cliente'] = crtmp_busqueda['Cedula_Cliente'].astype(str).str.strip()
+            
+            # Preparar el reporte base para el merge
+            reporte_busqueda = reporte_df[filtro_arpesod_especial][['Credito', 'Cedula_Cliente', 'Numero_Busqueda']].copy()
+            reporte_busqueda['Cedula_Cliente'] = reporte_busqueda['Cedula_Cliente'].astype(str).str.strip()
+
+            # 2. Cruzar (merge) los créditos especiales con la data de CRTMP
+            # Se cruza usando la cédula y el número de crédito extraído
+            merged_arpesod = pd.merge(
+                reporte_busqueda,
+                crtmp_busqueda,
+                left_on=['Cedula_Cliente', 'Numero_Busqueda'],
+                right_on=['Cedula_Cliente', 'Numero_Credito'],
+                how='left'
+            )
+
+            # 3. Construir la factura encontrada (ej. 'FF03-12576')
+            # Usamos np.where para manejar los casos que no encontraron correspondencia
+            merged_arpesod['Factura_Encontrada'] = np.where(
+                merged_arpesod['Numero_Credito'].notna(),
+                merged_arpesod['Tipo_Credito'] + '-' + merged_arpesod['Numero_Credito'],
+                np.nan # Dejar como NaN si no se encontró
+            )
+
+            # 4. Crear un mapa (diccionario) para la asignación final: {Credito: Factura_Encontrada}
+            mapa_facturas_arpesod = pd.Series(
+                merged_arpesod['Factura_Encontrada'].values,
+                index=merged_arpesod['Credito']
+            ).to_dict()
+
+            # 5. Asignar los valores al reporte final usando el mapa
+            reporte_df.loc[filtro_arpesod_especial, 'Factura_Venta'] = reporte_df.loc[filtro_arpesod_especial, 'Credito'].map(mapa_facturas_arpesod)
+            
+            # Limpiar la columna temporal
+            reporte_df.drop(columns=['Numero_Busqueda'], inplace=True)
+
+        # --- Lógica para ARPESOD (créditos normales) ---
+        # Aquellos de ARPESOD que NO son especiales y aún no tienen factura asignada
+        filtro_arpesod_normal = (reporte_df['Empresa'] == 'ARPESOD') & (reporte_df['Factura_Venta'].isnull())
+        reporte_df.loc[filtro_arpesod_normal, 'Factura_Venta'] = reporte_df['Credito']
+
+        # --- Rellenar valores no encontrados para todas las empresas ---
         reporte_df['Factura_Venta'].fillna('NO ASIGNADA', inplace=True)
-
+        
+        print("✅ Asignación de facturas de venta completada.")
         return reporte_df

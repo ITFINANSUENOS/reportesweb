@@ -112,63 +112,73 @@ class ReportProcessorService:
 
     def map_call_center_data(self, reporte_df):
         """
-        Crea las columnas 'Franja_Mora' y de Call Center consolidadas,
-        basándose en los días de atraso.
+        Limpia la columna 'Gestor' y crea las columnas 'Franja_Mora' y de
+        Call Center consolidadas, basándose en los días de atraso.
         """
-        print("Mappings de datos de Call Center...")
+        print("📞 Mapeando datos de Gestor y Call Center...")
 
-        # 1. Asegurarse que 'Dias_Atraso' sea numérico para poder comparar
+        # 1. Limpieza de la columna 'Gestor' (NUEVO)
+        if 'Gestor' in reporte_df.columns:
+            print("   - Limpiando columna 'Gestor'...")
+            # Reemplazar 'SIN GESTOR' por 'CALL CENTER'
+            reporte_df.loc[reporte_df['Gestor'] == 'SIN GESTOR', 'Gestor'] = 'CALL CENTER'
+            # Rellenar valores vacíos (NaN) con 'OTRAS ZONAS'
+            reporte_df['Gestor'].fillna('OTRAS ZONAS', inplace=True)
+        else:
+            print("   - ⚠️ Columna 'Gestor' no encontrada. Se omite la limpieza.")
+
+        # 2. Asegurarse que 'Dias_Atraso' sea numérico para poder comparar
         if 'Dias_Atraso' not in reporte_df.columns:
             print("⚠️ Columna 'Dias_Atraso' no encontrada. No se puede mapear la franja de mora.")
             return reporte_df
             
         reporte_df['Dias_Atraso'] = pd.to_numeric(reporte_df['Dias_Atraso'], errors='coerce')
 
-        # 2. Definir condiciones y valores para 'Franja_Mora'
+        # 3. Definir condiciones y valores para 'Franja_Mora' (sin cambios)
         condiciones_mora = [
             reporte_df['Dias_Atraso'] == 0,
             reporte_df['Dias_Atraso'].between(1, 30),
             reporte_df['Dias_Atraso'].between(31, 90),
-            reporte_df['Dias_Atraso'] > 90
+            reporte_df['Dias_Atraso'].between(91, 180),
+            reporte_df['Dias_Atraso'] > 180
         ]
-        valores_mora = ['AL DIA', '1 A 30', '31 A 90', '91 A 360']
+        valores_mora = ['AL DIA', '1 A 30', '31 A 90', '91 A 180','181 A 360']
         reporte_df['Franja_Mora'] = np.select(condiciones_mora, valores_mora, default='SIN INFO')
-
-        # 3. Mapear datos del Call Center según la 'Franja_Mora'
-        # Se definen las columnas de origen para cada franja
-        mapa_columnas = {
+        
+        mapa_franjas = {
             '1 A 30': ('call_center_1_30_dias', 'call_center_nombre_1_30', 'call_center_telefono_1_30'),
             '31 A 90': ('call_center_31_90_dias', 'call_center_nombre_31_90', 'call_center_telefono_31_90'),
-            '91 A 360': ('call_center_91_360_dias', 'call_center_nombre_91_360', 'call_center_telefono_91_360')
+            '91 A 180': ('call_center_91_360_dias', 'call_center_nombre_91_360', 'call_center_telefono_91_360'),
+            '181 A 360': ('call_center_91_360_dias', 'call_center_nombre_91_360', 'call_center_telefono_91_360')
         }
 
-        # Se crean las nuevas columnas vacías
+        # Se crean las nuevas columnas consolidadas vacías
         reporte_df['Call_Center_Apoyo'] = np.nan
         reporte_df['Nombre_Call_Center'] = np.nan
         reporte_df['Telefono_Call_Center'] = np.nan
 
-        # Se llenan las nuevas columnas iterando sobre el mapa
-        for franja, cols in mapa_columnas.items():
-            # cols[0] = apoyo, cols[1] = nombre, cols[2] = telefono
-            # Solo se actualizan las filas que coinciden con la franja actual
+        # Se llenan las nuevas columnas iterando sobre el mapa de franjas
+        print("   - Asignando datos de Call Center por franja de mora...")
+        for franja, cols in mapa_franjas.items():
+            # cols[0]=apoyo, cols[1]=nombre, cols[2]=telefono
             mask = reporte_df['Franja_Mora'] == franja
             if cols[0] in reporte_df.columns:
                 reporte_df.loc[mask, 'Call_Center_Apoyo'] = reporte_df.loc[mask, cols[0]]
             if cols[1] in reporte_df.columns:
                 reporte_df.loc[mask, 'Nombre_Call_Center'] = reporte_df.loc[mask, cols[1]]
             if cols[2] in reporte_df.columns:
-                 reporte_df.loc[mask, 'Telefono_Call_Center'] = reporte_df.loc[mask, cols[2]]
+                reporte_df.loc[mask, 'Telefono_Call_Center'] = reporte_df.loc[mask, cols[2]]
 
-        # 4. Eliminar las columnas originales de la matriz para limpiar el reporte
+        # 5. Eliminar las columnas originales de la matriz para limpiar el reporte (sin cambios)
         cols_a_borrar_matriz = [
-            'call_center_1_30_dias', 'call_center_nombre_1_30', 'call_center_telefono_1_30', 
-            'call_center_31_90_dias', 'call_center_nombre_31_90', 'call_center_telefono_31_90', 
+            'call_center_1_30_dias', 'call_center_nombre_1_30', 'call_center_telefono_1_30',
+            'call_center_31_90_dias', 'call_center_nombre_31_90', 'call_center_telefono_31_90',
             'call_center_91_360_dias', 'call_center_nombre_91_360', 'call_center_telefono_91_360'
         ]
-        # Nos aseguramos de no borrar 'Zona' que es la clave de cruce
         columnas_existentes_a_borrar = [col for col in cols_a_borrar_matriz if col in reporte_df.columns]
         reporte_df.drop(columns=columnas_existentes_a_borrar, inplace=True, errors='ignore')
         
+        print("✅ Mapeo completado.")
         return reporte_df
 
     def filter_by_date_range(self, reporte_df, start_date, end_date):
@@ -230,7 +240,32 @@ class ReportProcessorService:
         if 'Fecha_Facturada' in reporte_df.columns:
             reporte_df['Fecha_Facturada'] = pd.to_datetime(reporte_df['Fecha_Facturada'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
 
-        # Formatear columnas de porcentaje (SOLUCIÓN MODIFICADA)
+        
+        print("👔 Limpiando y completando la columna 'Lider_Zona'...")
+        if 'Lider_Zona' in reporte_df.columns and 'Regional_Venta' in reporte_df.columns:
+            # 1. Eliminar valores que son solo números (ej. un celular)
+            # Se convierten a NaN para poder rellenarlos en el siguiente paso.
+            is_numeric_mask = pd.to_numeric(reporte_df['Lider_Zona'], errors='coerce').notna()
+            reporte_df.loc[is_numeric_mask, 'Lider_Zona'] = np.nan
+
+            # 2. Rellenar vacíos con el líder más común (moda) de su respectiva regional
+            # Se usa groupby().transform() para aplicar el relleno de forma eficiente por cada grupo de 'Regional_Venta'.
+            # La función lambda encuentra el líder más común (moda) para un grupo y rellena los NaN de ese grupo.
+            def fill_with_mode(series):
+                mode_val = series.mode()
+                # Solo rellenar si existe una moda (si el grupo no está completamente vacío)
+                if not mode_val.empty:
+                    return series.fillna(mode_val.iloc[0])
+                return series
+
+            reporte_df['Lider_Zona'] = reporte_df.groupby('Regional_Venta')['Lider_Zona'].transform(fill_with_mode)
+
+            # 3. Si después del proceso aún queda algún vacío (ej. una regional sin ningún líder asignado),
+            # se le asigna un valor por defecto.
+            reporte_df['Lider_Zona'].fillna('NO ASIGNADO', inplace=True)
+        else:
+            print("   - ⚠️ Columnas 'Lider_Zona' o 'Regional_Venta' no encontradas. Se omite este paso.")
+
         print("✨ Formateando columnas de porcentaje...")
         columnas_porcentaje = ['Meta_%', 'Meta_T.R_%']
         for col in columnas_porcentaje:

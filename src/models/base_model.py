@@ -3,7 +3,7 @@ configuracion = {
     "ANALISIS": {
         "engine": "xlrd",
         "usecols": ["direccion", "barrio", "nomciudad",
-                     "diasatras", "cuotaspag","cedula","saldofac","tipo","numero"],
+                     "diasatras", "cuotaspag","cedula","saldofac","tipo","numero","fechafac"],
         "rename_map": { "direccion": "Direccion",
                         "barrio": "Barrio",
                         "nomciudad": "Nombre_Ciudad",
@@ -12,7 +12,9 @@ configuracion = {
                         "cedula" : "Cedula_Cliente", 
                         "tipo":"Tipo_Credito", 
                         "numero":"Numero_Credito",
-                        "saldofac":"Saldo_Factura" }
+                        "saldofac":"Saldo_Factura" ,
+                        "fechafac":"Fecha_Desembolso"
+                        }
     },
     "R91": {
         "usecols": ["VINNOMBRE", "MCDZONA", "MCDVINCULA", "MCDNUMCRU1", "VENNOMBRE",
@@ -57,11 +59,12 @@ configuracion = {
                        "CEDULA": "Cedula_Cliente" }
     },
     "SC04":{
-        "usecols":["FACTURA","SLCVALOR","SLCNCUOTAS"],
+        "usecols":["FACTURA","SLCVALOR","SLCNCUOTAS","SLCPAGOINI"],
         "rename_map":{ 
                         "FACTURA": "Factura_Venta",
                         "SLCVALOR": "Valor_Cuota", 
-                        "SLCNCUOTAS": "Total_Cuotas"
+                        "SLCNCUOTAS": "Total_Cuotas",
+                        "SLCPAGOINI":"Pago_Inicial"
         }
     },
     "CRTMPCONSULTA1":{
@@ -148,6 +151,7 @@ ORDEN_COLUMNAS_FINAL = [
     'Empresa',
     'Credito',
     'Fecha_Facturada',
+    'Fecha_Desembolso',
     'Factura_Venta',
     'Nombre_Producto',
     'Cantidad_Producto',

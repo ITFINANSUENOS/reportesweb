@@ -33,7 +33,8 @@ class CreditDetailsService:
 
             sc04_df['Valor_Cuota'] = pd.to_numeric(sc04_df['Valor_Cuota'], errors='coerce')
             sc04_df['Total_Cuotas'] = pd.to_numeric(sc04_df['Total_Cuotas'], errors='coerce')
-            sc04_df['Valor_Desembolso'] = sc04_df['Valor_Cuota'] * sc04_df['Total_Cuotas']
+            sc04_df['Pago_Inicial'] = pd.to_numeric(sc04_df['Pago_Inicial'], errors='coerce')
+            sc04_df['Valor_Desembolso'] = (sc04_df['Valor_Cuota'] * sc04_df['Total_Cuotas']) + sc04_df['Pago_Inicial']
 
             mapa_cuotas_arp = sc04_df.set_index('Factura_Venta')['Total_Cuotas']
             mapa_valor_arp = sc04_df.set_index('Factura_Venta')['Valor_Cuota']

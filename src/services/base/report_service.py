@@ -90,7 +90,7 @@ class ReportService:
             # 3. Creamos la columna Vendedor_Activo
             reporte_final['Vendedor_Activo'] = np.where(
                 reporte_final['Codigo_Vendedor_clean'].isin(codigos_activos),
-                'SI',
+                'ACTIVO',
                 'INACTIVO'
             )
             
