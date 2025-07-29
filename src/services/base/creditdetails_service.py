@@ -4,14 +4,14 @@ import numpy as np
 class CreditDetailsService:
     """Servicio para manejar los detalles específicos de los créditos"""
     
-    def enrich_credit_details(self, reporte_df, sc04_df, desembolsos_df):
+    def enrich_credit_details(self, reporte_df, sc04_df, fnz001_df):
         """
         Puebla las columnas Total_Cuotas, Valor_Cuota y Valor_Desembolso
         usando 'Factura_Venta' para SC04 y 'Credito' para Desembolsos.
         """
         print("✨ Enriqueciendo detalles de cuotas y desembolsos...")
 
-        if sc04_df.empty and desembolsos_df.empty:
+        if sc04_df.empty and fnz001_df.empty:
             print("⚠️ No se encontraron archivos SC04 ni de Desembolsos. Se omiten los detalles del crédito.")
             return reporte_df
 
@@ -47,12 +47,12 @@ class CreditDetailsService:
             reporte_df.loc[mask_arp, 'Valor_Desembolso'] = reporte_df.loc[mask_arp, 'Factura_Venta'].map(mapa_desembolso_arp)
         
         # --- Preparar datos de FINANSUEÑOS (Desembolsos) ---
-        if not desembolsos_df.empty:
-            desembolsos_df.drop_duplicates(subset='Credito', keep='last', inplace=True)
+        if not fnz001_df.empty:
+            fnz001_df.drop_duplicates(subset='Credito', keep='last', inplace=True)
 
-            mapa_cuotas_fns = desembolsos_df.set_index('Credito')['Total_Cuotas']
-            mapa_valor_fns = desembolsos_df.set_index('Credito')['Valor_Cuota']
-            mapa_desembolso_fns = desembolsos_df.set_index('Credito')['Valor_Desembolso']
+            mapa_cuotas_fns = fnz001_df.set_index('Credito')['Total_Cuotas']
+            mapa_valor_fns = fnz001_df.set_index('Credito')['Valor_Cuota']
+            mapa_desembolso_fns = fnz001_df.set_index('Credito')['Valor_Desembolso']
 
             mask_fns = reporte_df['Empresa'] == 'FINANSUEÑOS'
             reporte_df.loc[mask_fns, 'Total_Cuotas'] = reporte_df.loc[mask_fns, 'Credito'].map(mapa_cuotas_fns)

@@ -130,19 +130,14 @@ configuracion = {
               }
         ]
     },
-    "DESEMBOLSOS_FINANSUEÑOS": {
-        "sheets": [{ 
-              "sheet_name": "Page 001", 
-              "usecols": ["CRÉDITO","VLR_FNZ","CUOTAS","VLR_CUOTA"], 
-              "rename_map": { 
-                              "CRÉDITO":"Credito",
-                              "VLR_FNZ":"Valor_Desembolso",
-                              "CUOTAS":"Total_Cuotas",
-                              "VLR_CUOTA":"Valor_Cuota",
-               }, 
-              "merge_on": "Credito" 
-              },
-        ]
+     "FNZ001":{
+        "usecols":["DSM_TP","SALDO","DESEMBOLSO", "DSM_NUM"],
+        "rename_map":{ 
+                      "DSM_TP":"Tipo_Credito",
+                      "DSM_NUM": "Numero_Credito",  
+                      "VLR_CUOTA":"Valor_Cuota",
+                      "CUOTAS":"Total_Cuotas", 
+                      "VLR_FNZ":"Saldo" }
     }
 }
 
