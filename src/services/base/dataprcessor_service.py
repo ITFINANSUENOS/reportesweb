@@ -10,91 +10,109 @@ class ReportProcessorService:
     """Servicio para el procesamiento final del reporte consolidado"""
     
     def calculate_balances(self, reporte_df, fnz003_df):
-        """Calcula los diferentes saldos y los agrega al reporte."""
+        """
+        Calcula saldos numéricamente. La presentación final se hace en finalize_report.
+        """
         print("📊 Calculando saldos...")
+        
+        creditos_negativos_fnz003 = pd.DataFrame()
         reporte_df['Saldo_Capital'] = np.where(reporte_df['Empresa'] == 'ARPESOD', reporte_df.get('Saldo_Factura'), np.nan)
+        reporte_df['Saldo_Avales'] = 0
+        reporte_df['Saldo_Interes_Corriente'] = 0
+        
         if not fnz003_df.empty:
-            fnz003_df = self.data_loader.create_credit_key(fnz003_df)
-            fnz003_df['Credito'] = fnz003_df['Credito'].astype(str)
+            fnz003_df['Saldo'] = pd.to_numeric(fnz003_df['Saldo'], errors='coerce').fillna(0)
+            
+            negativos_df = fnz003_df[fnz003_df['Saldo'] < 0].copy()
+            if not negativos_df.empty:
+                print(f"   - ⚠️ Se encontraron {len(negativos_df)} saldos negativos en FNZ003.")
+                negativos_df['Observacion'] = 'Saldo negativo en: ' + negativos_df['Concepto'].astype(str)
+                creditos_negativos_fnz003 = negativos_df[['Credito', 'Observacion']].drop_duplicates()
+
             mapa_capital = fnz003_df[fnz003_df['Concepto'].isin(['CAPITAL', 'ABONO DIF TASA'])].groupby('Credito')['Saldo'].sum()
             mapa_avales = fnz003_df[fnz003_df['Concepto'] == 'AVAL'].groupby('Credito')['Saldo'].sum()
             mapa_interes = fnz003_df[fnz003_df['Concepto'] == 'INTERES CORRIENTE'].groupby('Credito')['Saldo'].sum()
             
-            reporte_df['Saldo_Capital'] = reporte_df['Credito'].map(mapa_capital).combine_first(reporte_df['Saldo_Capital'])
-            reporte_df['Saldo_Avales'] = reporte_df['Credito'].map(mapa_avales)
-            reporte_df['Saldo_Interes_Corriente'] = reporte_df['Credito'].map(mapa_interes)
+            mask_fns = reporte_df['Empresa'] == 'FINANSUEÑOS'
+            reporte_df.loc[mask_fns, 'Saldo_Capital'] = reporte_df.loc[mask_fns, 'Credito'].map(mapa_capital)
+            reporte_df.loc[mask_fns, 'Saldo_Avales'] = reporte_df.loc[mask_fns, 'Credito'].map(mapa_avales)
+            reporte_df.loc[mask_fns, 'Saldo_Interes_Corriente'] = reporte_df.loc[mask_fns, 'Credito'].map(mapa_interes)
         
+        # Limpieza final: nos aseguramos de que TODAS las columnas de saldo sean numéricas.
         reporte_df['Saldo_Capital'] = pd.to_numeric(reporte_df['Saldo_Capital'], errors='coerce').fillna(0).astype(int)
-        reporte_df['Saldo_Avales'] = np.where(reporte_df['Empresa'] == 'FINANSUEÑOS', reporte_df.get('Saldo_Avales').fillna(0).astype(int), 'NO APLICA')
-        reporte_df['Saldo_Interes_Corriente'] = np.where(reporte_df['Empresa'] == 'FINANSUEÑOS', reporte_df.get('Saldo_Interes_Corriente').fillna(0).astype(int), 'NO APLICA')
-        return reporte_df
+        reporte_df['Saldo_Avales'] = pd.to_numeric(reporte_df['Saldo_Avales'], errors='coerce').fillna(0).astype(int)
+        reporte_df['Saldo_Interes_Corriente'] = pd.to_numeric(reporte_df['Saldo_Interes_Corriente'], errors='coerce').fillna(0).astype(int)
+        
+        return reporte_df, creditos_negativos_fnz003
+
 
     def calculate_goal_metrics(self, reporte_df, metas_franjas_df):
         """
-        Calcula las diferentes métricas de metas, interpretando correctamente
-        los porcentajes y limpiando las columnas intermedias al final.
+        Calcula las diferentes métricas de metas.
         """
         print("🎯 Calculando métricas de metas...")
 
-        # 1. Calcular Meta_General (sin cambios)
+        # ... (El inicio de la función no cambia) ...
         for col in ['Meta_DC_Al_Dia', 'Meta_DC_Atraso', 'Meta_Atraso']:
             if col in reporte_df.columns:
                 reporte_df[col] = pd.to_numeric(reporte_df[col], errors='coerce').fillna(0)
         reporte_df['Meta_General'] = reporte_df['Meta_DC_Al_Dia'] + reporte_df['Meta_DC_Atraso'] + reporte_df['Meta_Atraso']
 
         if metas_franjas_df.empty:
-            print("⚠️ Archivo de Metas por Franja no encontrado. Se omiten los cálculos de metas % y $.")
             return reporte_df
 
-        # 2. Unir metas por franja al reporte principal por 'Zona'
-        metas_franjas_df['Zona'] = metas_franjas_df['Zona'].astype(str).str.strip()
-        reporte_df['Zona'] = reporte_df['Zona'].astype(str).str.strip()
-        columnas_metas_a_borrar = [col for col in metas_franjas_df.columns if col != 'Zona']
         reporte_df = pd.merge(reporte_df, metas_franjas_df, on='Zona', how='left')
-
-        # 3. Convertir las columnas de porcentaje a números decimales correctamente
-        print("   - Convirtiendo porcentajes a números...")
+        columnas_metas_a_borrar = [col for col in metas_franjas_df.columns if col != 'Zona']
+        
         columnas_porcentaje = ['Meta_1_A_30', 'Meta_31_A_90', 'Meta_91_A_180', 'Meta_181_A_360', 'Total_Recaudo']
         for col in columnas_porcentaje:
             if col in reporte_df.columns:
-                # Primero convertimos a string y limpiamos
                 reporte_df[col] = reporte_df[col].astype(str).str.replace('%', '').str.strip()
-                # Luego convertimos a numérico
                 numeric_col = pd.to_numeric(reporte_df[col], errors='coerce')
-                # Dividimos por 100 solo si el valor es >1 (para manejar ambos casos)
-                reporte_df[col] = np.where(
-                    numeric_col > 1,
-                    numeric_col / 100,
-                    numeric_col
-                )
+                reporte_df[col] = np.where(numeric_col > 1, numeric_col / 100, numeric_col)
                 reporte_df[col] = reporte_df[col].fillna(0)
 
-        # 4. Calcular 'Meta_%' dinámicamente
         dias_atraso = reporte_df['Dias_Atraso']
         condiciones = [
-            dias_atraso.between(1, 30),
-            dias_atraso.between(31, 90),
-            dias_atraso.between(91, 180),
-            dias_atraso > 180
+            dias_atraso.between(1, 30), dias_atraso.between(31, 90),
+            dias_atraso.between(91, 180), dias_atraso > 180
         ]
         valores = [
-            reporte_df['Meta_1_A_30'],
-            reporte_df['Meta_31_A_90'],
-            reporte_df['Meta_91_A_180'],
-            reporte_df['Meta_181_A_360']
+            reporte_df['Meta_1_A_30'], reporte_df['Meta_31_A_90'],
+            reporte_df['Meta_91_A_180'], reporte_df['Meta_181_A_360']
         ]
         reporte_df['Meta_%'] = np.select(condiciones, valores, default=0)
-
-        # 5. Calcular 'Meta_$'
         reporte_df['Meta_$'] = reporte_df['Meta_General'] * reporte_df['Meta_%']
-        
-        # 6. Calcular 'Meta_T.R_%' y 'Meta_T.R_$'
         reporte_df['Meta_T.R_%'] = reporte_df['Total_Recaudo']
 
+        # --- INICIA BLOQUE DE DEPURACIÓN PROFUNDA ---
+        # Este bloque revisará las columnas justo antes de la línea que da el error.
+        
+        print("\n--- DEPURACIÓN PROFUNDA ANTES DE LA MULTIPLICACIÓN FINAL ---")
+        columnas_a_revisar = ['Saldo_Capital', 'Saldo_Avales', 'Saldo_Interes_Corriente', 'Meta_T.R_%']
+        for col in columnas_a_revisar:
+            if col in reporte_df.columns:
+                print(f"\nRevisando columna: '{col}'")
+                print(f"  - Tipo de dato (dtype): {reporte_df[col].dtype}")
+                
+                # Esta línea buscará si alguna celda en la columna es una lista
+                try:
+                    celdas_con_listas = reporte_df[col].apply(lambda x: isinstance(x, list))
+                    if celdas_con_listas.any():
+                        print(f"  - ¡¡¡ALERTA!!! Se encontraron celdas que contienen LISTAS en esta columna.")
+                        print("  - Mostrando las primeras 5 filas con listas:")
+                        print(reporte_df[celdas_con_listas][['Credito', col]].head())
+                    else:
+                        print("  - OK. No se encontraron listas en esta columna.")
+                except Exception as e:
+                    print(f"  - No se pudo revisar la columna por el error: {e}")
+        print("--- FIN DE LA DEPURACIÓN ---\n")
+        # --- TERMINA BLOQUE DE DEPURACIÓN PROFUNDA ---
+
+        # Esta es la línea donde probablemente ocurre el error
         saldo_capital_num = pd.to_numeric(reporte_df['Saldo_Capital'], errors='coerce').fillna(0)
         saldo_avales_num = pd.to_numeric(reporte_df['Saldo_Avales'], errors='coerce').fillna(0)
         saldo_interes_num = pd.to_numeric(reporte_df['Saldo_Interes_Corriente'], errors='coerce').fillna(0)
-        
         total_saldo_fns = saldo_capital_num + saldo_avales_num + saldo_interes_num
         
         reporte_df['Meta_T.R_$'] = np.where(
@@ -103,10 +121,7 @@ class ReportProcessorService:
             saldo_capital_num
         ) * reporte_df['Meta_T.R_%']
 
-        # --- NUEVO: 7. Eliminar las columnas intermedias de metas ---
-        print("   - Limpiando columnas de metas intermedias...")
         reporte_df.drop(columns=columnas_metas_a_borrar, inplace=True, errors='ignore')
-
         return reporte_df
 
     def map_call_center_data(self, reporte_df):
@@ -303,11 +318,17 @@ class ReportProcessorService:
                 
                 # Para los cálculos que necesiten el valor decimal, usamos numeric_col directamente
                 # (pero no lo guardamos en el dataframe final)
-
+        mask_arp = reporte_df['Empresa'] == 'ARPESOD'
+        for col in ['Saldo_Avales', 'Saldo_Interes_Corriente']:
+            if col in reporte_df.columns:
+                reporte_df[col] = reporte_df[col].astype(object) # Permite mezclar tipos
+                reporte_df.loc[mask_arp, col] = 'NO APLICA' 
+                
+                
         # Eliminar columnas temporales y reordenar
         print("🏗️  Reordenando columnas según la configuración...")
         columnas_a_eliminar = [
-            'Saldo_Factura','Tipo_Credito' , 'Numero_Credito',
+            'Saldo_Factura','Tipo_Credito' , 'Numero_Credito','Meta_DC_Al_Dia','Meta_DC_Atraso','Meta_Atraso'
             *[col for col in reporte_df.columns if '_Analisis' in col or '_R03' in col or '_Venc' in col],
             *[col for col in reporte_df.columns if col.endswith('_display')]  # Eliminar columnas display si existen
         ]

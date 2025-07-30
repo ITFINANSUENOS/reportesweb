@@ -51,13 +51,13 @@ class BaseMensualView(tk.Toplevel):
             "R91": "Reportes R91 (ARP y FS)",
             "VENCIMIENTOS": "Vencimientos (ARP y FNS)",
             "R03": "Reportes R03 (Codeudores ARP y FNS)",
-            "SC04": "Archivo SC04",
-            "CRTMPCONSULTA1": "Consulta CRTMPCONSULTA1",
+            "SC04": "Desembolsos Arpesod (SC04)",
+            "CRTMPCONSULTA1": "Reporte de ventas CRTMPCONSULTA1",
             "FNZ003": "Saldos FNZ003",
             "MATRIZ_CARTERA": "Matriz de Cartera",
             "METAS_FRANJAS": "Metas por Franjas",
             "ASESORES": "Asesores Activos",
-            "DESEMBOLSOS_FINANSUEÑOS": "Desembolsos Finansueños"
+            "DESEMBOLSOS_FINANSUEÑOS": "Desembolsos Finansueños (FNZ001)"
         }
 
         # --- Crear dinámicamente los campos de carga de archivos ---

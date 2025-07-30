@@ -79,19 +79,23 @@ class CreditDetailsService:
         today = pd.Timestamp.now().normalize()
         
         resumen_creditos = pd.DataFrame(df['Credito'].unique(), columns=['Credito']).set_index('Credito')
-        
+        # --- NUEVO: Añadir la columna 'Celular' al resumen ---
+        # Como el celular es el mismo para todas las cuotas de un crédito, tomamos el primero que aparezca.
+        if 'Celular' in df.columns:
+            mapa_celular = df.groupby('Credito')['Celular'].first()
+            resumen_creditos['Celular'] = resumen_creditos.index.map(mapa_celular)
+        # --- FIN DEL BLOQUE NUEVO ---
+
         # --- Cálculos de Atraso ---
         df_atrasados = df[df['Fecha_Cuota_Vigente'] < today].copy()
         
-        # --- NUEVO: Detección de créditos con cuotas negativas ---
-        creditos_con_negativos = pd.DataFrame() # Inicia como un df vacío
+        creditos_con_negativos = pd.DataFrame()
         if not df_atrasados.empty:
             cuotas_negativas_df = df_atrasados[df_atrasados['Valor_Cuota_Vigente'] < 0]
             if not cuotas_negativas_df.empty:
-                print(f"   - ⚠️ Se encontraron {len(cuotas_negativas_df)} cuotas con valores negativos.")
-                # Extraemos la información necesaria y eliminamos duplicados
+                print(f"   - ⚠️ Se encontraron {len(cuotas_negativas_df)} cuotas negativas en Vencimientos.")
                 creditos_con_negativos = cuotas_negativas_df[['Credito', 'Cedula_Cliente']].drop_duplicates().reset_index(drop=True)
-        # --- FIN DEL BLOQUE NUEVO ---
+                creditos_con_negativos['Observacion'] = 'Valor negativo en Informe de Vencimientos'
 
         if not df_atrasados.empty:
             mapa_valor_vencido = df_atrasados.groupby('Credito')['Valor_Cuota_Vigente'].sum()
@@ -113,10 +117,18 @@ class CreditDetailsService:
             resumen_creditos['Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Cuota_Vigente'])
             resumen_creditos['Valor_Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Valor_Cuota_Vigente'])
 
-        print("✅ Resumen de vencimientos creado.")
-        # Ahora la función devuelve DOS dataframes
-        return resumen_creditos.reset_index(), creditos_con_negativos
+        # --- NUEVO: Rellenar vacíos en 'Valor_Vencido' ---
+        # Si un crédito no tiene valor vencido, nos aseguramos de que sea 0 en lugar de NaN.
+        if 'Valor_Vencido' in resumen_creditos.columns:
+            resumen_creditos['Valor_Vencido'] = resumen_creditos['Valor_Vencido'].fillna(0)
+        else:
+            # Si ningún crédito tiene mora, la columna no se crea, así que la creamos con ceros.
+            resumen_creditos['Valor_Vencido'] = 0
+        # --- FIN DEL BLOQUE NUEVO ---
 
+        print("✅ Resumen de vencimientos creado.")
+        return resumen_creditos.reset_index(), creditos_con_negativos
+    
     def adjust_arrears_status(self, reporte_df):
         """Ajusta el estado de mora basado en la columna 'Dias_Atraso' del reporte final."""
         print("🔧 Ajustando estado final de la mora...")
