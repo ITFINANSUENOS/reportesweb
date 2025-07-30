@@ -69,7 +69,6 @@ class ReportProcessorService:
                 )
                 reporte_df[col] = reporte_df[col].fillna(0)
 
-
         # 4. Calcular 'Meta_%' dinámicamente
         dias_atraso = reporte_df['Dias_Atraso']
         condiciones = [

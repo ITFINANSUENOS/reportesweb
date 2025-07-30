@@ -45,7 +45,7 @@ class ReportService:
         print(f"📄 Reporte base creado con {len(reporte_final)} registros de R91 (sin eliminar duplicados).")
 
         # 3. Procesar vencimientos
-        processed_vencimientos = self.credit_details.process_vencimientos_data(vencimientos_df)
+        processed_vencimientos, creditos_negativos_df = self.credit_details.process_vencimientos_data(vencimientos_df)
         
         # 4. Unir datos al reporte base
         print("\n🔍 Uniendo resúmenes de información al reporte base...")

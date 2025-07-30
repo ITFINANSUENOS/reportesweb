@@ -156,7 +156,7 @@ ORDEN_COLUMNAS_FINAL = [
     'Cedula_Cliente',
     'Nombre_Cliente',
     'Correo',
-    'Telefono',
+    'Celular',
     'Direccion',
     'Barrio',
     'Nombre_Ciudad',
