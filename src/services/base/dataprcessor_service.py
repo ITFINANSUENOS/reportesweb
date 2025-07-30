@@ -76,7 +76,7 @@ class ReportProcessorService:
             dias_atraso.between(1, 30),
             dias_atraso.between(31, 90),
             dias_atraso.between(91, 180),
-            dias_atraso.between(181, 360)
+            dias_atraso > 180
         ]
         valores = [
             reporte_df['Meta_1_A_30'],
@@ -240,31 +240,49 @@ class ReportProcessorService:
         if 'Fecha_Facturada' in reporte_df.columns:
             reporte_df['Fecha_Facturada'] = pd.to_datetime(reporte_df['Fecha_Facturada'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
 
-        
-        print("👔 Limpiando y completando la columna 'Lider_Zona'...")
+        if 'Fecha_Desembolso' in reporte_df.columns:
+            reporte_df['Fecha_Desembolso'] = pd.to_datetime(reporte_df['Fecha_Desembolso'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')    
+ 
+        print("👔 Limpiando y completando la columna 'Lider_Zona' y 'Movil_Lider'")
+       
         if 'Lider_Zona' in reporte_df.columns and 'Regional_Venta' in reporte_df.columns:
-            # 1. Eliminar valores que son solo números (ej. un celular)
-            # Se convierten a NaN para poder rellenarlos en el siguiente paso.
+            print("👔 Limpiando y completando 'Lider_Zona' y 'Movil_Lider'...")
+
+            # --- PASO 1: Limpiar los datos de origen ---
+            # Eliminar valores numéricos de 'Lider_Zona' para que no se consideren nombres válidos
             is_numeric_mask = pd.to_numeric(reporte_df['Lider_Zona'], errors='coerce').notna()
             reporte_df.loc[is_numeric_mask, 'Lider_Zona'] = np.nan
+            
+            # --- PASO 2: Crear un mapa de Líder -> Móvil ---
+            # Se crea antes de rellenar los vacíos para capturar las relaciones originales.
+            mapa_moviles = {}
+            if 'Movil_Lider' in reporte_df.columns:
+                # Nos aseguramos de que solo mapeamos líderes que tienen un móvil válido
+                mapa_df = reporte_df.dropna(subset=['Lider_Zona', 'Movil_Lider']) \
+                                    .drop_duplicates(subset=['Lider_Zona'])
+                mapa_moviles = pd.Series(mapa_df['Movil_Lider'].values, index=mapa_df['Lider_Zona']).to_dict()
 
-            # 2. Rellenar vacíos con el líder más común (moda) de su respectiva regional
-            # Se usa groupby().transform() para aplicar el relleno de forma eficiente por cada grupo de 'Regional_Venta'.
-            # La función lambda encuentra el líder más común (moda) para un grupo y rellena los NaN de ese grupo.
+            # --- PASO 3: Rellenar 'Lider_Zona' con la moda de su respectiva regional ---
             def fill_with_mode(series):
                 mode_val = series.mode()
-                # Solo rellenar si existe una moda (si el grupo no está completamente vacío)
                 if not mode_val.empty:
                     return series.fillna(mode_val.iloc[0])
                 return series
-
+                
             reporte_df['Lider_Zona'] = reporte_df.groupby('Regional_Venta')['Lider_Zona'].transform(fill_with_mode)
 
-            # 3. Si después del proceso aún queda algún vacío (ej. una regional sin ningún líder asignado),
-            # se le asigna un valor por defecto.
+            # --- PASO 4: Usar el 'Lider_Zona' ya completo para asignar su móvil ---
+            if 'Movil_Lider' in reporte_df.columns:
+                # El método .map usará el 'mapa_moviles' que creamos en el paso 2
+                reporte_df['Movil_Lider'] = reporte_df['Lider_Zona'].map(mapa_moviles)
+
+            # --- PASO 5: Rellenar cualquier vacío restante en ambas columnas ---
             reporte_df['Lider_Zona'].fillna('NO ASIGNADO', inplace=True)
+            if 'Movil_Lider' in reporte_df.columns:
+                reporte_df['Movil_Lider'].fillna('NO ASIGNADO', inplace=True)
         else:
             print("   - ⚠️ Columnas 'Lider_Zona' o 'Regional_Venta' no encontradas. Se omite este paso.")
+
 
         print("✨ Formateando columnas de porcentaje...")
         columnas_porcentaje = ['Meta_%', 'Meta_T.R_%']

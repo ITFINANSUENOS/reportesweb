@@ -53,10 +53,9 @@ class ProductsSalesService:
             mapa_facturas_arp = pd.Series(merged_arp['Factura_Encontrada'].values, index=merged_arp['Credito']).to_dict()
             reporte_df.loc[filtro_arp_especial, 'Factura_Venta'] = reporte_df.loc[filtro_arp_especial, 'Credito'].map(mapa_facturas_arp)
             reporte_df.drop(columns=['Numero_Busqueda'], inplace=True, errors='ignore')
-
+        
         filtro_arp_normal = (reporte_df['Empresa'] == 'ARPESOD') & (reporte_df['Factura_Venta'].isnull())
         reporte_df.loc[filtro_arp_normal, 'Factura_Venta'] = reporte_df['Credito']
-        
         # Llenar vacíos restantes
         reporte_df['Factura_Venta'] = reporte_df['Factura_Venta'].fillna('NO ASIGNADA')
         
@@ -72,10 +71,10 @@ class ProductsSalesService:
 
         if crtmp_df.empty:
             print("⚠️ Archivo CRTMP no encontrado. No se pueden agregar detalles de productos.")
-            reporte_df['Productos'] = 'NO DISPONIBLE'
-            reporte_df['Cantidad_Productos'] = 0
-            reporte_df['Obsequios'] = 'NO DISPONIBLE'
-            reporte_df['Cantidad_Obsequios'] = 0
+            reporte_df['Nombre_Producto'] = 'NO DISPONIBLE'
+            reporte_df['Cantidad_Producto'] = 0
+            reporte_df['Obsequio'] = 'NO DISPONIBLE'
+            reporte_df['Cantidad_Obsequio'] = 0
             return reporte_df
 
 
@@ -85,31 +84,28 @@ class ProductsSalesService:
         crtmp_detalles['Cantidad_Item'] = pd.to_numeric(crtmp_detalles['Cantidad_Item'], errors='coerce').fillna(1)
         
         # 2. Clasificar items y preparar texto (sin cambios)
-        es_obsequio = (crtmp_detalles['Total_Venta'] >= 1000) & (crtmp_detalles['Total_Venta'] <= 2000)
+        es_obsequio = (crtmp_detalles['Total_Venta'] >= 1000) & (crtmp_detalles['Total_Venta'] <= 6000)
         crtmp_detalles['Tipo_Item'] = np.where(es_obsequio, 'Obsequio', 'Producto')
         crtmp_detalles['Item_Texto'] = crtmp_detalles['Nombre_Producto'].astype(str) + ' (' + crtmp_detalles['Cantidad_Item'].astype(int).astype(str) + ')'
 
         # 3. Agrupar items por factura (SE ELIMINA LA BÚSQUEDA DE FECHA)
         productos = crtmp_detalles[crtmp_detalles['Tipo_Item'] == 'Producto'].groupby('Factura_Venta').agg(
-            Productos=('Item_Texto', ', '.join),
-            Cantidad_Productos=('Cantidad_Item', 'sum')
+            Nombre_Producto=('Item_Texto', ', '.join),
+            Cantidad_Producto=('Cantidad_Item', 'sum')
         )
         obsequios = crtmp_detalles[crtmp_detalles['Tipo_Item'] == 'Obsequio'].groupby('Factura_Venta').agg(
-            Obsequios=('Item_Texto', ', '.join),
-            Cantidad_Obsequios=('Cantidad_Item', 'sum')
+            Obsequio=('Item_Texto', ', '.join),
+            Cantidad_Obsequio=('Cantidad_Item', 'sum')
         )
-
         # 4. Unir solo la información de productos y obsequios
         info_facturas = productos.join(obsequios, how='outer')
-
         # 5. Cruzar esta información con el reporte principal
         reporte_df = pd.merge(reporte_df, info_facturas, on='Factura_Venta', how='left')
-        
         # 6. Limpieza final de las nuevas columnas
-        reporte_df['Productos'] = reporte_df['Productos'].fillna('NO REGISTRA')
-        reporte_df['Obsequios'] = reporte_df['Obsequios'].fillna('SIN OBSEQUIOS')
-        reporte_df['Cantidad_Productos'] = reporte_df['Cantidad_Productos'].fillna(0).astype(int)
-        reporte_df['Cantidad_Obsequios'] = reporte_df['Cantidad_Obsequios'].fillna(0).astype(int)
+        reporte_df['Nombre_Producto'] = reporte_df['Nombre_Producto'].fillna('NO REGISTRA')
+        reporte_df['Obsequio'] = reporte_df['Obsequio'].fillna('SIN OBSEQUIOS')
+        reporte_df['Cantidad_Producto'] = reporte_df['Cantidad_Producto'].fillna(0).astype(int)
+        reporte_df['Cantidad_Obsequio'] = reporte_df['Cantidad_Obsequio'].fillna(0).astype(int)
         
         print("✅ Detalles de productos y obsequios agregados.")
         return reporte_df

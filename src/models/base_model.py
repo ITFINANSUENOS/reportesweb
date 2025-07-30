@@ -131,13 +131,13 @@ configuracion = {
         ]
     },
      "FNZ001":{
-        "usecols":["DSM_TP","SALDO","DESEMBOLSO", "DSM_NUM"],
+        "usecols":["DSM_TP","VLR_FNZ","VLR_CUOTA", "DSM_NUM","CUOTAS"],
         "rename_map":{ 
                       "DSM_TP":"Tipo_Credito",
                       "DSM_NUM": "Numero_Credito",  
                       "VLR_CUOTA":"Valor_Cuota",
                       "CUOTAS":"Total_Cuotas", 
-                      "VLR_FNZ":"Saldo" }
+                      "VLR_FNZ":"Valor_Desembolso" }
     }
 }
 
