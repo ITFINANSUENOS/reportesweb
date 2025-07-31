@@ -69,7 +69,6 @@ class ReportProcessorService:
                 )
                 reporte_df[col] = reporte_df[col].fillna(0)
 
-
         # 4. Calcular 'Meta_%' dinámicamente
         dias_atraso = reporte_df['Dias_Atraso']
         condiciones = [
@@ -308,7 +307,7 @@ class ReportProcessorService:
         # Eliminar columnas temporales y reordenar
         print("🏗️  Reordenando columnas según la configuración...")
         columnas_a_eliminar = [
-            'Saldo_Factura','Tipo_Credito' , 'Numero_Credito',
+            'Saldo_Factura','Tipo_Credito' , 'Numero_Credito','Meta_DC_Al_Dia','Meta_DC_Atraso','Meta_Atraso'
             *[col for col in reporte_df.columns if '_Analisis' in col or '_R03' in col or '_Venc' in col],
             *[col for col in reporte_df.columns if col.endswith('_display')]  # Eliminar columnas display si existen
         ]

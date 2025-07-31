@@ -156,7 +156,7 @@ ORDEN_COLUMNAS_FINAL = [
     'Cedula_Cliente',
     'Nombre_Cliente',
     'Correo',
-    'Telefono',
+    'Celular',
     'Direccion',
     'Barrio',
     'Nombre_Ciudad',
@@ -208,9 +208,6 @@ ORDEN_COLUMNAS_FINAL = [
     'Fecha_Cuota_Atraso',      # <-- NUEVA
     'Primera_Cuota_Mora',      # <-- NUEVA
     'Valor_Cuota_Atraso',      # <-- NUEVA
-    'Valor_Vencido',
-    'Meta_DC_Al_Dia',
-    'Meta_DC_Atraso',
-    'Meta_Atraso',
+    'Valor_Vencido'
 
 ]
