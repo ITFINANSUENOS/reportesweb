@@ -1,5 +1,6 @@
 from tkinter import filedialog, messagebox
 import threading
+import pandas as pd
 from pathlib import Path
 
 # Importaciones de tu proyecto
@@ -67,7 +68,7 @@ class BaseMensualController:
             self.view.actualizar_estado("Generando reporte consolidado...", 30)
             
             # --- MODIFICADO: Pasar las fechas al servicio ---
-            reporte_final = service.generate_consolidated_report(
+            reporte_final, reporte_negativos = service.generate_consolidated_report(
                 file_paths=lista_final_rutas,
                 orden_columnas=ORDEN_COLUMNAS_FINAL,
                 start_date=start_date,
@@ -91,7 +92,18 @@ class BaseMensualController:
                 messagebox.showinfo("Cancelado", "La operación de guardado fue cancelada.")
                 return
 
-            reporte_final.to_excel(nombre_archivo_salida, index=False, sheet_name='Reporte Consolidado')
+             # --- MODIFICADO: Lógica de guardado para múltiples hojas ---
+            print(f"💾 Guardando reporte en {nombre_archivo_salida}...")
+            with pd.ExcelWriter(nombre_archivo_salida, engine='openpyxl') as writer:
+                # Hoja 1: El reporte principal
+                reporte_final.to_excel(writer, sheet_name='Reporte Consolidado', index=False)
+                
+                # Hoja 2: El reporte de negativos (solo si tiene datos)
+                if reporte_negativos is not None and not reporte_negativos.empty:
+                    reporte_negativos.to_excel(writer, sheet_name='Creditos_Negativos', index=False)
+                    print("   - Hoja 'Creditos_Negativos' añadida.")
+            # --- FIN DE LA MODIFICACIÓN ---
+
             self.view.actualizar_estado("¡Éxito! Reporte guardado.", 100)
             messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}")
 

@@ -10,12 +10,35 @@ class ReportProcessorService:
     """Servicio para el procesamiento final del reporte consolidado"""
     
     def calculate_balances(self, reporte_df, fnz003_df):
-        """Calcula los diferentes saldos y los agrega al reporte."""
+        """
+        Calcula saldos, los agrega al reporte, y devuelve una lista de créditos
+        con saldos negativos encontrados en FNZ003.
+        """
         print("📊 Calculando saldos...")
+        
+        creditos_negativos_fnz003 = pd.DataFrame() # Inicia df de negativos vacío
+
         reporte_df['Saldo_Capital'] = np.where(reporte_df['Empresa'] == 'ARPESOD', reporte_df.get('Saldo_Factura'), np.nan)
+        
         if not fnz003_df.empty:
-            fnz003_df = self.data_loader.create_credit_key(fnz003_df)
-            fnz003_df['Credito'] = fnz003_df['Credito'].astype(str)
+            # Aseguramos que 'Saldo' sea numérico para los cálculos
+            fnz003_df['Saldo'] = pd.to_numeric(fnz003_df['Saldo'], errors='coerce').fillna(0)
+            
+            # --- NUEVO: Detección de saldos negativos en FNZ003 ---
+            negativos_df = fnz003_df[fnz003_df['Saldo'] < 0].copy()
+            if not negativos_df.empty:
+                print(f"   - ⚠️ Se encontraron {len(negativos_df)} saldos negativos en FNZ003.")
+                
+                # Creamos la llave 'Credito' para poder unir los datos
+                # Asegúrate de que tu data_loader esté disponible como self.data_loader
+                negativos_df = self.data_loader.create_credit_key(negativos_df) 
+                
+                # Creamos la columna 'Observacion' usando el 'Concepto'
+                negativos_df['Observacion'] = 'Saldo negativo en: ' + negativos_df['Concepto'].astype(str)
+                creditos_negativos_fnz003 = negativos_df[['Credito', 'Observacion']].drop_duplicates()
+            # --- FIN DEL BLOQUE NUEVO ---
+
+            # El resto de la lógica de cálculo de saldos no cambia
             mapa_capital = fnz003_df[fnz003_df['Concepto'].isin(['CAPITAL', 'ABONO DIF TASA'])].groupby('Credito')['Saldo'].sum()
             mapa_avales = fnz003_df[fnz003_df['Concepto'] == 'AVAL'].groupby('Credito')['Saldo'].sum()
             mapa_interes = fnz003_df[fnz003_df['Concepto'] == 'INTERES CORRIENTE'].groupby('Credito')['Saldo'].sum()
@@ -24,10 +47,13 @@ class ReportProcessorService:
             reporte_df['Saldo_Avales'] = reporte_df['Credito'].map(mapa_avales)
             reporte_df['Saldo_Interes_Corriente'] = reporte_df['Credito'].map(mapa_interes)
         
+        # Limpieza final de las columnas de saldo (sin cambios)
         reporte_df['Saldo_Capital'] = pd.to_numeric(reporte_df['Saldo_Capital'], errors='coerce').fillna(0).astype(int)
         reporte_df['Saldo_Avales'] = np.where(reporte_df['Empresa'] == 'FINANSUEÑOS', reporte_df.get('Saldo_Avales').fillna(0).astype(int), 'NO APLICA')
         reporte_df['Saldo_Interes_Corriente'] = np.where(reporte_df['Empresa'] == 'FINANSUEÑOS', reporte_df.get('Saldo_Interes_Corriente').fillna(0).astype(int), 'NO APLICA')
-        return reporte_df
+        
+        # La función ahora devuelve el reporte y la lista de negativos
+        return reporte_df, creditos_negativos_fnz003
 
     def calculate_goal_metrics(self, reporte_df, metas_franjas_df):
         """
@@ -307,7 +333,7 @@ class ReportProcessorService:
         # Eliminar columnas temporales y reordenar
         print("🏗️  Reordenando columnas según la configuración...")
         columnas_a_eliminar = [
-            'Saldo_Factura','Tipo_Credito' , 'Numero_Credito','Meta_DC_Al_Dia','Meta_DC_Atraso','Meta_Atraso'
+            'Saldo_Factura','Tipo_Credito' , 'Numero_Credito','Meta_DC_Al_Dia','Meta_DC_Atraso','Meta_Atraso',
             *[col for col in reporte_df.columns if '_Analisis' in col or '_R03' in col or '_Venc' in col],
             *[col for col in reporte_df.columns if col.endswith('_display')]  # Eliminar columnas display si existen
         ]

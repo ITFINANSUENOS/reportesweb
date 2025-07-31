@@ -45,7 +45,7 @@ class ReportService:
         print(f"📄 Reporte base creado con {len(reporte_final)} registros de R91 (sin eliminar duplicados).")
 
         # 3. Procesar vencimientos
-        processed_vencimientos = self.credit_details.process_vencimientos_data(vencimientos_df)
+        processed_vencimientos, negativos_vencimientos = self.credit_details.process_vencimientos_data(vencimientos_df)
         
         # 4. Unir datos al reporte base
         print("\n🔍 Uniendo resúmenes de información al reporte base...")
@@ -63,8 +63,8 @@ class ReportService:
             matriz_cartera_df['Zona'] = matriz_cartera_df['Zona'].astype(str).str.strip()
             reporte_final = pd.merge(reporte_final, matriz_cartera_df.drop_duplicates('Zona'), on='Zona', how='left')
         
-        if not crtmp_df.empty:
-            reporte_final = pd.merge(reporte_final, crtmp_df[['Credito', 'Correo', 'Fecha_Facturada']].drop_duplicates('Credito'), on='Credito', how='left')
+        # if not crtmp_df.empty:
+        #     reporte_final = pd.merge(reporte_final, crtmp_df[['Credito', 'Correo', 'Fecha_Facturada']].drop_duplicates('Credito'), on='Credito', how='left')
         
         if asesores_sheets:
             # Primero obtenemos todos los códigos de vendedor activos
@@ -122,10 +122,39 @@ class ReportService:
         reporte_final = self.credit_details.enrich_credit_details(reporte_final, sc04_df, fnz001_df)
         reporte_final = self.credit_details.clean_installment_data(reporte_final)
         reporte_final = self.report_processor.map_call_center_data(reporte_final)
-        reporte_final = self.report_processor.calculate_balances(reporte_final, fnz003_df)
+        reporte_final, negativos_fnz003 = self.report_processor.calculate_balances(reporte_final, fnz003_df)
         reporte_final = self.report_processor.calculate_goal_metrics(reporte_final, metas_franjas_df)
         reporte_final = self.credit_details.adjust_arrears_status(reporte_final)
         reporte_final = self.report_processor.filter_by_date_range(reporte_final, start_date, end_date)
         reporte_final = self.report_processor.finalize_report(reporte_final, orden_columnas)
 
-        return reporte_final
+        reporte_negativos_final = pd.DataFrame() 
+        lista_de_negativos = [df for df in [negativos_vencimientos, negativos_fnz003] if not df.empty]
+
+        if lista_de_negativos:
+            print("📊 Unificando reportes de créditos con valores negativos...")
+            
+            # Unimos todas las listas de créditos negativos
+            todos_los_negativos = pd.concat(lista_de_negativos, ignore_index=True)
+            
+            # Preparamos la información de clientes del reporte final para el cruce
+            info_clientes = reporte_final[['Credito', 'Cedula_Cliente', 'Nombre_Cliente']].drop_duplicates(subset=['Credito'])
+            
+            # --- LÓGICA CORREGIDA ---
+            # Hacemos el merge usando solo las columnas necesarias de 'todos_los_negativos'
+            # para evitar el conflicto de nombres en 'Cedula_Cliente'.
+            reporte_negativos_final = pd.merge(
+                todos_los_negativos[['Credito', 'Observacion']].drop_duplicates(), 
+                info_clientes, 
+                on='Credito', 
+                how='left'
+            )
+            
+            # Seleccionamos y ordenamos las columnas finales para el reporte
+            columnas_finales_negativos = ['Credito', 'Cedula_Cliente', 'Nombre_Cliente', 'Observacion']
+            # Nos aseguramos que todas las columnas existan antes de seleccionarlas
+            columnas_existentes = [col for col in columnas_finales_negativos if col in reporte_negativos_final.columns]
+            reporte_negativos_final = reporte_negativos_final[columnas_existentes].drop_duplicates()
+
+        # Se devuelven ambos reportes para que el controlador los guarde
+        return reporte_final, reporte_negativos_final
