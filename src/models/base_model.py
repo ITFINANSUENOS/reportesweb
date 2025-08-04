@@ -205,12 +205,8 @@ ORDEN_COLUMNAS_FINAL = [
     'Cuota_Vigente',
     'Fecha_Cuota_Vigente',
     'Valor_Cuota_Vigente',
-    'Fecha_Cuota_Atraso',      # <-- NUEVA
-    'Primera_Cuota_Mora',      # <-- NUEVA
-    'Valor_Cuota_Atraso',      # <-- NUEVA
-    'Valor_Vencido',
-    'Meta_DC_Al_Dia',
-    'Meta_DC_Atraso',
-    'Meta_Atraso',
-
+    'Fecha_Cuota_Atraso',
+    'Primera_Cuota_Mora',
+    'Valor_Cuota_Atraso',      
+    'Valor_Vencido'
 ]

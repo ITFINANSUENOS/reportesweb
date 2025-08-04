@@ -79,6 +79,7 @@ class CreditDetailsService:
         today = pd.Timestamp.now().normalize()
         
         resumen_creditos = pd.DataFrame(df['Credito'].unique(), columns=['Credito']).set_index('Credito')
+        
         # --- NUEVO: Añadir la columna 'Celular' al resumen ---
         # Como el celular es el mismo para todas las cuotas de un crédito, tomamos el primero que aparezca.
         if 'Celular' in df.columns:
@@ -93,7 +94,7 @@ class CreditDetailsService:
         if not df_atrasados.empty:
             cuotas_negativas_df = df_atrasados[df_atrasados['Valor_Cuota_Vigente'] < 0]
             if not cuotas_negativas_df.empty:
-                print(f"   - ⚠️ Se encontraron {len(cuotas_negativas_df)} cuotas negativas en Vencimientos.")
+                print(f"   - ⚠️ Se encontraron {len(cuotas_negativas_df)} cuotas con valores negativos.")
                 creditos_con_negativos = cuotas_negativas_df[['Credito', 'Cedula_Cliente']].drop_duplicates().reset_index(drop=True)
                 creditos_con_negativos['Observacion'] = 'Valor negativo en Informe de Vencimientos'
 
@@ -125,6 +126,9 @@ class CreditDetailsService:
             # Si ningún crédito tiene mora, la columna no se crea, así que la creamos con ceros.
             resumen_creditos['Valor_Vencido'] = 0
         # --- FIN DEL BLOQUE NUEVO ---
+
+        print("✅ Resumen de vencimientos creado.")
+        return resumen_creditos.reset_index(), creditos_con_negativos
 
         print("✅ Resumen de vencimientos creado.")
         return resumen_creditos.reset_index(), creditos_con_negativos

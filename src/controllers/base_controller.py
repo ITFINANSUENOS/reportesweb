@@ -69,10 +69,10 @@ class BaseMensualController:
             
             # --- MODIFICADO: Pasar las fechas al servicio ---
             reporte_final, reporte_negativos = service.generate_consolidated_report(
-            file_paths=lista_final_rutas,
-            orden_columnas=ORDEN_COLUMNAS_FINAL,
-            start_date=start_date,
-            end_date=end_date
+                file_paths=lista_final_rutas,
+                orden_columnas=ORDEN_COLUMNAS_FINAL,
+                start_date=start_date,
+                end_date=end_date
             )
 
             if reporte_final is None or reporte_final.empty:
@@ -92,16 +92,18 @@ class BaseMensualController:
                 messagebox.showinfo("Cancelado", "La operación de guardado fue cancelada.")
                 return
 
+             # --- MODIFICADO: Lógica de guardado para múltiples hojas ---
             print(f"💾 Guardando reporte en {nombre_archivo_salida}...")
             with pd.ExcelWriter(nombre_archivo_salida, engine='openpyxl') as writer:
+                # Hoja 1: El reporte principal
                 reporte_final.to_excel(writer, sheet_name='Reporte Consolidado', index=False)
                 
-                # Si el reporte de negativos no está vacío, lo añade en otra hoja
-                if not reporte_negativos.empty:
+                # Hoja 2: El reporte de negativos (solo si tiene datos)
+                if reporte_negativos is not None and not reporte_negativos.empty:
                     reporte_negativos.to_excel(writer, sheet_name='Creditos_Negativos', index=False)
                     print("   - Hoja 'Creditos_Negativos' añadida.")
             # --- FIN DE LA MODIFICACIÓN ---
-            print(f"Archvio guardado en: {nombre_archivo_salida} ")
+
             self.view.actualizar_estado("¡Éxito! Reporte guardado.", 100)
             messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}")  
 
