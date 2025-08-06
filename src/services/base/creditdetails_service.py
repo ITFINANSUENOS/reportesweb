@@ -80,13 +80,14 @@ class CreditDetailsService:
         
         resumen_creditos = pd.DataFrame(df['Credito'].unique(), columns=['Credito']).set_index('Credito')
         
-        # --- NUEVO: Añadir la columna 'Celular' al resumen ---
-        # Como el celular es el mismo para todas las cuotas de un crédito, tomamos el primero que aparezca.
+        # --- Añadir la columna 'Celular' al resumen ---
         if 'Celular' in df.columns:
             mapa_celular = df.groupby('Credito')['Celular'].first()
             resumen_creditos['Celular'] = resumen_creditos.index.map(mapa_celular)
-        # --- FIN DEL BLOQUE NUEVO ---
 
+        # --- Inicializar Valor_Vencido con 0 para todos los créditos ---
+        resumen_creditos['Valor_Vencido'] = 0
+        
         # --- Cálculos de Atraso ---
         df_atrasados = df[df['Fecha_Cuota_Vigente'] < today].copy()
         
@@ -98,17 +99,22 @@ class CreditDetailsService:
                 creditos_con_negativos = cuotas_negativas_df[['Credito', 'Cedula_Cliente']].drop_duplicates().reset_index(drop=True)
                 creditos_con_negativos['Observacion'] = 'Valor negativo en Informe de Vencimientos'
 
-        if not df_atrasados.empty:
+            # Calcular suma de valores vencidos para cada crédito
             mapa_valor_vencido = df_atrasados.groupby('Credito')['Valor_Cuota_Vigente'].sum()
+            # Actualizar los valores en el resumen (solo para créditos con mora)
+            resumen_creditos['Valor_Vencido'] = resumen_creditos['Valor_Vencido'].add(
+                mapa_valor_vencido, fill_value=0
+            )
+            
+            # Resto de cálculos de atraso
             idx_primera_mora = df_atrasados.groupby('Credito')['Fecha_Cuota_Vigente'].idxmin()
             mapa_primera_mora = df.loc[idx_primera_mora].set_index('Credito')
 
-            resumen_creditos['Valor_Vencido'] = resumen_creditos.index.map(mapa_valor_vencido)
             resumen_creditos['Fecha_Cuota_Atraso'] = resumen_creditos.index.map(mapa_primera_mora['Fecha_Cuota_Vigente'])
             resumen_creditos['Primera_Cuota_Mora'] = resumen_creditos.index.map(mapa_primera_mora['Cuota_Vigente'])
             resumen_creditos['Valor_Cuota_Atraso'] = resumen_creditos.index.map(mapa_primera_mora['Valor_Cuota_Vigente'])
 
-        # --- Cálculos de Vigencia (sin cambios) ---
+        # --- Cálculos de Vigencia ---
         df_vigentes = df[(df['Fecha_Cuota_Vigente'].dt.year == today.year) & (df['Fecha_Cuota_Vigente'].dt.month == today.month)].copy()
         if not df_vigentes.empty:
             idx_ultima_vigente = df_vigentes.groupby('Credito')['Fecha_Cuota_Vigente'].idxmax()
@@ -118,21 +124,9 @@ class CreditDetailsService:
             resumen_creditos['Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Cuota_Vigente'])
             resumen_creditos['Valor_Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Valor_Cuota_Vigente'])
 
-        # --- NUEVO: Rellenar vacíos en 'Valor_Vencido' ---
-        # Si un crédito no tiene valor vencido, nos aseguramos de que sea 0 en lugar de NaN.
-        if 'Valor_Vencido' in resumen_creditos.columns:
-            resumen_creditos['Valor_Vencido'] = resumen_creditos['Valor_Vencido'].fillna(0)
-        else:
-            # Si ningún crédito tiene mora, la columna no se crea, así que la creamos con ceros.
-            resumen_creditos['Valor_Vencido'] = 0
-        # --- FIN DEL BLOQUE NUEVO ---
-
         print("✅ Resumen de vencimientos creado.")
         return resumen_creditos.reset_index(), creditos_con_negativos
 
-        print("✅ Resumen de vencimientos creado.")
-        return resumen_creditos.reset_index(), creditos_con_negativos
-    
     def adjust_arrears_status(self, reporte_df):
         """Ajusta el estado de mora basado en la columna 'Dias_Atraso' del reporte final."""
         print("🔧 Ajustando estado final de la mora...")

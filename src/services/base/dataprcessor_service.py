@@ -243,6 +243,10 @@ class ReportProcessorService:
         """Realiza la limpieza, formato y reordenamiento final del reporte."""
         print("🧹 Realizando transformaciones y limpieza final...")
         
+         # Asegurarse que 'Valor_Vencido' existe y tiene el formato correcto
+        if 'Valor_Vencido' not in reporte_df.columns:
+            reporte_df['Valor_Vencido'] = 0  # Crear columna si no existe
+        
         # Formatear y rellenar columnas de vencimientos
         columnas_vencimiento = {
             'Fecha_Cuota_Vigente': 'VIGENCIA EXPIRADA',
@@ -251,8 +255,9 @@ class ReportProcessorService:
             'Fecha_Cuota_Atraso': 'SIN MORA',
             'Primera_Cuota_Mora': 'SIN MORA',
             'Valor_Cuota_Atraso': 0,
-            'Valor_Vencido': 0
+            'Valor_Vencido': 0  # Asegurar que tiene un valor por defecto
         }
+        
         for col, default_value in columnas_vencimiento.items():
             if col not in reporte_df.columns:
                 reporte_df[col] = default_value
@@ -335,7 +340,10 @@ class ReportProcessorService:
                 reporte_df[col] = reporte_df[col].astype(object) # Permite mezclar tipos
                 reporte_df.loc[mask_arp, col] = 'NO APLICA' 
                 
-                
+
+        if 'Valor_Vencido' not in orden_columnas:
+            orden_columnas.append('Valor_Vencido')          
+
         # Eliminar columnas temporales y reordenar
         print("🏗️  Reordenando columnas según la configuración...")
         columnas_a_eliminar = [

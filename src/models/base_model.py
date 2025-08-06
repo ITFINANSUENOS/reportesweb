@@ -138,16 +138,26 @@ configuracion = {
                       "VLR_CUOTA":"Valor_Cuota",
                       "CUOTAS":"Total_Cuotas", 
                       "VLR_FNZ":"Valor_Desembolso" }
-    }
+    },
+    # "NOVEDADES":{
+    #     "usecols":["VNTCEDULA","NOTA","VNTNEWFEC","VNTNEWUSER"],
+    #     "rename_map":{
+    #                   "VNTCEDULA":"Cedula_Cliente",
+    #                   "NOTA":"Tipo_Novedad",
+    #                   "VNTNEWFEC":"Fecha_Novedad",
+    #                   "VNTNEWUSER":"Usuario_Novedad"
+    #                   }
+
+    # }
 }
 
 ORDEN_COLUMNAS_FINAL = [
     # --- Identificadores Principales ---
     'Empresa',
     'Credito',
-    'Fecha_Facturada',
     'Fecha_Desembolso',
     'Factura_Venta',
+    'Fecha_Facturada',
     'Nombre_Producto',
     'Cantidad_Producto',
     'Obsequio',
