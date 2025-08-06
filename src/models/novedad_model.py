@@ -9,6 +9,13 @@ configuracion = {
                       }
     },
     "ANALISIS":{
-        "usecols":["cedula","diasatras",""]
+        "engine": "xlrd",
+        "usecols":["cedula","diasatras","tipo","numero"],
+        "rename_map":{
+                      "cedula":"Cedula_Cliente",
+                      "tipo":"Tipo_Credito", 
+                      "numero":"Numero_Credito",
+                      "diasatras":"Dias_Atraso_Final"
+        }
     }
 }
