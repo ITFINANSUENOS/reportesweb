@@ -3,49 +3,58 @@ from tkinter import ttk
 from pathlib import Path
 from tkinter.font import Font
 
-class BaseMensualView(tk.Toplevel):
+class BaseMensualView(ttk.Frame):
     """
     Vista para seleccionar todos los archivos necesarios para generar la base mensual.
+    Ahora es un Frame que se puede poner dentro de la ventana principal.
     """
-    def __init__(self, parent, controller):
+    def __init__(self, parent, controller, main_window_controller):
         super().__init__(parent)
         self.controller = controller
-        self.parent = parent
-        self.rutas_labels = {}  # Diccionario para guardar las etiquetas de las rutas
+        self.main_window_controller = main_window_controller
+        self.rutas_labels = {} 
 
-        # Configuración de la ventana
-        self.title("Generar Base Mensual")
-        self.geometry("800x650") # Aumentamos un poco la altura
-        self.configure(bg="#F0F0F0")
+        # --- Estilo para esta vista ---
+        style = ttk.Style()
+        style.configure('Base.TFrame', background='#F0F0F0')
+        style.configure('Card.TFrame', background='#FFFFFF')
+        style.configure('Title.TLabel', background='#FFFFFF', font=("Helvetica", 14, "bold"))
+        style.configure('Desc.TLabel', background='#FFFFFF', width=35)
+        style.configure('Status.TLabel', background='#FFFFFF')
+        
+        # Estilo para la etiqueta cuando un archivo se selecciona con éxito
+        style.configure('Success.TLabel',
+                        background="#D4EDDA",
+                        foreground="#155724",
+                        relief="flat",
+                        padding=5)
+
+        self.configure(style='Base.TFrame')
+
+        # --- Botón para volver al menú principal ---
+        top_bar_frame = ttk.Frame(self, style='Base.TFrame')
+        top_bar_frame.pack(fill=tk.X, padx=10, pady=5)
+        back_button = ttk.Button(top_bar_frame, text="← Volver a Base Mensual", command=self.volver_al_menu)
+        back_button.pack(anchor="nw")
 
         # --- Frame principal con scroll ---
-        main_frame = ttk.Frame(self, padding="10")
+        main_frame = ttk.Frame(self, padding="10", style='Base.TFrame')
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         canvas = tk.Canvas(main_frame, bg="#F0F0F0", highlightthickness=0)
         scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas, style='Card.TFrame')
 
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        style = ttk.Style()
-        style.configure('Card.TFrame', background="#FFFFFF")
-
         # Título
-        title_font = Font(family="Helvetica", size=14, weight="bold")
-        title_label = ttk.Label(scrollable_frame, text="Cargar Archivos para el Reporte", font=title_font, background="#FFFFFF")
+        title_label = ttk.Label(scrollable_frame, text="Cargar Archivos para el Reporte", style='Title.TLabel')
         title_label.pack(pady=20, padx=20)
 
-        # Definir los archivos a solicitar
         archivos_requeridos = {
             "ANALISIS": "Análisis de Cartera (ARP y FNS)",
             "R91": "Reportes R91 (ARP y FS)",
@@ -57,7 +66,7 @@ class BaseMensualView(tk.Toplevel):
             "MATRIZ_CARTERA": "Matriz de Cartera",
             "METAS_FRANJAS": "Metas por Franjas",
             "ASESORES": "Asesores Activos",
-            "DESEMBOLSOS_FINANSUEÑOS": "Desembolsos Finansueños (FNZ001)"
+            "FNZ001": "Desembolsos Finansueños (FNZ001)"
         }
 
         # --- Crear dinámicamente los campos de carga de archivos ---
@@ -65,7 +74,7 @@ class BaseMensualView(tk.Toplevel):
             frame_archivo = ttk.Frame(scrollable_frame, padding=5, style='Card.TFrame')
             frame_archivo.pack(fill=tk.X, expand=True, padx=20, pady=5)
 
-            label = ttk.Label(frame_archivo, text=f"{desc}:", width=35, background="#FFFFFF")
+            label = ttk.Label(frame_archivo, text=f"{desc}:", style='Desc.TLabel')
             label.pack(side=tk.LEFT, padx=5)
 
             ruta_label = ttk.Label(frame_archivo, text="No seleccionado", relief="sunken", width=40, anchor="w", padding=5)
@@ -75,7 +84,7 @@ class BaseMensualView(tk.Toplevel):
             boton = ttk.Button(frame_archivo, text="Seleccionar...", command=lambda k=key: self.controller.seleccionar_archivo(k))
             boton.pack(side=tk.LEFT, padx=5)
 
-        # --- INICIO: NUEVA SECCIÓN PARA FILTRO DE FECHAS ---
+        # --- Filtro de Fechas ---
         date_filter_frame = ttk.LabelFrame(scrollable_frame, text=" Filtro por Fecha (Opcional) ", padding="10")
         date_filter_frame.pack(fill=tk.X, padx=20, pady=(20, 10))
 
@@ -91,7 +100,6 @@ class BaseMensualView(tk.Toplevel):
         
         date_filter_frame.columnconfigure(1, weight=1)
         date_filter_frame.columnconfigure(3, weight=1)
-        # --- FIN DE LA NUEVA SECCIÓN ---
 
         # --- Botón de Procesar y Estado ---
         action_frame = ttk.Frame(scrollable_frame, padding="10", style='Card.TFrame')
@@ -100,25 +108,25 @@ class BaseMensualView(tk.Toplevel):
         self.procesar_button = ttk.Button(action_frame, text="▶ Procesar Base Mensual", command=self.controller.procesar_archivos, style='Accent.TButton')
         self.procesar_button.pack(pady=10)
 
-        self.status_label = ttk.Label(action_frame, text="Esperando archivos...", background="#FFFFFF")
+        self.status_label = ttk.Label(action_frame, text="Esperando archivos...", style='Status.TLabel')
         self.status_label.pack(pady=10)
 
         self.progress_bar = ttk.Progressbar(action_frame, orient='horizontal', mode='determinate', length=400)
         self.progress_bar.pack(pady=5, fill=tk.X, expand=True)
+        
+    def volver_al_menu(self):
+        """Llama al método del controlador principal para mostrar el menú."""
+        self.main_window_controller.mostrar_vista("base_mensual_menu")
 
     def actualizar_ruta_label(self, tipo_archivo, display_text):
         """
         Actualiza la etiqueta que muestra el estado del archivo seleccionado
-        y cambia su color para confirmar visualmente la carga.
+        aplicando el nuevo estilo 'Success.TLabel'.
         """
         if tipo_archivo in self.rutas_labels:
             label = self.rutas_labels[tipo_archivo]
-            label.config(
-                text=display_text, 
-                background="#D4EDDA",  # Un fondo verde claro para indicar éxito
-                foreground="#155724",  # Texto oscuro para buena legibilidad
-                relief="flat"        # Borde plano
-            )
+            # En lugar de .config(background...), cambiamos el estilo del widget
+            label.config(text=display_text, style='Success.TLabel')
             self.update_idletasks()
     
     def actualizar_estado(self, mensaje, progreso=None):
@@ -127,3 +135,4 @@ class BaseMensualView(tk.Toplevel):
         if progreso is not None:
             self.progress_bar.config(value=progreso)
         self.update_idletasks()
+

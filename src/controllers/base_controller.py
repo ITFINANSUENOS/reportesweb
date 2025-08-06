@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 
 # Importaciones de tu proyecto
-from src.views.base_view import BaseMensualView
+from src.views.base_view.base_view import BaseMensualView
 from src.services.base.report_service import ReportService
 from src.models.base_model import configuracion, ORDEN_COLUMNAS_FINAL
 

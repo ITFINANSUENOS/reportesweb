@@ -1,172 +1,196 @@
 import tkinter as tk
 from tkinter import ttk
-from tkinter.font import Font
+import pandas as pd 
 from src.views.config_view.config_view import AppConfig
+from src.views.base_view.base_view import BaseMensualView
+from src.views.convenios_anticipos_view.convenios_anticipos_view import ConveniosAnticiposView
+from src.views.centrales_view.centrales_menu_view import CentralesMenuView
+from src.views.centrales_view.centrales_arpesod_view import CentralesArpesodView
+from src.views.centrales_view.centrales_finansuenos_view import CentralesFinansuenosView
+from src.views.base_view.base_menu_view import BaseMensualMenuView
+from src.views.base_view.novedades_view import NovedadesView
 
 class MainWindow:
     def __init__(self, root, controller_convenios, controller_anticipos, controller_base_mensual,
-                 controller_datacredito,controller_cifin):
+                 controller_datacredito, controller_cifin):
         
         self.root = root
+        # Guardamos los controllers para pasarlos a las vistas que los necesiten
         self.convenios_controller = controller_convenios
         self.anticipos_controller = controller_anticipos
         self.base_mensual_controller = controller_base_mensual
         self.datacredito_controller = controller_datacredito
         self.cifin_controller = controller_cifin
-        self.config = AppConfig()
-        self.setup_ui()
         
-    def setup_ui(self):
-        """Configura la interfaz de usuario."""
+        self.config = AppConfig()
+        
+        # --- Configuración básica de la ventana (se hace una sola vez) ---
         self.root.title(self.config.title)
         self.root.geometry(self.config.geometry)
         self.root.resizable(False, False)
-        self.root.configure(bg=self.config.bg_color)
         
-        # Configurar estilo
-        self.style = ttk.Style()
-        self.style.theme_use('clam')
+        # --- Contenedor principal que alojará todas las vistas ---
+        container = ttk.Frame(self.root)
+        container.pack(fill=tk.BOTH, expand=True)
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+
+        self.frames = {} # Diccionario para guardar todas las vistas (frames)
+
+        menu_frame = self._crear_menu_principal(container) 
+        base_mensual_frame = BaseMensualView(container, self.base_mensual_controller, self)
+        convenios_frame = ConveniosAnticiposView(container, self.convenios_controller, self.anticipos_controller, self)
+        centrales_menu_frame = CentralesMenuView(container, self)
+        centrales_arpesod_frame = CentralesArpesodView(container, self)
+        centrales_finansuenos_frame = CentralesFinansuenosView(container, self.datacredito_controller, self.cifin_controller, self)
+        base_menu_frame = BaseMensualMenuView(container, self)
+        base_carga_frame = BaseMensualView(container, self.base_mensual_controller, self) # La vista de carga de archivos
+        novedades_frame = NovedadesView(container, self)
+        # Las guardamos en el diccionario con un nombre clave
+        self.frames["menu"] = menu_frame
+        self.frames["base_mensual"] = base_mensual_frame
+        self.frames["convenios_anticipos"] = convenios_frame
+        self.frames["centrales_menu"] = centrales_menu_frame
+        self.frames["centrales_arpesod"] = centrales_arpesod_frame
+        self.frames["centrales_finansuenos"] = centrales_finansuenos_frame
+        self.frames["base_mensual_menu"] = base_menu_frame
+        self.frames["base_mensual_carga"] = base_carga_frame
+        self.frames["reporte_novedades"] = novedades_frame
+
         
-        # Fuentes
-        self.title_font = Font(family="Helvetica", size=16, weight="bold")
-        self.button_font = Font(family="Arial", size=12)
-        self.label_font = Font(family="Arial", size=10)
+        # Colocamos ambos frames en la misma celda del grid para que se apilen.
+        for frame in self.frames.values():
+            frame.grid(row=0, column=0, sticky="nsew")
+        # Empezamos mostrando el menú principal por defecto
+        self.mostrar_vista("menu")
         
-        # Marco principal
-        self.main_frame = ttk.Frame(self.root, padding="20")
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
-        self.main_frame.configure(style='Card.TFrame')
+    def mostrar_vista(self, nombre_vista):
+        """Muestra el frame solicitado y lo trae al frente."""
+        frame = self.frames[nombre_vista]
+        frame.tkraise()
         
-        # Estilo para el marco
-        # Estilo para el marco
-        self.style.configure('Card.TFrame', background=self.config.bg_color)
+    def _crear_menu_principal(self, parent):
+        """
+        Crea y devuelve el Frame que contiene todos los widgets del menú principal.
+        """
+        main_frame = ttk.Frame(parent, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # --- Configurar Estilo y Fuentes ---
+        style = ttk.Style()
+        style.theme_use('clam')
         
+        # Estilo para los frames que actúan como fondo
+        style.configure('Card.TFrame', background=self.config.bg_color)
+        
+        # Estilo para el Título
+        style.configure('Title.TLabel', 
+                        background=self.config.bg_color, 
+                        foreground=self.config.secondary_color, 
+                        font=("Helvetica", 16, "bold"))
+                        
+        # Estilo para el texto normal (descripción y pie de página)
+        style.configure('Normal.TLabel', 
+                        background=self.config.bg_color, 
+                        foreground=self.config.text_color, 
+                        font=("Arial", 10))
+
+        # Estilo para el texto de estado
+        style.configure('Status.TLabel', 
+                        background=self.config.bg_color, 
+                        foreground=self.config.secondary_color, 
+                        font=("Arial", 10))
+        
+        # Estilo para los botones
+        style.configure('Accent.TButton', 
+                        font=("Arial", 12), 
+                        foreground='white', 
+                        background=self.config.accent_color)
+        style.map('Accent.TButton', 
+                background=[('active', self.config.secondary_color), ('pressed', self.config.secondary_color)])
+
+        # --- Creación de Widgets usando los estilos ---
+
         # Título
-        self.title_label = ttk.Label(
-            self.main_frame, 
+        title_label = ttk.Label(
+            main_frame, 
             text=self.config.title, 
-            font=self.title_font,
-            background=self.config.bg_color,
-            foreground=self.config.secondary_color
+            style='Title.TLabel'
         )
-        self.title_label.pack(pady=(0, 20))
+        title_label.pack(pady=(0, 20))
         
         # Descripción
-        self.desc_label = ttk.Label(
-            self.main_frame,
+        desc_label = ttk.Label(
+            main_frame,
             text="Esta herramienta procesa archivos Excel con información financiera\ny genera un reporte consolidado.",
-            font=self.label_font,
-            background=self.config.bg_color,
-            foreground=self.config.text_color,
+            style='Normal.TLabel',
             justify=tk.CENTER
         )
-        self.desc_label.pack(pady=(0, 30))
+        desc_label.pack(pady=(0, 30))
         
+        # Contenedor de botones
+        buttons_container_frame = ttk.Frame(main_frame, style='Card.TFrame')
+        buttons_container_frame.pack(pady=(0, 20))
+        top_row_frame = ttk.Frame(buttons_container_frame, style='Card.TFrame')
+        top_row_frame.pack(pady=(0, 10))
+        bottom_row_frame = ttk.Frame(buttons_container_frame, style='Card.TFrame')
+        bottom_row_frame.pack()
         
-        # Frame principal que contendrá las dos filas de botones
-        self.buttons_container_frame = ttk.Frame(self.main_frame, style='Card.TFrame')
-        self.buttons_container_frame.pack(pady=(0, 20))
-
-        # Frame para la fila SUPERIOR de botones
-        self.top_row_frame = ttk.Frame(self.buttons_container_frame, style='Card.TFrame')
-        self.top_row_frame.pack(pady=(0, 10))
-
-        # Frame para la fila INFERIOR de botones
-        self.bottom_row_frame = ttk.Frame(self.buttons_container_frame, style='Card.TFrame')
-        self.bottom_row_frame.pack()
-        
-        # --- Botones de la Fila Superior (3 botones) ---
-        self.action1_button = ttk.Button(
-            self.top_row_frame, # <-- Se añade al marco superior
-            text="Cruce de convenios",
-            command=self.convenios_controller.start_report_generation,
+        convenios_anticipos_button = ttk.Button(
+            top_row_frame,
+            text="Convenios y Anticipos",
+            command=lambda: self.mostrar_vista("convenios_anticipos"), # <-- Llama a la nueva vista
             style='Accent.TButton'
         )
-        self.action1_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
+        convenios_anticipos_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
         
-        self.action2_button = ttk.Button(
-            self.top_row_frame, # <-- Se añade al marco superior
-            text="Anticipos Online",
-            command=self.anticipos_controller.start_report_generation,
-            style='Accent.TButton'
-        )
-        self.action2_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
-        
-        self.base_mensual_button = ttk.Button(
-            self.top_row_frame, # <-- Se añade al marco superior
+        base_mensual_button = ttk.Button(
+            top_row_frame, 
             text="Base Mensual",
-            command=lambda: self.base_mensual_controller.abrir_vista(self.root),
+            command=lambda: self.mostrar_vista("base_mensual_menu"), # <-- Llama al NUEVO sub-menú
             style='Accent.TButton'
         )
-        self.base_mensual_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
+        base_mensual_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
 
-        # --- Botones de la Fila Inferior (2 botones) ---
-        self.datacredito_button = ttk.Button(
-            self.bottom_row_frame, # <-- Se añade al marco inferior
-            text="Centrales Datacredito",
-            command=lambda: self.datacredito_controller.abrir_vista_datacredito(self.root),
+        # --- Botones de la Fila Inferior ---
+        centrales_button = ttk.Button(
+            bottom_row_frame,
+            text="Centrales de Riesgo",
+            command=lambda: self.mostrar_vista("centrales_menu"), # <-- Llama al nuevo menú de centrales
             style='Accent.TButton'
         )
-        self.datacredito_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
-
-        self.cifin_button = ttk.Button(
-            self.bottom_row_frame, # <-- Se añade al marco inferior
-            text="Centrales CIFIN",
-            command=lambda: self.cifin_controller.open_cifin_window(self.root),
-            style='Accent.TButton'
-        )
-        self.cifin_button.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
+        centrales_button.pack(padx=10, ipadx=10, ipady=5)
         
-        # Configurar estilo para el botón de acento
-        self.style.configure('Accent.TButton', font=self.button_font, foreground='white', background=self.config.accent_color)
-        self.style.map('Accent.TButton',
-                     background=[('active', self.config.secondary_color), ('pressed', self.config.secondary_color)])
-        
-        
-        self.progress_bar = ttk.Progressbar(
-            self.main_frame,
-            orient=tk.HORIZONTAL,
-            length=300,
-            mode='determinate'
-        )
-        self.progress_bar.pack(pady=(10, 0))
-        self.progress_bar['value'] = 0
-        self.progress_bar.pack_forget()  # Ocultarla inicialmente
-
-        # Estado del proceso (status_label)
+        # Estado del proceso
         self.status_label = ttk.Label(
-            self.main_frame,
-            text="Estado: Inactivo",
-            font=self.label_font,
-            background=self.config.bg_color,
-            foreground=self.config.secondary_color
+            main_frame, 
+            text="Estado: Inactivo", 
+            style='Status.TLabel'
         )
         self.status_label.pack(pady=(10, 0))
         
         # Pie de página
-        self.footer_label = ttk.Label(
-            self.main_frame,
-            text="© 2023 Departamento Financiero",
-            font=self.label_font,
-            background=self.config.bg_color,
-            foreground=self.config.text_color
+        footer_label = ttk.Label(
+            main_frame, 
+            text=f"© {pd.Timestamp.now().year} Departamento Financiero", 
+            style='Normal.TLabel'
         )
-        self.footer_label.pack(side=tk.BOTTOM, pady=(20, 0))
-    
+        footer_label.pack(side=tk.BOTTOM, pady=(20, 0))
+        return main_frame
+
     def update_status(self, message: str):
         """Actualiza solo el texto de estado."""
         self.status_label.config(text=message)
         self.root.update_idletasks()
 
-    
     def update_progress(self, progress: int):
         """Actualiza solo la barra de progreso."""
-        self.progress_bar['value'] = progress
-        if progress > 0 and not self.progress_bar.winfo_viewable():
+        if not self.progress_bar.winfo_viewable():
             self.progress_bar.pack(pady=(10, 0))
+        self.progress_bar['value'] = progress
         self.root.update_idletasks()
     
     def update_display(self, message: str, progress: int):
         """Método unificado que actualiza tanto el texto de estado como la barra de progreso."""
         self.update_status(message)
-        self.update_progress(progress)    
+        self.update_progress(progress)   
