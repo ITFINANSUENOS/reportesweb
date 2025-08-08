@@ -36,10 +36,10 @@ class MainWindow:
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
 
-        self.frames = {} # Diccionario para guardar todas las vistas (frames)
 
         menu_frame = self._crear_menu_principal(container) 
-        base_mensual_frame = BaseMensualView(container, self.base_mensual_controller, self)
+        base_carga_frame = BaseMensualView(container, self.base_mensual_controller, self) 
+        self.base_mensual_controller.set_view(base_carga_frame)
         convenios_frame = ConveniosAnticiposView(container, self.convenios_controller, self.anticipos_controller, self)
         centrales_menu_frame = CentralesMenuView(container, self)
         centrales_arpesod_frame = CentralesArpesodView(container, self)
@@ -47,6 +47,7 @@ class MainWindow:
         base_menu_frame = BaseMensualMenuView(container, self)
         novedades_frame = NovedadesView(container, self.novedades_analisis_controller, self)
         # Las guardamos en el diccionario con un nombre clave
+
         self.frames = {
             "menu": menu_frame,
             "convenios_anticipos": convenios_frame,
@@ -54,7 +55,7 @@ class MainWindow:
             "centrales_arpesod": centrales_arpesod_frame,
             "centrales_finansuenos": centrales_finansuenos_frame,
             "base_mensual_menu": base_menu_frame,
-            "base_mensual_carga": base_mensual_frame,
+            "base_mensual_carga": base_carga_frame,
             "reporte_novedades": novedades_frame
         }
         
