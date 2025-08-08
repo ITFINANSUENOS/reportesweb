@@ -12,7 +12,7 @@ from src.views.base_view.novedades_view import NovedadesView
 
 class MainWindow:
     def __init__(self, root, controller_convenios, controller_anticipos, controller_base_mensual,
-                 controller_datacredito, controller_cifin):
+                 controller_datacredito, controller_cifin, controller_novedades_analisis):
         
         self.root = root
         # Guardamos los controllers para pasarlos a las vistas que los necesiten
@@ -21,6 +21,7 @@ class MainWindow:
         self.base_mensual_controller = controller_base_mensual
         self.datacredito_controller = controller_datacredito
         self.cifin_controller = controller_cifin
+        self.novedades_analisis_controller = controller_novedades_analisis
         
         self.config = AppConfig()
         
@@ -44,28 +45,25 @@ class MainWindow:
         centrales_arpesod_frame = CentralesArpesodView(container, self)
         centrales_finansuenos_frame = CentralesFinansuenosView(container, self.datacredito_controller, self.cifin_controller, self)
         base_menu_frame = BaseMensualMenuView(container, self)
-        base_carga_frame = BaseMensualView(container, self.base_mensual_controller, self) # La vista de carga de archivos
-        novedades_frame = NovedadesView(container, self)
+        novedades_frame = NovedadesView(container, self.novedades_analisis_controller, self)
         # Las guardamos en el diccionario con un nombre clave
-        self.frames["menu"] = menu_frame
-        self.frames["base_mensual"] = base_mensual_frame
-        self.frames["convenios_anticipos"] = convenios_frame
-        self.frames["centrales_menu"] = centrales_menu_frame
-        self.frames["centrales_arpesod"] = centrales_arpesod_frame
-        self.frames["centrales_finansuenos"] = centrales_finansuenos_frame
-        self.frames["base_mensual_menu"] = base_menu_frame
-        self.frames["base_mensual_carga"] = base_carga_frame
-        self.frames["reporte_novedades"] = novedades_frame
-
+        self.frames = {
+            "menu": menu_frame,
+            "convenios_anticipos": convenios_frame,
+            "centrales_menu": centrales_menu_frame,
+            "centrales_arpesod": centrales_arpesod_frame,
+            "centrales_finansuenos": centrales_finansuenos_frame,
+            "base_mensual_menu": base_menu_frame,
+            "base_mensual_carga": base_mensual_frame,
+            "reporte_novedades": novedades_frame
+        }
         
-        # Colocamos ambos frames en la misma celda del grid para que se apilen.
         for frame in self.frames.values():
             frame.grid(row=0, column=0, sticky="nsew")
-        # Empezamos mostrando el menú principal por defecto
+
         self.mostrar_vista("menu")
         
     def mostrar_vista(self, nombre_vista):
-        """Muestra el frame solicitado y lo trae al frente."""
         frame = self.frames[nombre_vista]
         frame.tkraise()
         

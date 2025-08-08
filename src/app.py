@@ -11,6 +11,7 @@ from src.controllers.base_controller import BaseMensualController
 from src.controllers.datacredito_controller import DataCreditoController
 from src.controllers.cifin_contoller import CifinController
 from src.views.main_window import MainWindow
+from src.controllers.novedades_controller import NovedadesAnalisisController
 
 def main():
     try:
@@ -20,13 +21,21 @@ def main():
         controller_base_mensual = BaseMensualController()
         controller_datacredito = DataCreditoController()
         controller_cifin = CifinController()
+        controller_novedades_analisis = NovedadesAnalisisController()
 
-        
-        view= MainWindow(root, controller_convenios, controller_anticipos,
-                         controller_base_mensual,controller_datacredito,controller_cifin)
-        
-        controller_anticipos.view = view
-        controller_convenios.view = view
+        main_view = MainWindow(
+            root, 
+            controller_convenios, 
+            controller_anticipos,
+            controller_base_mensual,
+            controller_datacredito,
+            controller_cifin,
+            controller_novedades_analisis  
+        )
+
+        controller_anticipos.set_view(main_view)
+        controller_convenios.set_view(main_view)
+
         root.mainloop()
     except Exception as e:
         print(f"Error inesperado en la aplicación: {str(e)}")

@@ -5,6 +5,9 @@ class AnticiposController:
     def __init__(self,view):
         self.view = view
         self.service = AnticiposService()
+
+    def set_view(self, view):
+        self.view = view    
     
     def start_report_generation(self):
         """Inicia el flujo completo a petición de la vista."""

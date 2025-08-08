@@ -9,8 +9,8 @@ from src.services.base.report_service import ReportService
 from src.models.base_model import configuracion, ORDEN_COLUMNAS_FINAL
 
 class BaseMensualController:
-    def __init__(self):
-        self.view = None
+    def __init__(self,view=None):
+        self.view = view
         self.rutas_archivos = {} # Diccionario para almacenar las rutas
 
     def abrir_vista(self, parent):
@@ -18,6 +18,9 @@ class BaseMensualController:
         if self.view is None or not self.view.winfo_exists():
             self.view = BaseMensualView(parent, self)
         self.view.deiconify() # Muestra la ventana si estaba oculta
+
+    def set_view(self, view):
+        self.view = view
 
     def seleccionar_archivo(self, tipo_archivo):
         """Abre un diálogo para seleccionar uno o varios archivos."""
@@ -34,6 +37,11 @@ class BaseMensualController:
             display_text = Path(rutas[0]).name
             if len(rutas) > 1:
                 display_text = f"{len(rutas)} archivos seleccionados"
+
+            if self.view:
+               self.view.actualizar_ruta_label(tipo_archivo, display_text)
+            else:
+               print("Error: La vista no ha sido asignada al controlador.")    
             
             self.view.actualizar_ruta_label(tipo_archivo, display_text)
             print(f"Archivos para {tipo_archivo}: {self.rutas_archivos[tipo_archivo]}")
@@ -103,6 +111,25 @@ class BaseMensualController:
                     reporte_negativos.to_excel(writer, sheet_name='Creditos_Negativos', index=False)
                     print("   - Hoja 'Creditos_Negativos' añadida.")
             # --- FIN DE LA MODIFICACIÓN ---
+
+            try:
+                cache_dir = Path(__file__).resolve().parent.parent.parent / "cache"
+                cache_dir.mkdir(exist_ok=True)
+                cache_filepath = cache_dir / "reporte_base_mensual.feather"
+                
+                print(f"⚡ Guardando caché de datos para análisis rápido en: {cache_filepath}")
+                # Guarda el DataFrame en formato Feather (muy rápido para leer)
+                for col in reporte_final.columns:
+                    reporte_final[col] = reporte_final[col].astype(str)
+          
+                reporte_final.to_feather(cache_filepath)
+                
+            except Exception as e:
+                # Si algo falla al guardar el caché, informa al usuario pero no detengas el programa
+                print(f"⚠️ No se pudo guardar el caché de datos: {e}")
+                messagebox.showwarning("Advertencia de Caché", 
+                                    "No se pudo guardar el archivo de caché interno para análisis futuros."
+                                    "\nEl reporte de Excel se guardó correctamente.")
 
             self.view.actualizar_estado("¡Éxito! Reporte guardado.", 100)
             messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}")  

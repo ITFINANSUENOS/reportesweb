@@ -7,6 +7,13 @@ class ConveniosController:
     def __init__(self, view):
         self.view = view
         self.service = ConveniosService()
+
+    def set_view(self, view):
+        """
+        Guarda una referencia a la vista para que el controlador 
+        pueda comunicarse con ella (ej. para actualizar un mensaje de estado).
+        """
+        self.view = view    
         
     def start_report_generation(self):
         """Inicia el flujo completo a petición de la vista."""

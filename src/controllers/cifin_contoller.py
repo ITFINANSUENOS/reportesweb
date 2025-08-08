@@ -33,6 +33,13 @@ class CifinController:
             'actual_value_paid':'valor_real_pagado'
         }
 
+    def set_view(self, view):
+        """
+        Guarda una referencia a la vista para que el controlador 
+        pueda comunicarse con ella (ej. para actualizar un mensaje de estado).
+        """
+        self.view = view    
+
     def open_cifin_window(self, parent):
         # --- CORRECCIÓN AQUÍ ---
         # Comprueba la existencia de la ventana a través de .top

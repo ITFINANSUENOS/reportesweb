@@ -40,6 +40,13 @@ class DataCreditoController:
     def __init__(self):
         self.datacredito_view = None
         self.model = DataCreditoModel()
+    
+    def set_view(self, view):
+        """
+        Guarda una referencia a la vista para que el controlador 
+        pueda comunicarse con ella (ej. para actualizar un mensaje de estado).
+        """
+        self.view = view
 
     def abrir_vista_datacredito(self, parent):
         """Crea y muestra la ventana de Datacredito."""
