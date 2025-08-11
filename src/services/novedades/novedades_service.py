@@ -5,26 +5,75 @@ class NovedadesService:
     def __init__(self, config):
         self.config = config
 
-    def _formatear_novedades(self, grupo):
-        grupo = grupo.sort_values('Fecha_Novedad')
-        lineas = [f"[{fila['Fecha_Novedad'].strftime('%d/%m/%Y')}] ({fila['Usuario_Novedad']}): {fila['Tipo_Novedad']}"
-                  for _, fila in grupo.iterrows()]
-        return "\n".join(lineas)
-
     def aplicar_novedades(self, df_base, df_novedades):
-        print("🔄 Aplicando novedades...")
-        # Se elimina la línea pd.read_excel. El resto de la lógica es la misma.
+        """
+        Procesa el df_novedades y devuelve dos reportes:
+        1. El df_base enriquecido con columnas de resumen de novedades.
+        2. Un nuevo df con el detalle completo de todas las novedades, sin filas duplicadas.
+        """
+        print("🔄 Aplicando novedades y creando reportes...")
         
+        if df_novedades.empty:
+            print("⚠️ Archivo de novedades vacío. No se aplicarán cambios.")
+            df_base['Cantidad_Novedades'] = 0
+            df_base['Fecha_Ultima_Novedad'] = None
+            return df_base, pd.DataFrame()
+
+        # --- 1. Preparar el DataFrame de Novedades Detallado ---
         df_novedades['Fecha_Novedad'] = pd.to_datetime(df_novedades['Fecha_Novedad'], errors='coerce')
         df_novedades.dropna(subset=['Cedula_Cliente', 'Fecha_Novedad'], inplace=True)
-        df_novedades['Cedula_Cliente'] = df_novedades['Cedula_Cliente'].astype(str)
+        # Limpiamos espacios en blanco de la llave de unión
+        df_novedades['Cedula_Cliente'] = df_novedades['Cedula_Cliente'].astype(str).str.strip()
 
-        mapa_novedades = df_novedades.groupby('Cedula_Cliente').apply(self._formatear_novedades)
-        df_historial = mapa_novedades.reset_index(name='Historial_Novedades')
-
-        df_base['Cedula_Cliente'] = df_base['Cedula_Cliente'].astype(str)
-        df_actualizado = pd.merge(df_base, df_historial, on='Cedula_Cliente', how='left')
-        df_actualizado['Historial_Novedades'].fillna('Sin Novedades', inplace=True)
+        # --- SOLUCIÓN AL AUMENTO DE FILAS ---
+        # 2. Crear una lista de clientes ÚNICA y LIMPIA desde el reporte base
+        info_cliente = df_base[['Cedula_Cliente', 'Nombre_Cliente']].copy()
+        info_cliente['Cedula_Cliente'] = info_cliente['Cedula_Cliente'].astype(str).str.strip()
+        info_cliente['Nombre_Cliente'] = info_cliente['Nombre_Cliente'].astype(str).str.strip()
         
-        print("✅ Novedades aplicadas.")
-        return df_actualizado
+        # Nos quedamos con el PRIMER nombre que aparezca para cada cédula única.
+        # Esto garantiza que la unión no duplique filas.
+        info_cliente.drop_duplicates(subset=['Cedula_Cliente'], keep='first', inplace=True)
+        
+        # 3. Unir novedades con la lista de clientes limpia
+        reporte_novedades_detallado = pd.merge(df_novedades, info_cliente, on='Cedula_Cliente', how='left')
+        
+        # Ordenamos las columnas para la hoja de novedades
+        columnas_novedades = ['Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad', 'Tipo_Novedad', 'Novedad', 'Valor', 'Fecha_Compromiso']
+        reporte_novedades_detallado = reporte_novedades_detallado[columnas_novedades]
+
+        # --- 4. Preparar el Reporte Base Enriquecido (con resúmenes) ---
+        df_base_enriquecido = df_base.copy()
+        df_base_enriquecido['Cedula_Cliente'] = df_base_enriquecido['Cedula_Cliente'].astype(str).str.strip()
+
+        # Calcular resúmenes (el conteo por cliente sigue siendo útil)
+        resumen_novedades = df_novedades.groupby('Cedula_Cliente').agg(
+            Cantidad_Novedades=('Novedad', 'count'),
+            Fecha_Ultima_Novedad=('Fecha_Novedad', 'max')
+        ).reset_index()
+
+        # Unir los resúmenes al reporte base
+        df_base_enriquecido = pd.merge(df_base_enriquecido, resumen_novedades, on='Cedula_Cliente', how='left')
+        
+        # Rellenar vacíos y dar formato
+        df_base_enriquecido['Cantidad_Novedades'].fillna(0, inplace=True)
+        df_base_enriquecido['Cantidad_Novedades'] = df_base_enriquecido['Cantidad_Novedades'].astype(int)
+        
+         # --- PASO FINAL: Formatear las columnas a solo FECHA ---
+        print("📅 Formateando fechas (eliminando la hora)...")
+        # Formatear la fecha en el reporte base enriquecido
+        if 'Fecha_Ultima_Novedad' in df_base_enriquecido.columns:
+            # .dt.date extrae solo la parte de la fecha, eliminando la hora por completo
+            df_base_enriquecido['Fecha_Ultima_Novedad'] = pd.to_datetime(df_base_enriquecido['Fecha_Ultima_Novedad'], errors='coerce').dt.date
+        
+        # Formatear las fechas en el reporte de detalle
+        for col in ['Fecha_Novedad', 'Fecha_Compromiso']:
+            if col in reporte_novedades_detallado.columns:
+                reporte_novedades_detallado[col] = pd.to_datetime(reporte_novedades_detallado[col], errors='coerce').dt.date
+
+        # Reordenar columnas para la hoja de novedades
+        columnas_novedades = ['Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad', 'Tipo_Novedad', 'Novedad','Valor','Fecha_Compromiso']
+        reporte_novedades_detallado = reporte_novedades_detallado[columnas_novedades]
+        
+        print("✅ Reportes de Novedades generados.")
+        return df_base_enriquecido, reporte_novedades_detallado

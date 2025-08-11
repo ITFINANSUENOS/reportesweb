@@ -53,31 +53,34 @@ class NovedadesAnalisisController:
         
         return pd.concat(df_list, ignore_index=True)
 
+
     def procesar_archivos(self, rutas_novedades, rutas_analisis):
         """
-        Orquesta todo el proceso: carga el caché, aplica novedades y calcula el rodamiento.
+        Orquesta todo el proceso: carga el caché, aplica novedades, calcula el rodamiento
+        y guarda un reporte multi-hoja.
         """
         if not rutas_novedades or not rutas_analisis:
-            messagebox.showwarning("Archivos Faltantes", "Debes seleccionar ambos archivos para continuar.")
+            messagebox.showwarning("Archivos Faltantes", "Debes seleccionar los archivos de Novedades y Análisis.")
             return
             
         try:
             # 1. Cargar la base desde el caché
             df_base = self._cargar_base_desde_cache()
 
-            # 2. Instanciar y usar el servicio de novedades
+            # 2. Cargar y unir los archivos de entrada que seleccionó el usuario
             df_novedades_unido = self._cargar_y_unir_archivos(rutas_novedades, "NOVEDADES")
             df_analisis_unido = self._cargar_y_unir_archivos(rutas_analisis, "ANALISIS")
 
-            # 2. Aplicar Novedades (el servicio ahora recibe un DataFrame)
+            # 3. Aplicar Novedades
+            #    Ahora recibe dos DataFrames: el base enriquecido y el detalle de novedades.
             novedades_service = NovedadesService(config=configuracion)
-            df_con_novedades = novedades_service.aplicar_novedades(df_base, df_novedades_unido)
+            df_base_enriquecido, df_novedades_detallado = novedades_service.aplicar_novedades(df_base, df_novedades_unido)
             
-            # 3. Calcular Rodamiento (el servicio ahora recibe un DataFrame)
+            # 4. Calcular Rodamiento usando el reporte ya enriquecido como base
             analisis_service = AnalisisService(config=configuracion)
-            df_final = analisis_service.calcular_rodamiento(df_con_novedades, df_analisis_unido)
+            df_final_analisis = analisis_service.calcular_rodamiento(df_base_enriquecido, df_analisis_unido)
 
-            # 4. Pedir al usuario dónde guardar el nuevo reporte
+            # 5. Pedir al usuario dónde guardar el nuevo reporte
             ruta_salida = filedialog.asksaveasfilename(
                 defaultextension=".xlsx",
                 filetypes=[("Archivos de Excel", "*.xlsx")],
@@ -89,8 +92,16 @@ class NovedadesAnalisisController:
                 messagebox.showinfo("Cancelado", "Proceso cancelado por el usuario.")
                 return
 
-            # 5. Guardar el resultado
-            df_final.to_excel(ruta_salida, index=False)
+            # 6. Guardar el resultado en un archivo Excel con MÚLTIPLES HOJAS
+            print(f"💾 Guardando reporte multi-hoja en {ruta_salida}...")
+            with pd.ExcelWriter(ruta_salida, engine='openpyxl') as writer:
+                # Hoja 1: El reporte principal con el análisis de rodamiento
+                df_final_analisis.to_excel(writer, sheet_name='Analisis_de_Cartera', index=False)
+                
+                # Hoja 2: El reporte con el detalle completo de todas las novedades
+                if not df_novedades_detallado.empty:
+                    df_novedades_detallado.to_excel(writer, sheet_name='Detalle_Novedades', index=False)
+            
             messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
 
         except Exception as e:

@@ -63,9 +63,6 @@ class ReportService:
             matriz_cartera_df['Zona'] = matriz_cartera_df['Zona'].astype(str).str.strip()
             reporte_final = pd.merge(reporte_final, matriz_cartera_df.drop_duplicates('Zona'), on='Zona', how='left')
         
-        # if not crtmp_df.empty:
-        #     reporte_final = pd.merge(reporte_final, crtmp_df[['Credito', 'Correo', 'Fecha_Facturada']].drop_duplicates('Credito'), on='Credito', how='left')
-        
         if asesores_sheets:
             # Primero obtenemos todos los códigos de vendedor activos
             codigos_activos = []

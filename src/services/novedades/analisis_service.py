@@ -14,6 +14,7 @@ class AnalisisService:
         else:
             raise KeyError("El archivo de Análisis no contiene las columnas 'Tipo_Credito' o 'Numero_Credito' necesarias para crear la llave 'Credito'.")
 
+        df_analisis_unido.drop_duplicates(subset=['Credito'], keep='last', inplace=True)
         # 2. Unir el análisis al reporte base (left merge es clave)
         df_actualizado = pd.merge(df_base, df_analisis_unido[['Credito', 'Dias_Atraso_Final']], on='Credito', how='left')
         
