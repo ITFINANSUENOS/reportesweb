@@ -14,9 +14,11 @@ class NovedadesView(ttk.Frame):
         
         self.rutas_novedades = []
         self.rutas_analisis = []
+        self.rutas_r91 = []
 
         self.label_novedades_path = tk.StringVar(value="No seleccionado")
         self.label_analisis_path = tk.StringVar(value="No seleccionado")
+        self.label_r91_path = tk.StringVar(value="No seleccionado")
 
         # --- Estilos ---
         style = ttk.Style()
@@ -40,11 +42,24 @@ class NovedadesView(ttk.Frame):
         ttk.Label(content_frame, text="2. Cargar Archivo(s) de Análisis (.xlsx):").grid(row=2, column=0, columnspan=2, sticky="w", pady=(15, 5))
         ttk.Entry(content_frame, textvariable=self.label_analisis_path, state="readonly").grid(row=3, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(content_frame, text="Seleccionar...", command=self.seleccionar_analisis).grid(row=3, column=1, sticky="ew")
+
+       # --- Selección del Archivo de Recaudos R91 ---
+        ttk.Label(content_frame, text="3. Cargar Archivo(s) de Recaudos (R91):").grid(row=4, column=0, columnspan=2, sticky="w", pady=(15, 5))
+        ttk.Entry(content_frame, textvariable=self.label_r91_path, state="readonly").grid(row=5, column=0, sticky="ew", padx=(0, 10))
+        ttk.Button(content_frame, text="Seleccionar...", command=self.seleccionar_r91).grid(row=5, column=1, sticky="ew")
         
         
         # --- Botón de Procesar ---
-        ttk.Button(content_frame, text="▶ Procesar y Generar Reporte", command=self.procesar, style='Accent.TButton').grid(row=4, column=0, columnspan=2, pady=(25, 10), ipady=5)
+        ttk.Button(content_frame, text="▶ Procesar y Generar Reporte", command=self.procesar, style='Accent.TButton').grid(row=6, column=0, columnspan=2, pady=(25, 10), ipady=5)
         content_frame.grid_columnconfigure(0, weight=1)
+
+    def seleccionar_r91(self):
+        file_types = [("Archivos de Excel", "*.xlsx *.XLSX *.xls *.XLS"), ("Todos los archivos", "*.*")]
+        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) R91", filetypes=file_types)
+        if filepaths:
+            self.rutas_r91 = list(filepaths)
+            self.label_r91_path.set(f"{len(self.rutas_r91)} archivo(s) seleccionado(s)")
+
 
     def seleccionar_novedades(self):
          # Permite seleccionar múltiples archivos
@@ -83,5 +98,6 @@ class NovedadesView(ttk.Frame):
         # Llama al controlador con las LISTAS de rutas
         self.controller.procesar_archivos(
             rutas_novedades=self.rutas_novedades,
-            rutas_analisis=self.rutas_analisis
+            rutas_analisis=self.rutas_analisis,
+            rutas_r91=self.rutas_r91
         )

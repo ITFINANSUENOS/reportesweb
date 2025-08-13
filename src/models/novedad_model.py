@@ -22,8 +22,14 @@ configuracion = {
         }
     },
     "R91": {
-        "usecols": ["COBRO_DC_A","COBRO_DC_2","COBRO_ATRA","COBRO_ANTI"],
+        "usecols": ["COBRO_DC_A","COBRO_DC_2","COBRO_ATRA","COBRO_ANTI","MCDTIPCRU1","MCDNUMCRU1"],
         "rename_map": { 
+                       "MCDNUMCRU1": "Numero_Credito",
+                       "MCDTIPCRU1": "Tipo_Credito", 
+                       "COBRO_DC_A": "Recaudo_DC_Al_Dia",
+                       "COBRO_DC_2": "Recaudo_DC_Atraso",
+                       "COBRO_ATRA": "Recaudo_Atraso",
+                       "COBRO_ANTI":"Recaudo_Anticipado"
                         }
     }
 }
