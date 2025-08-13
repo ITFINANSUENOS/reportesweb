@@ -125,6 +125,8 @@ class ReportService:
         reporte_final = self.report_processor.filter_by_date_range(reporte_final, start_date, end_date)
         reporte_final = self.report_processor.finalize_report(reporte_final, orden_columnas)
 
+        reporte_final, df_a_corregir = self.report_processor.finalize_report(reporte_final, orden_columnas)
+        
         reporte_negativos_final = pd.DataFrame() 
         lista_de_negativos = [df for df in [negativos_vencimientos, negativos_fnz003] if not df.empty]
 
@@ -151,4 +153,4 @@ class ReportService:
             reporte_negativos_final = reporte_negativos_final[columnas_existentes].drop_duplicates()
 
         # Se devuelven ambos reportes para que el controlador los guarde
-        return reporte_final, reporte_negativos_final
+        return reporte_final, reporte_negativos_final,df_a_corregir

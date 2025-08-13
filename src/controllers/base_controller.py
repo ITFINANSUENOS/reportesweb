@@ -76,7 +76,7 @@ class BaseMensualController:
             self.view.actualizar_estado("Generando reporte consolidado...", 30)
             
             # --- MODIFICADO: Pasar las fechas al servicio ---
-            reporte_final, reporte_negativos = service.generate_consolidated_report(
+            reporte_final, reporte_negativos, reporte_correcciones = service.generate_consolidated_report(
                 file_paths=lista_final_rutas,
                 orden_columnas=ORDEN_COLUMNAS_FINAL,
                 start_date=start_date,
@@ -111,6 +111,11 @@ class BaseMensualController:
                     reporte_negativos.to_excel(writer, sheet_name='Creditos_Negativos', index=False)
                     print("   - Hoja 'Creditos_Negativos' añadida.")
             # --- FIN DE LA MODIFICACIÓN ---
+
+                 # --- NUEVO: Guardar la hoja de correcciones ---
+                if reporte_correcciones is not None and not reporte_correcciones.empty:
+                    reporte_correcciones.to_excel(writer, sheet_name='Registros_Para_Corregir', index=False)
+                    print("   - ⚠️ Hoja 'Registros_Para_Corregir' añadida.")
 
             try:
                 cache_dir = Path(__file__).resolve().parent.parent.parent / "cache"

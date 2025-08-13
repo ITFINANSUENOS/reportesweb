@@ -312,6 +312,31 @@ class ReportProcessorService:
                 reporte_df['Movil_Lider'].fillna('NO ASIGNADO', inplace=True)
         else:
             print("   - ⚠️ Columnas 'Lider_Zona' o 'Regional_Venta' no encontradas. Se omite este paso.")
+            
+            
+        print("🔍 Buscando registros con datos críticos faltantes...")
+    
+        # Define las columnas que son esenciales para tu operación
+        columnas_criticas = [
+            'Nombre_Vendedor', 'Zona', 'Saldo_Capital', 'Valor_Desembolso', 'Nombre_Cliente'
+        ]
+        
+        # Filtra el DataFrame para encontrar filas donde CUALQUIERA de las columnas críticas esté vacía o sea 0
+        # Usamos una copia para evitar advertencias de pandas
+        df_para_revision = reporte_df[columnas_criticas].copy()
+        df_para_revision.replace('NO ASIGNADO', np.nan, inplace=True) # Considerar 'NO ASIGNADO' como vacío
+        df_para_revision.replace('SIN INFO', np.nan, inplace=True)   # Considerar 'SIN INFO' como vacío
+        df_para_revision['Saldo_Capital'] = pd.to_numeric(df_para_revision['Saldo_Capital'], errors='coerce')
+        
+        # La máscara identifica filas con problemas
+        mascara_problemas = df_para_revision.isnull().any(axis=1) | (df_para_revision['Saldo_Capital'] == 0)
+
+        # Creamos la hoja de correcciones con el 'Credito' y las columnas problemáticas
+        df_a_corregir = reporte_df.loc[mascara_problemas, ['Credito', 'Cedula_Cliente'] + columnas_criticas]
+        
+        if not df_a_corregir.empty:
+            print(f"   - ⚠️ Se encontraron {len(df_a_corregir)} registros que necesitan corrección manual.")
+        # --- FIN DEL BLOQUE NUEVO ---       
 
 
         print("✨ Formateando columnas de porcentaje...")
