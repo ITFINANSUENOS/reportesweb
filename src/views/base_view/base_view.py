@@ -51,6 +51,9 @@ class BaseMensualView(ttk.Frame):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
+        self.update_mode_var = tk.BooleanVar(value=False)
+
+
         # Título
         title_label = ttk.Label(scrollable_frame, text="Cargar Archivos para el Reporte", style='Title.TLabel')
         title_label.pack(pady=20, padx=20)
@@ -104,6 +107,16 @@ class BaseMensualView(ttk.Frame):
         # --- Botón de Procesar y Estado ---
         action_frame = ttk.Frame(scrollable_frame, padding="10", style='Card.TFrame')
         action_frame.pack(fill=tk.X, pady=20, padx=20)
+
+        # --- NUEVO: Interruptor de Modo Actualización ---
+        style.configure('Switch.TCheckbutton', font=('Arial', 10))
+        update_switch = ttk.Checkbutton(
+            action_frame,
+            text="⚡ Modo Actualización Rápida (usar base anterior)",
+            variable=self.update_mode_var,
+            style='Switch.TCheckbutton'
+        )
+        update_switch.pack(pady=(0, 10))
         
         self.procesar_button = ttk.Button(action_frame, text="▶ Procesar Base Mensual", command=self.controller.procesar_archivos, style='Accent.TButton')
         self.procesar_button.pack(pady=10)

@@ -238,43 +238,112 @@ class ReportProcessorService:
         print(f"✅ Filtro aplicado. {len(filtered_df)} registros encontrados en el rango.")
         
         return filtered_df
+    
+
+    def _detectar_problemas_calidad(self, df):
+        """
+        Crea un reporte de auditoría de calidad de datos, garantizando una
+        única fila por crédito y aplicando las reglas de negocio correctamente.
+        """
+        print("🔍 Generando reporte de auditoría de calidad de datos...")
+        
+        # 1. Usamos una copia del DataFrame con créditos únicos como base de todo.
+        df_auditoria = df.drop_duplicates(subset=['Credito']).copy()
+
+        # 2. Aplicamos cada regla directamente sobre esta copia para crear las columnas de estado.
+        
+        # --- Reglas de Nulos o Valores Específicos ---
+        df_auditoria['Estado_Fecha_Desembolso'] = np.where(pd.to_datetime(df_auditoria['Fecha_Desembolso'], errors='coerce').isnull(), 'CORREGIR', 'BIEN')
+        # REGLA CORREGIDA: 'Fecha_Facturada' solo valida si está vacía.
+        df_auditoria['Estado_Fecha_Facturada'] = np.where(pd.to_datetime(df_auditoria['Fecha_Facturada'], errors='coerce').isnull(), 'CORREGIR', 'BIEN')
+        df_auditoria['Estado_Factura'] = np.where(df_auditoria['Factura_Venta'] == 'NO ASIGNADA', 'CORREGIR', 'BIEN')
+        
+        df_auditoria['Estado_Producto'] = np.where(df_auditoria['Nombre_Producto'] == 'NO REGISTRA', 'CORREGIR', 'BIEN')
+        df_auditoria['Estado_Obsequio'] = np.where((df_auditoria['Obsequio'] == 'SIN OBSEQUIOS') & (df_auditoria['Nombre_Producto'] == 'NO REGISTRA'), 'CORREGIR', 'BIEN')
+        df_auditoria['Estado_Cant_Producto'] = np.where((pd.to_numeric(df_auditoria['Cantidad_Producto'], errors='coerce') == 0) & (df_auditoria['Factura_Venta'] == 'NO ASIGNADA'), 'CORREGIR', 'BIEN')
+        df_auditoria['Estado_Cant_Obsequio'] = np.where((pd.to_numeric(df_auditoria['Cantidad_Obsequio'], errors='coerce') == 0) & (df_auditoria['Factura_Venta'] == 'NO ASIGNADA'), 'CORREGIR', 'BIEN')
+        df_auditoria['Estado_Direccion'] = np.where(df_auditoria['Direccion'].isnull() | (df_auditoria['Direccion'] == ''), 'CORREGIR', 'BIEN')
+        df_auditoria['Estado_Barrio'] = np.where(df_auditoria['Barrio'].isnull() | (df_auditoria['Barrio'] == ''), 'CORREGIR', 'BIEN')
+        df_auditoria['Estado_Nombre_Ciudad'] = np.where(df_auditoria['Nombre_Ciudad'].isnull() | (df_auditoria['Nombre_Ciudad'] == ''), 'CORREGIR', 'BIEN')
+
+        # --- Reglas de Formato (Regex) ---
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        mask_correo_ok = df_auditoria['Correo'].astype(str).str.match(email_regex, na=False)
+        df_auditoria['Estado_Correo'] = np.where(mask_correo_ok, 'BIEN', 'CORREGIR')
+
+        celular_regex = r'^(3\d{9}|60\d{8})$'
+        celulares_str = df_auditoria['Celular'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        mask_celular_ok = celulares_str.str.match(celular_regex, na=False)
+        df_auditoria['Estado_Celular'] = np.where(mask_celular_ok, 'BIEN', 'CORREGIR')
+
+        # --- Reglas Numéricas ---
+        for col in ['Valor_Desembolso', 'Total_Cuotas', 'Valor_Cuota']:
+            df_auditoria[f'Estado_{col}'] = np.where(pd.to_numeric(df_auditoria[col], errors='coerce').fillna(0) == 0, 'CORREGIR', 'BIEN')
+        df_auditoria['Estado_Dias_Atraso'] = np.where(pd.to_numeric(df_auditoria['Dias_Atraso'], errors='coerce').isnull(), 'CORREGIR', 'BIEN')
+
+        # --- Regla para Codeudores ---
+        for i in ['1', '2']:
+            for col_base in ['Codeudor', 'Nombre_Codeudor', 'Telefono_Codeudor', 'Ciudad_Codeudor']:
+                col = f"{col_base}{i}"
+                df_auditoria[f'Estado_{col}'] = np.where(df_auditoria[col].isnull() | (df_auditoria[col] == 'SIN CODEUDOR'), 'CORREGIR', 'BIEN')
+
+        # 3. Filtramos para quedarnos solo con las filas que tienen al menos un problema
+        columnas_de_estado = [col for col in df_auditoria.columns if col.startswith('Estado_')]
+        mascara_final = (df_auditoria[columnas_de_estado] == 'CORREGIR').any(axis=1)
+        
+        # 4. Seleccionamos las columnas a mostrar en el reporte final
+        columnas_a_mostrar = ['Credito', 'Cedula_Cliente', 'Nombre_Cliente'] + sorted(columnas_de_estado)
+        df_a_corregir = df_auditoria.loc[mascara_final, columnas_a_mostrar]
+        
+        if not df_a_corregir.empty:
+            print(f"   - ✅ Se encontraron {len(df_a_corregir)} créditos únicos con problemas de calidad para revisar.")
+        
+        return df_a_corregir
+        
 
     def finalize_report(self, reporte_df, orden_columnas):
         """Realiza la limpieza, formato y reordenamiento final del reporte."""
         print("🧹 Realizando transformaciones y limpieza final...")
         
-         # Asegurarse que 'Valor_Vencido' existe y tiene el formato correcto
-        if 'Valor_Vencido' not in reporte_df.columns:
-            reporte_df['Valor_Vencido'] = 0  # Crear columna si no existe
+        # --- PASO 1: Detectar problemas ANTES de cualquier formateo ---
+        df_a_corregir = self._detectar_problemas_calidad(reporte_df)
+
+        # --- PASO 2: Formatear TODAS las columnas de fecha ---
+        print("📅 Formateando fechas a solo día/mes/año...")
         
-        # Formatear y rellenar columnas de vencimientos
+        columnas_de_fecha = [
+            'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso', 
+            'Fecha_Facturada', 'Fecha_Desembolso', 'Fecha_Ultima_Novedad'
+        ]
+        
+        for col in columnas_de_fecha:
+            if col in reporte_df.columns:
+                # --- CAMBIO CLAVE: de .dt.normalize() a .dt.date ---
+                # .dt.date extrae solo la fecha, eliminando la hora por completo.
+                # Excel lo reconocerá como un tipo de dato de fecha puro.
+                reporte_df[col] = pd.to_datetime(reporte_df[col], errors='coerce').dt.date
+
+        # --- PASO 3: Rellenar vacíos y formatear el resto de columnas ---
+        
         columnas_vencimiento = {
-            'Fecha_Cuota_Vigente': 'VIGENCIA EXPIRADA',
-            'Cuota_Vigente': 'VIGENCIA EXPIRADA',
-            'Valor_Cuota_Vigente': 'VIGENCIA EXPIRADA',
-            'Fecha_Cuota_Atraso': 'SIN MORA',
-            'Primera_Cuota_Mora': 'SIN MORA',
-            'Valor_Cuota_Atraso': 0,
-            'Valor_Vencido': 0  # Asegurar que tiene un valor por defecto
+            'Fecha_Cuota_Vigente': 'VIGENCIA EXPIRADA', 'Cuota_Vigente': 'VIGENCIA EXPIRADA',
+            'Valor_Cuota_Vigente': 'VIGENCIA EXPIRADA', 'Fecha_Cuota_Atraso': 'SIN MORA',
+            'Primera_Cuota_Mora': 'SIN MORA', 'Valor_Cuota_Atraso': 0, 'Valor_Vencido': 0
         }
         
         for col, default_value in columnas_vencimiento.items():
             if col not in reporte_df.columns:
                 reporte_df[col] = default_value
             else:
+                # Para las fechas, si después de procesar siguen vacías (NaT),
+                # las llenamos con el texto correspondiente.
                 if 'Fecha' in col:
-                    reporte_df[col] = pd.to_datetime(reporte_df[col], errors='coerce').dt.strftime('%d/%m/%Y')
-                reporte_df[col].fillna(default_value, inplace=True)
-
-        # Formatear otras fechas
-        if 'Fecha_Facturada' in reporte_df.columns:
-            reporte_df['Fecha_Facturada'] = pd.to_datetime(reporte_df['Fecha_Facturada'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
-
-        if 'Fecha_Desembolso' in reporte_df.columns:
-            reporte_df['Fecha_Desembolso'] = pd.to_datetime(reporte_df['Fecha_Desembolso'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')    
+                    reporte_df[col] = reporte_df[col].fillna(default_value)
+                else:
+                    reporte_df[col].fillna(default_value, inplace=True)
+        
  
         print("👔 Limpiando y completando la columna 'Lider_Zona' y 'Movil_Lider'")
-       
         if 'Lider_Zona' in reporte_df.columns and 'Regional_Venta' in reporte_df.columns:
             print("👔 Limpiando y completando 'Lider_Zona' y 'Movil_Lider'...")
 
@@ -313,31 +382,6 @@ class ReportProcessorService:
         else:
             print("   - ⚠️ Columnas 'Lider_Zona' o 'Regional_Venta' no encontradas. Se omite este paso.")
             
-            
-        print("🔍 Buscando registros con datos críticos faltantes...")
-    
-        # Define las columnas que son esenciales para tu operación
-        columnas_criticas = [
-            'Nombre_Vendedor', 'Zona', 'Saldo_Capital', 'Valor_Desembolso', 'Nombre_Cliente'
-        ]
-        
-        # Filtra el DataFrame para encontrar filas donde CUALQUIERA de las columnas críticas esté vacía o sea 0
-        # Usamos una copia para evitar advertencias de pandas
-        df_para_revision = reporte_df[columnas_criticas].copy()
-        df_para_revision.replace('NO ASIGNADO', np.nan, inplace=True) # Considerar 'NO ASIGNADO' como vacío
-        df_para_revision.replace('SIN INFO', np.nan, inplace=True)   # Considerar 'SIN INFO' como vacío
-        df_para_revision['Saldo_Capital'] = pd.to_numeric(df_para_revision['Saldo_Capital'], errors='coerce')
-        
-        # La máscara identifica filas con problemas
-        mascara_problemas = df_para_revision.isnull().any(axis=1) | (df_para_revision['Saldo_Capital'] == 0)
-
-        # Creamos la hoja de correcciones con el 'Credito' y las columnas problemáticas
-        df_a_corregir = reporte_df.loc[mascara_problemas, ['Credito', 'Cedula_Cliente'] + columnas_criticas]
-        
-        if not df_a_corregir.empty:
-            print(f"   - ⚠️ Se encontraron {len(df_a_corregir)} registros que necesitan corrección manual.")
-        # --- FIN DEL BLOQUE NUEVO ---       
-
 
         print("✨ Formateando columnas de porcentaje...")
         columnas_porcentaje = ['Meta_%', 'Meta_T.R_%']
@@ -367,7 +411,8 @@ class ReportProcessorService:
                 
 
         if 'Valor_Vencido' not in orden_columnas:
-            orden_columnas.append('Valor_Vencido')          
+            orden_columnas.append('Valor_Vencido')
+
 
         # Eliminar columnas temporales y reordenar
         print("🏗️  Reordenando columnas según la configuración...")
@@ -383,4 +428,4 @@ class ReportProcessorService:
         columnas_ordenadas = [col for col in orden_columnas if col in columnas_actuales]
         columnas_restantes = [col for col in columnas_actuales if col not in columnas_ordenadas]
         
-        return reporte_df[columnas_ordenadas + columnas_restantes]
+        return reporte_df[columnas_ordenadas + columnas_restantes],df_a_corregir
