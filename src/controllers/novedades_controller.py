@@ -16,12 +16,49 @@ class NovedadesAnalisisController:
         """Asigna la vista a este controlador."""
         self.view = view
 
-    def _cargar_base_desde_cache(self):
-        """Método interno para cargar el reporte base desde el archivo Feather."""
-        if not self.cache_path.exists():
-            raise FileNotFoundError("No se encontró el archivo de caché (reporte_base_mensual.feather).\n\nPor favor, genera primero el 'Reporte Base' desde el módulo de 'Base Mensual'.")
-        print(f"🔄 Cargando reporte base desde el caché: {self.cache_path}")
-        return pd.read_feather(self.cache_path)
+     # --- MÉTODO NUEVO Y RECOMENDADO para cargar el reporte base ---
+    def _cargar_reporte_base(self, ruta_base, config):
+        """
+        Carga el archivo de reporte base usando la configuración definida en el modelo.
+        Aplica el mapa de tipos y convierte las columnas de fecha.
+        """
+        print("🔄 Cargando reporte base con configuración del modelo...")
+        
+        # 1. Obtiene la configuración específica para "BASE_MENSUAL" de forma segura
+        config_base = config.get("BASE_MENSUAL", {})
+        mapa_de_tipos = config_base.get("dtype_map", None)
+
+        if not mapa_de_tipos:
+            messagebox.showwarning("Configuración Faltante", "No se encontró el 'dtype_map' para 'BASE_MENSUAL' en la configuración.")
+            # Como fallback, lo leemos como texto para evitar errores
+            return pd.read_excel(ruta_base, dtype=mapa_de_tipos,parse_dates=False)
+
+        # 2. Lee el Excel usando el mapa de tipos que definiste
+        df_base = pd.read_excel(ruta_base, dtype=mapa_de_tipos)
+        
+         # --- LÍNEAS NUEVAS PARA LIMPIAR LA COLUMNA PROBLEMÁTICA ---
+        if 'Valor_Cuota_Vigente' in df_base.columns:
+            # Convierte a número, los errores (texto) se volverán NaN
+            df_base['Valor_Cuota_Vigente'] = pd.to_numeric(df_base['Valor_Cuota_Vigente'], errors='coerce')
+            # Rellena los NaN resultantes con 0 para tener una columna numérica limpia
+            df_base['Valor_Cuota_Vigente'] = df_base['Valor_Cuota_Vigente'].fillna(0)
+
+        # --- NUEVO BLOQUE DE LIMPIEZA PARA 'Primera_Cuota_Mora' ---
+        if 'Primera_Cuota_Mora' in df_base.columns:
+            df_base['Primera_Cuota_Mora'] = pd.to_numeric(df_base['Primera_Cuota_Mora'], errors='coerce').fillna(0)
+            # Como es un entero, podemos convertir el tipo al final para que no tenga decimales
+            df_base['Primera_Cuota_Mora'] = df_base['Primera_Cuota_Mora'].astype('Int64')    
+
+        # 3. Convierte TODAS las columnas de fecha de una vez
+        columnas_fecha = [
+            'Fecha_Desembolso', 'Fecha_Facturada', 'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso'
+        ]
+        for col in columnas_fecha:
+            if col in df_base.columns:
+                df_base[col] = pd.to_datetime(df_base[col], errors='coerce')
+        
+        print("✅ Reporte base cargado exitosamente usando el mapa de tipos.")
+        return df_base   
     
     def _cargar_y_unir_archivos(self, file_paths, config_key):
         """
@@ -55,7 +92,7 @@ class NovedadesAnalisisController:
         return pd.concat(df_list, ignore_index=True)
 
 
-    def procesar_archivos(self, rutas_novedades, rutas_analisis, rutas_r91):
+    def procesar_archivos(self, rutas_novedades,ruta_base, rutas_analisis, rutas_r91):
         """
         Orquesta todo el proceso: carga el caché, aplica novedades, calcula el rodamiento
         y guarda un reporte multi-hoja.
@@ -65,7 +102,15 @@ class NovedadesAnalisisController:
             return
             
         try:
-            df_base = self._cargar_base_desde_cache()
+            # --- CAMBIO: Cargar la base desde el archivo Excel seleccionado ---
+            print(f"🔄 Cargando reporte base desde: {ruta_base}")
+            # Usamos dtype=str para evitar problemas de formato de Excel con las cédulas
+            df_base = self._cargar_reporte_base(ruta_base, configuracion)
+            
+            # Si la carga falla por alguna razón, el método nuevo podría retornar None
+            if df_base is None or df_base.empty:
+                messagebox.showerror("Error", "No se pudo cargar el reporte base correctamente.")
+                return
 
             # 1. Cargar y unir todos los archivos de entrada
             df_novedades_unido = self._cargar_y_unir_archivos(rutas_novedades, "NOVEDADES")
@@ -86,10 +131,20 @@ class NovedadesAnalisisController:
 
             # 5. Unir la información de recaudos al reporte final
             df_final = pd.merge(df_con_rodamiento, df_recaudos, on='Credito', how='left')
-            # Rellenar con 0 por si algún crédito no tiene recaudo
             for col in ['Recaudo_Anticipado', 'Recaudo_Meta', 'Total_Recaudo']:
-                df_final[col].fillna(0, inplace=True)
-
+                if col in df_final.columns:
+                    df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
+            
+            
+            columnas_fecha_sin_hora = [
+                'Fecha_Desembolso', 'Fecha_Facturada',
+                'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso'
+            ]
+            for col in columnas_fecha_sin_hora:
+                if col in df_final.columns:
+                    df_final[col] = pd.to_datetime(df_final[col], errors='coerce').dt.date
+            
+            
             # 6. Guardar el reporte multi-hoja
             ruta_salida = filedialog.asksaveasfilename(
                 defaultextension=".xlsx", 
@@ -100,7 +155,7 @@ class NovedadesAnalisisController:
             with pd.ExcelWriter(ruta_salida, engine='openpyxl') as writer:
                 df_final.to_excel(writer, sheet_name='Analisis_de_Cartera', index=False)
                 df_novedades_detallado.to_excel(writer, sheet_name='Detalle_Novedades', index=False)
- 
+
             messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
 
         except Exception as e:
