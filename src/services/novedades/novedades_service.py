@@ -1,4 +1,3 @@
-# En: src/services/novedades_service.py
 import pandas as pd
 
 class NovedadesService:
@@ -70,10 +69,18 @@ class NovedadesService:
         for col in ['Fecha_Novedad', 'Fecha_Compromiso']:
             if col in reporte_novedades_detallado.columns:
                 reporte_novedades_detallado[col] = pd.to_datetime(reporte_novedades_detallado[col], errors='coerce').dt.date
-
+          
+                
+        reporte_novedades_detallado.loc[
+            reporte_novedades_detallado['Tipo_Novedad'] != 'COMPROMISO DE PAGO', 
+            'Fecha_Compromiso'
+        ] = 'SIN COMPROMISO'
+        
         # Reordenar columnas para la hoja de novedades
         columnas_novedades = ['Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad', 'Tipo_Novedad', 'Novedad','Valor','Fecha_Compromiso']
-        reporte_novedades_detallado = reporte_novedades_detallado[columnas_novedades]
-        
+        # Usamos reindex para asegurarnos de no perder columnas si se añade alguna nueva
+        columnas_existentes = [col for col in columnas_novedades if col in reporte_novedades_detallado.columns]
+        reporte_novedades_detallado = reporte_novedades_detallado.reindex(columns=columnas_existentes)
+                        
         print("✅ Reportes de Novedades generados.")
         return df_base_enriquecido, reporte_novedades_detallado

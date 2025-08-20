@@ -18,12 +18,19 @@ class ReportService:
         self.products_sales = ProductsSalesService()
         self.report_processor = ReportProcessorService(config)
 
-    def generate_consolidated_report(self, file_paths, orden_columnas, start_date=None, end_date=None):
+    def generate_consolidated_report(self, file_paths, orden_columnas, start_date=None, end_date=None,dataframes_preloaded=None):
         """
         Orquesta todo el proceso de ETL con la arquitectura correcta y de mejor rendimiento.
         """
         # 1. Cargar todos los dataframes
         dataframes_por_tipo = self.data_loader.load_dataframes(file_paths)
+        
+        if dataframes_preloaded:
+            print("\n⚙️  Usando dataframes precargados desde el modo de actualización...")
+            dataframes_por_tipo = dataframes_preloaded
+        else:
+            print("\n⚙️  Cargando dataframes desde archivos...")
+            dataframes_por_tipo = self.data_loader.load_dataframes(file_paths)
 
         # 2. Preparar dataframes individuales
         print("\n🔗 Limpiando y estandarizando llaves de todos los archivos...")

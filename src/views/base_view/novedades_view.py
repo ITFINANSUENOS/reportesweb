@@ -15,11 +15,13 @@ class NovedadesView(ttk.Frame):
         self.rutas_novedades = []
         self.rutas_analisis = []
         self.rutas_r91 = []
+        self.ruta_usuarios = ""
         self.ruta_reporte_base = ""
 
         self.label_novedades_path = tk.StringVar(value="No seleccionado")
         self.label_analisis_path = tk.StringVar(value="No seleccionado")
         self.label_r91_path = tk.StringVar(value="No seleccionado")
+        self.label_usuarios_path = tk.StringVar(value="No seleccionado")
         self.label_base_path = tk.StringVar(value="No seleccionado")
 
         # --- Estilos ---
@@ -91,6 +93,12 @@ class NovedadesView(ttk.Frame):
         ttk.Entry(content_frame, textvariable=self.label_r91_path, state="readonly").grid(row=7, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(content_frame, text="Seleccionar...", command=self.seleccionar_r91).grid(row=7, column=1, sticky="ew")
         
+        # --- SECCIÓN 5: USUARIOS (NUEVA SECCIÓN) ---
+        ttk.Label(content_frame, text="5. Cargar Archivo(s) de Usuarios:").grid(row=8, column=0, columnspan=2, sticky="w", pady=(15, 5))
+        ttk.Entry(content_frame, textvariable=self.label_usuarios_path, state="readonly").grid(row=9, column=0, sticky="ew", padx=(0, 10))
+        ttk.Button(content_frame, text="Seleccionar...", command=self.seleccionar_usuarios).grid(row=9, column=1, sticky="ew")
+
+        
         # --- BOTÓN DE PROCESAR ---
         ttk.Button(content_frame, text="▶ Procesar y Generar Reporte", command=self.procesar, style='Accent.TButton').grid(row=8, column=0, columnspan=2, pady=(25, 10), ipady=5)
         
@@ -128,6 +136,13 @@ class NovedadesView(ttk.Frame):
             self.label_novedades_path.set(f"{len(self.rutas_novedades)} archivo(s) seleccionado(s)")
 
 
+    def seleccionar_usuarios(self):
+        file_types = [("Archivos de Excel", "*.xlsx *.XLSX *.xls *.XLS"), ("Todos los archivos", "*.*")]
+        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Usuarios", filetypes=file_types)
+        if filepaths:
+            self.ruta_usuarios = list(filepaths)
+            self.label_usuarios_path.set(f"{len(self.ruta_usuarios)} archivo(s) seleccionado(s)")
+
     def seleccionar_analisis(self):
         # Permite seleccionar múltiples archivos
         file_types = [
@@ -150,5 +165,6 @@ class NovedadesView(ttk.Frame):
             ruta_base=self.ruta_reporte_base,
             rutas_novedades=self.rutas_novedades,
             rutas_analisis=self.rutas_analisis,
-            rutas_r91=self.rutas_r91
+            rutas_r91=self.rutas_r91,
+            ruta_usuarios=self.ruta_usuarios
         )

@@ -118,7 +118,6 @@ class ReportProcessorService:
                 except Exception as e:
                     print(f"  - No se pudo revisar la columna por el error: {e}")
         print("--- FIN DE LA DEPURACIÓN ---\n")
-        # --- TERMINA BLOQUE DE DEPURACIÓN PROFUNDA ---
 
         # Esta es la línea donde probablemente ocurre el error
         saldo_capital_num = pd.to_numeric(reporte_df['Saldo_Capital'], errors='coerce').fillna(0)

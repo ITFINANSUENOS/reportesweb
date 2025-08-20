@@ -60,6 +60,7 @@ class NovedadesAnalisisController:
         print("✅ Reporte base cargado exitosamente usando el mapa de tipos.")
         return df_base   
     
+    
     def _cargar_y_unir_archivos(self, file_paths, config_key):
         """
         Función interna para leer y concatenar múltiples archivos,
@@ -92,7 +93,7 @@ class NovedadesAnalisisController:
         return pd.concat(df_list, ignore_index=True)
 
 
-    def procesar_archivos(self, rutas_novedades,ruta_base, rutas_analisis, rutas_r91):
+    def procesar_archivos(self, rutas_novedades,ruta_base, rutas_analisis, rutas_r91,ruta_usuarios ):
         """
         Orquesta todo el proceso: carga el caché, aplica novedades, calcula el rodamiento
         y guarda un reporte multi-hoja.
@@ -116,11 +117,29 @@ class NovedadesAnalisisController:
             df_novedades_unido = self._cargar_y_unir_archivos(rutas_novedades, "NOVEDADES")
             df_analisis_unido = self._cargar_y_unir_archivos(rutas_analisis, "ANALISIS")
             df_r91_unido = self._cargar_y_unir_archivos(rutas_r91, "R91")
-
+            df_usuarios_unido = self._cargar_y_unir_archivos(ruta_usuarios, "USUARIOS")
+            
+            df_novedades_unido['Usuario_Novedad'] = df_novedades_unido['Usuario_Novedad'].astype(str).str.lower()
+            df_usuarios_unido['Usuario_Novedad'] = df_usuarios_unido['Usuario_Novedad'].astype(str).str.lower()
+            
             # 2. Aplicar Novedades
             novedades_service = NovedadesService(configuracion)
             df_base_enriquecido, df_novedades_detallado = novedades_service.aplicar_novedades(df_base, df_novedades_unido)
             
+            df_novedades_detallado = pd.merge(
+                df_novedades_detallado, 
+                df_usuarios_unido, 
+                on='Usuario_Novedad', 
+                how='left'
+            )
+            
+            columnas_a_mayusculas = ['Usuario_Novedad', 'Nombre_Usuario', 'Cargo_Usuario']
+            for col in columnas_a_mayusculas:
+                # Verificamos si la columna existe en el DataFrame para evitar errores
+                if col in df_novedades_detallado.columns:
+                    # Usamos .astype(str) por si hay algún valor no textual (como NaN) y luego .str.upper()
+                    df_novedades_detallado[col] = df_novedades_detallado[col].astype(str).str.upper()
+                
             # 3. Calcular Rodamiento
             analisis_service = AnalisisService(configuracion)
             df_con_rodamiento = analisis_service.calcular_rodamiento(df_base_enriquecido, df_analisis_unido)
@@ -144,6 +163,104 @@ class NovedadesAnalisisController:
                 if col in df_final.columns:
                     df_final[col] = pd.to_datetime(df_final[col], errors='coerce').dt.date
             
+            
+            orden_columnas_analisis = [
+                'Empresa',
+                'Credito',
+                'Fecha_Desembolso',
+                'Factura_Venta',
+                'Fecha_Facturada',
+                'Nombre_Producto',
+                'Cantidad_Producto',
+                'Obsequio',
+                'Cantidad_Obsequio',
+                'Cantidad_Total_Producto',
+                'Cedula_Cliente',
+                'Nombre_Cliente',
+                'Correo',
+                'Celular',
+                'Direccion',
+                'Barrio',
+                'Nombre_Ciudad',
+                'Zona',
+                'Cobrador',
+                'Telefono_Cobrador',
+                'Zona_Cobro',
+                'Call_Center_Apoyo',
+                'Nombre_Call_Center',
+                'Telefono_Call_Center',
+                'Regional_Cobro',
+                'Gestor',
+                'Telefono_Gestor',
+                'Jefe_ventas',
+                'Codigo_Vendedor',
+                'Nombre_Vendedor',
+                'Movil_Vendedor',
+                'Vendedor_Activo',
+                'Lider_Zona',
+                'Movil_Lider',
+                'Codigo_Centro_Costos',
+                'Regional_Venta',
+                'Codeudor1',
+                'Nombre_Codeudor1',
+                'Telefono_Codeudor1',
+                'Ciudad_Codeudor1',
+                'Codeudor2',
+                'Nombre_Codeudor2',
+                'Telefono_Codeudor2',
+                'Ciudad_Codeudor2',
+                'Valor_Desembolso',
+                'Total_Cuotas',
+                'Valor_Cuota',
+                'Dias_Atraso',
+                'Franja_Mora',
+                'Saldo_Capital',
+                'Saldo_Interes_Corriente',
+                'Saldo_Avales',
+                'Meta_Intereses',
+                'Meta_General',
+                'Meta_%',
+                'Meta_$',
+                'Meta_T.R_%',
+                'Meta_T.R_$',
+                'Cuotas_Pagadas',
+                'Cuota_Vigente',
+                'Fecha_Cuota_Vigente',
+                'Valor_Cuota_Vigente',
+                'Fecha_Cuota_Atraso',
+                'Primera_Cuota_Mora',
+                'Valor_Cuota_Atraso',      
+                'Valor_Vencido',
+                'Fecha_Ultima_Novedad',
+                'Cantidad_Novedades',
+                'Dias_Atraso_Final',
+                'Franja_Mora_Final',
+                'Rodamiento',
+                'Recaudo_Anticipado',
+                'Recaudo_Meta',
+                'Total_Recaudo'
+            ]
+
+            # 2. Define el orden para la hoja 'Detalle_Novedades'
+            #    ¡AJUSTA TAMBIÉN ESTA LISTA!
+            orden_columnas_detalle = [
+                'Cedula_Cliente',
+                'Nombre_Cliente',
+                'Fecha_Novedad',
+                'Usuario_Novedad',
+                'Nombre_Usuario',
+                'Cargo_Usuario',
+                'Celular_Corporativo',
+                'Tipo_Novedad',
+                'Novedad',
+                'Fecha_Compromiso',
+                'Valor',
+                # --- Agrega aquí las demás columnas de df_novedades_detallado en el orden deseado ---
+            ]
+
+           
+            df_final = df_final[[col for col in orden_columnas_analisis if col in df_final.columns]]
+            df_novedades_detallado = df_novedades_detallado[[col for col in orden_columnas_detalle if col in df_novedades_detallado.columns]]
             
             # 6. Guardar el reporte multi-hoja
             ruta_salida = filedialog.asksaveasfilename(

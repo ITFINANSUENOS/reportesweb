@@ -20,7 +20,7 @@ class UpdateBaseService:
             print(f"   - ⚠️ Advertencia: La llave '{llave}' no se encontró en ambos DataFrames. Se omite esta actualización.")
             return df_principal
 
-        df_actualizacion_limpio = df_actualizacion.drop_duplicates(subset=[llave])
+        df_actualizacion_limpio = df_actualizacion.drop_duplicates(subset=[llave]).copy()
         
          # --- LÓGICA DE LIMPIEZA AVANZADA ---
         # 1. Convertir a numérico primero, forzando errores a NaN (no un número)
@@ -76,6 +76,10 @@ class UpdateBaseService:
                 "llave":"Zona",
                 "columnas":'__ALL__'
             },
+            "VENCIMIENTOS":{
+                "llave":"Credito",
+                "columnas":'__ALL__'
+            },
             "ASESORES": {
                 # Caso especial con múltiples hojas
                 "sheets": [
@@ -113,14 +117,14 @@ class UpdateBaseService:
         fnz001_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("FNZ001", [])))
         df_base = self.report_service.credit_details.enrich_credit_details(df_base, sc04_df, fnz001_df)
 
-        vencimientos_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("VENCIMIENTOS", [])))
-        if not vencimientos_df.empty:
-            print("   - Recalculando desde 'VENCIMIENTOS'...")
-            processed_vencimientos, _ = self.report_service.credit_details.process_vencimientos_data(vencimientos_df)
-            if not processed_vencimientos.empty:
-                cols_vencimientos = processed_vencimientos.columns.drop('Credito')
-                df_base = df_base.drop(columns=cols_vencimientos, errors='ignore')
-                df_base = pd.merge(df_base, processed_vencimientos, on='Credito', how='left')
+        # vencimientos_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("VENCIMIENTOS", [])))
+        # if not vencimientos_df.empty:
+        #     print("   - Recalculando desde 'VENCIMIENTOS'...")
+        #     processed_vencimientos, _ = self.report_service.credit_details.process_vencimientos_data(vencimientos_df)
+        #     if not processed_vencimientos.empty:
+        #         cols_vencimientos = processed_vencimientos.columns.drop('Credito')
+        #         df_base = df_base.drop(columns=cols_vencimientos, errors='ignore')
+        #         df_base = pd.merge(df_base, processed_vencimientos, on='Credito', how='left')
         
         fnz003_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("FNZ003", [])))
         if not fnz003_df.empty:
@@ -159,7 +163,7 @@ class UpdateBaseService:
             df_nuevos_procesados, _, _ = self.report_service.generate_consolidated_report(
                 file_paths=None, 
                 orden_columnas=[],
-                _dataframes_preloaded=dataframes_solo_nuevos
+                dataframes_preloaded=dataframes_solo_nuevos  # <-- SOLUCIONADO
             )
         
         print("\nConsolidando reporte final...")
@@ -202,6 +206,7 @@ class UpdateBaseService:
                 df_filtrado = df_concatenado
             
             if not df_filtrado.empty:
-                dataframes_filtrados[tipo] = [{"data": df_filtrado, "config": lista_dfs[0]["config"]}]
+                config = lista_dfs[0].get("config") if lista_dfs else None
+                dataframes_filtrados[tipo] = [{"data": df_filtrado, "config": config}]
 
         return dataframes_filtrados

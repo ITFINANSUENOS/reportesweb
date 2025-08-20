@@ -32,6 +32,15 @@ configuracion = {
                        "COBRO_ANTI":"Recaudo_Anticipado"
                         }
     },
+    "USUARIOS": {
+        "usecols": ["Cargo","Nombre completo","Usuario de MANAGER","Número corporativo"],
+        "rename_map": { 
+                       "Cargo": "Cargo_Usuario",
+                       "Nombre completo": "Nombre_Usuario", 
+                       "Usuario de MANAGER": "Usuario_Novedad",
+                       "Número corporativo": "Celular_Corporativo"
+                        }
+    },
     "BASE_MENSUAL": {
         "dtype_map": {
             # --- Aquí defines los tipos de tu archivo base ---
