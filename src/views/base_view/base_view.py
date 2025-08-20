@@ -108,16 +108,29 @@ class BaseMensualView(ttk.Frame):
         action_frame = ttk.Frame(scrollable_frame, padding="10", style='Card.TFrame')
         action_frame.pack(fill=tk.X, pady=20, padx=20)
 
-        # --- NUEVO: Interruptor de Modo Actualización ---
+        # --- Interruptor de Modo Actualización ---
         style.configure('Switch.TCheckbutton', font=('Arial', 10))
         update_switch = ttk.Checkbutton(
             action_frame,
             text="⚡ Modo Actualización Rápida (usar base anterior)",
             variable=self.update_mode_var,
-            style='Switch.TCheckbutton'
+            style='Switch.TCheckbutton',
+            # <<< CAMBIO 1: Se añade el comando para llamar a la función de visibilidad >>>
+            command=self._toggle_base_report_visibility
         )
         update_switch.pack(pady=(0, 10))
+
+        # --- Widget para cargar el reporte base (se crea pero no se muestra aún) ---
+        self.base_report_frame = ttk.LabelFrame(action_frame, text="Cargar Base Anterior", padding="10")
+        # No usamos .pack() aquí todavía
+
+        self.base_report_path_label = ttk.Label(self.base_report_frame, text="Ningún reporte base seleccionado...", width=60)
+        self.base_report_path_label.pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
+
+        base_report_button = ttk.Button(self.base_report_frame, text="Seleccionar Reporte...", command=self.controller.seleccionar_reporte_base)
+        base_report_button.pack(side=tk.LEFT, padx=5)
         
+        # --- Widgets de acción final ---
         self.procesar_button = ttk.Button(action_frame, text="▶ Procesar Base Mensual", command=self.controller.procesar_archivos, style='Accent.TButton')
         self.procesar_button.pack(pady=10)
 
@@ -126,26 +139,32 @@ class BaseMensualView(ttk.Frame):
 
         self.progress_bar = ttk.Progressbar(action_frame, orient='horizontal', mode='determinate', length=400)
         self.progress_bar.pack(pady=5, fill=tk.X, expand=True)
+
+        # Llamamos a la función una vez al inicio para asegurar que el widget esté oculto
+        self._toggle_base_report_visibility()
         
+    # <<< CAMBIO 2: Nueva función para mostrar/ocultar el widget >>>
+    def _toggle_base_report_visibility(self):
+        """Muestra u oculta el frame para seleccionar el reporte base según el estado del checkbox."""
+        if self.update_mode_var.get():
+            # Si el checkbox está activado, muestra el frame justo antes del botón de procesar.
+            self.base_report_frame.pack(fill=tk.X, padx=5, pady=(5, 10), before=self.procesar_button)
+        else:
+            # Si el checkbox está desactivado, lo oculta.
+            self.base_report_frame.pack_forget()
+
     def volver_al_menu(self):
         """Llama al método del controlador principal para mostrar el menú."""
         self.main_window_controller.mostrar_vista("base_mensual_menu")
 
     def actualizar_ruta_label(self, tipo_archivo, display_text):
-        """
-        Actualiza la etiqueta que muestra el estado del archivo seleccionado
-        aplicando el nuevo estilo 'Success.TLabel'.
-        """
         if tipo_archivo in self.rutas_labels:
             label = self.rutas_labels[tipo_archivo]
-            # En lugar de .config(background...), cambiamos el estilo del widget
             label.config(text=display_text, style='Success.TLabel')
             self.update_idletasks()
     
     def actualizar_estado(self, mensaje, progreso=None):
-        """Actualiza el mensaje de estado y la barra de progreso."""
         self.status_label.config(text=mensaje)
         if progreso is not None:
             self.progress_bar.config(value=progreso)
         self.update_idletasks()
-

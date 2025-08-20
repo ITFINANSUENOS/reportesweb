@@ -31,5 +31,34 @@ configuracion = {
                        "COBRO_ATRA": "Recaudo_Atraso",
                        "COBRO_ANTI":"Recaudo_Anticipado"
                         }
+    },
+    "BASE_MENSUAL": {
+        "dtype_map": {
+            # --- Aquí defines los tipos de tu archivo base ---
+            # AJUSTA ESTOS NOMBRES Y TIPOS A TU ARCHIVO REAL
+            'Cedula_Cliente': str,          # Como texto para conservar ceros
+            'Numero_Credito': str,          # También como texto
+            'Primera_Cuota_Mora':str,
+            'Fecha_Desembolso': str,
+            'Fecha_Facturada':str,
+            'Fecha_Cuota_Vigente':str,
+            'Fecha_Cuota_Atraso':str,
+            'Cantidad_Producto':int,                    
+            'Cantidad_Obsequio':int,
+            'Valor_Cuota': float,        
+            'Saldo_Capital': float,
+            'Valor_Desembolso': float,               
+            'Meta_Intereses':float,          
+            'Meta_General':float,
+            'Meta_$':float,
+            'Meta_T.R_$':float,
+            'Valor_Cuota_Atraso':float,
+            'Valor_Vencido':float,
+            'Valor_Cuota_Vigente':str,
+            'Total_Cuotas': 'Int64',
+            'Cuotas_Pagadas':'Int64',                    
+            'Dias_Atraso':'Int64',
+
+        }
     }
 }
