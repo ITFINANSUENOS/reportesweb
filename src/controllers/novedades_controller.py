@@ -6,6 +6,10 @@ from src.services.novedades.analisis_service import AnalisisService
 from src.services.novedades.recaudo_service import RecaudoR91Service 
 from src.services.novedades.franjas_service import ReporteFranjasService
 from src.models.novedad_model import configuracion
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font
+from openpyxl.utils.dataframe import dataframe_to_rows
+
 
 class NovedadesAnalisisController:
     def __init__(self):
@@ -94,7 +98,36 @@ class NovedadesAnalisisController:
         return pd.concat(df_list, ignore_index=True)
 
 
-    def procesar_archivos(self, rutas_novedades,ruta_base, rutas_analisis, rutas_r91,ruta_usuarios ):
+    def _save_multiindex_without_index(self, writer, df, sheet_name):
+        """
+        Guarda un DataFrame con MultiIndex columns sin la columna de índice numérico
+        """
+        # Crear nueva hoja
+        workbook = writer.book
+        if sheet_name in workbook.sheetnames:
+            # Eliminar la hoja si ya existe
+            std = workbook[sheet_name]
+            workbook.remove(std)
+        worksheet = workbook.create_sheet(sheet_name)
+        
+        # Escribir encabezados MultiIndex
+        for col_idx, col_name in enumerate(df.columns, 1):
+            if isinstance(col_name, tuple):
+                # Escribir primer nivel
+                worksheet.cell(row=1, column=col_idx, value=col_name[0])
+                # Escribir segundo nivel
+                worksheet.cell(row=2, column=col_idx, value=col_name[1])
+            else:
+                # Para columnas simples, mergear verticalmente
+                worksheet.cell(row=1, column=col_idx, value=col_name)
+                worksheet.merge_cells(start_row=1, start_column=col_idx, end_row=2, end_column=col_idx)
+        
+        # Escribir datos (empezando desde fila 3)
+        for row_idx, row_data in enumerate(df.values, 3):
+            for col_idx, value in enumerate(row_data, 1):
+                worksheet.cell(row=row_idx, column=col_idx, value=value)
+
+    def procesar_archivos(self, rutas_novedades, ruta_base, rutas_analisis, rutas_r91, ruta_usuarios):
         """
         Orquesta todo el proceso: carga el caché, aplica novedades, calcula el rodamiento
         y guarda un reporte multi-hoja.
@@ -163,102 +196,34 @@ class NovedadesAnalisisController:
                 if col in df_final.columns:
                     df_final[col] = pd.to_datetime(df_final[col], errors='coerce').dt.date
             
-            
             orden_columnas_analisis = [
-                'Empresa',
-                'Credito',
-                'Fecha_Desembolso',
-                'Factura_Venta',
-                'Fecha_Facturada',
-                'Nombre_Producto',
-                'Cantidad_Producto',
-                'Obsequio',
-                'Cantidad_Obsequio',
-                'Cantidad_Total_Producto',
-                'Cedula_Cliente',
-                'Nombre_Cliente',
-                'Correo',
-                'Celular',
-                'Direccion',
-                'Barrio',
-                'Nombre_Ciudad',
-                'Zona',
-                'Cobrador',
-                'Telefono_Cobrador',
-                'Zona_Cobro',
-                'Call_Center_Apoyo',
-                'Nombre_Call_Center',
-                'Telefono_Call_Center',
-                'Regional_Cobro',
-                'Gestor',
-                'Telefono_Gestor',
-                'Jefe_ventas',
-                'Codigo_Vendedor',
-                'Nombre_Vendedor',
-                'Movil_Vendedor',
-                'Vendedor_Activo',
-                'Lider_Zona',
-                'Movil_Lider',
-                'Codigo_Centro_Costos',
-                'Regional_Venta',
-                'Codeudor1',
-                'Nombre_Codeudor1',
-                'Telefono_Codeudor1',
-                'Ciudad_Codeudor1',
-                'Codeudor2',
-                'Nombre_Codeudor2',
-                'Telefono_Codeudor2',
-                'Ciudad_Codeudor2',
-                'Valor_Desembolso',
-                'Total_Cuotas',
-                'Valor_Cuota',
-                'Dias_Atraso',
-                'Franja_Mora',
-                'Saldo_Capital',
-                'Saldo_Interes_Corriente',
-                'Saldo_Avales',
-                'Meta_Intereses',
-                'Meta_General',
-                'Meta_%',
-                'Meta_$',
-                'Meta_T.R_%',
-                'Meta_T.R_$',
-                'Cuotas_Pagadas',
-                'Cuota_Vigente',
-                'Fecha_Cuota_Vigente',
-                'Valor_Cuota_Vigente',
-                'Fecha_Cuota_Atraso',
-                'Primera_Cuota_Mora',
-                'Valor_Cuota_Atraso',      
-                'Valor_Vencido',
-                'Fecha_Ultima_Novedad',
-                'Cantidad_Novedades',
-                'Dias_Atraso_Final',
-                'Franja_Mora_Final',
-                'Rodamiento',
-                'Recaudo_Anticipado',
-                'Recaudo_Meta',
+                'Empresa', 'Credito', 'Fecha_Desembolso', 'Factura_Venta', 'Fecha_Facturada',
+                'Nombre_Producto', 'Cantidad_Producto', 'Obsequio', 'Cantidad_Obsequio',
+                'Cantidad_Total_Producto', 'Cedula_Cliente', 'Nombre_Cliente', 'Correo',
+                'Celular', 'Direccion', 'Barrio', 'Nombre_Ciudad', 'Zona', 'Cobrador',
+                'Telefono_Cobrador', 'Zona_Cobro', 'Call_Center_Apoyo', 'Nombre_Call_Center',
+                'Telefono_Call_Center', 'Regional_Cobro', 'Gestor', 'Telefono_Gestor',
+                'Jefe_ventas', 'Codigo_Vendedor', 'Nombre_Vendedor', 'Movil_Vendedor',
+                'Vendedor_Activo', 'Lider_Zona', 'Movil_Lider', 'Codigo_Centro_Costos',
+                'Regional_Venta', 'Codeudor1', 'Nombre_Codeudor1', 'Telefono_Codeudor1',
+                'Ciudad_Codeudor1', 'Codeudor2', 'Nombre_Codeudor2', 'Telefono_Codeudor2',
+                'Ciudad_Codeudor2', 'Valor_Desembolso', 'Total_Cuotas', 'Valor_Cuota',
+                'Dias_Atraso', 'Franja_Mora', 'Saldo_Capital', 'Saldo_Interes_Corriente',
+                'Saldo_Avales', 'Meta_Intereses', 'Meta_General', 'Meta_%', 'Meta_$',
+                'Meta_T.R_%', 'Meta_T.R_$', 'Cuotas_Pagadas', 'Cuota_Vigente',
+                'Fecha_Cuota_Vigente', 'Valor_Cuota_Vigente', 'Fecha_Cuota_Atraso',
+                'Primera_Cuota_Mora', 'Valor_Cuota_Atraso', 'Valor_Vencido',
+                'Fecha_Ultima_Novedad', 'Cantidad_Novedades', 'Dias_Atraso_Final',
+                'Franja_Mora_Final', 'Rodamiento', 'Recaudo_Anticipado', 'Recaudo_Meta',
                 'Total_Recaudo'
             ]
 
-            # 2. Define el orden para la hoja 'Detalle_Novedades'
-            #    ¡AJUSTA TAMBIÉN ESTA LISTA!
             orden_columnas_detalle = [
-                'Cedula_Cliente',
-                'Nombre_Cliente',
-                'Fecha_Novedad',
-                'Usuario_Novedad',
-                'Nombre_Usuario',
-                'Cargo_Usuario',
-                'Celular_Corporativo',
-                'Tipo_Novedad',
-                'Novedad',
-                'Fecha_Compromiso',
-                'Valor',
-                # --- Agrega aquí las demás columnas de df_novedades_detallado en el orden deseado ---
+                'Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad',
+                'Nombre_Usuario', 'Cargo_Usuario', 'Celular_Corporativo', 'Tipo_Novedad',
+                'Novedad', 'Fecha_Compromiso', 'Valor'
             ]
 
-           
             df_final = df_final[[col for col in orden_columnas_analisis if col in df_final.columns]]
             df_novedades_detallado = df_novedades_detallado[[col for col in orden_columnas_detalle if col in df_novedades_detallado.columns]]
             
@@ -272,46 +237,54 @@ class NovedadesAnalisisController:
             )
             if not ruta_salida: return
 
-            df_reporte_franjas_reset = df_reporte_franjas.reset_index(drop=True)
-
+            print("💾 Guardando datos en el archivo Excel...")
             with pd.ExcelWriter(ruta_salida, engine='openpyxl') as writer:
+                # Guardar hojas normales con index=False
                 df_final.to_excel(writer, sheet_name='Analisis_de_Cartera', index=False)
                 df_novedades_detallado.to_excel(writer, sheet_name='Detalle_Novedades', index=False)
-                df_reporte_franjas_reset.to_excel(writer, sheet_name='Reporte_Franjas', index=True)
-
-            print("🎨 Aplicando formato de celda avanzado al reporte de franjas...")
+                
+                # Guardar hoja con MultiIndex usando nuestro método personalizado
+                self._save_multiindex_without_index(writer, df_reporte_franjas, 'Reporte_Franjas')
             
-            # --- AQUI VIENE LA MAGIA DEL FORMATO ---
-            from openpyxl import load_workbook
-            from openpyxl.utils import get_column_letter
-            from openpyxl.styles import Alignment
+            print("✅ Datos guardados.")
 
-            wb = load_workbook(ruta_salida)
-            ws = wb["Reporte_Franjas"]
+            # Aplicar formato a la hoja Reporte_Franjas
+            try:
+                print("🎨 Aplicando formato de celda final...")
+                
+                workbook = load_workbook(ruta_salida)
+                worksheet = workbook['Reporte_Franjas']
+                
+                alineacion_centrada = Alignment(horizontal='center', vertical='center')
+                fuente_negrita = Font(bold=True)
 
-            # Columnas que quieres combinar en el encabezado
-            columnas_combinadas = ["ZONA", "REGIONAL", "Total_Recaudo", "Recaudo_Anticipo"]
+                # a. Aplicar estilo a TODOS los encabezados (filas 1 y 2)
+                for row in worksheet.iter_rows(min_row=1, max_row=2, max_col=worksheet.max_column):
+                    for cell in row:
+                        cell.alignment = alineacion_centrada
+                        cell.font = fuente_negrita
 
-            for col in range(1, ws.max_column + 1):
-                valor = ws.cell(row=1, column=col).value
-                if valor in columnas_combinadas:
-                    col_letra = get_column_letter(col)
-                    # Combina fila 1 y fila 2
-                    ws.merge_cells(f"{col_letra}1:{col_letra}2")
-                    # Centrar
-                    ws[f"{col_letra}1"].alignment = Alignment(horizontal="center", vertical="center")
+                # b. Realizar merges HORIZONTALES leyendo la fila 1
+                start_col_merge = -1
+                for col_idx in range(1, worksheet.max_column + 2):
+                    cell_value = worksheet.cell(row=1, column=col_idx).value
+                    if cell_value is not None:
+                        if start_col_merge != -1 and col_idx - start_col_merge > 1:
+                            worksheet.merge_cells(start_row=1, start_column=start_col_merge, end_row=1, end_column=col_idx - 1)
+                        start_col_merge = col_idx
+                
+                # c. Realizar merges VERTICALES leyendo la fila 2
+                for col_idx in range(1, worksheet.max_column + 1):
+                    if worksheet.cell(row=2, column=col_idx).value is None:
+                        worksheet.merge_cells(start_row=1, start_column=col_idx, end_row=2, end_column=col_idx)
 
-            # Centrar todo el encabezado
-            for row in ws.iter_rows(min_row=1, max_row=2, max_col=ws.max_column):
-                for cell in row:
-                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                workbook.save(ruta_salida)
+                
+                print("✅ Formato de celda aplicado exitosamente.")
+                messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
 
-            wb.save(ruta_salida)
-            
-            print("✅ Formato de celda aplicado exitosamente.")
-            # --- FIN: CÓDIGO DE FORMATO ---
-
-            messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
+            except Exception as e:
+                messagebox.showerror("Error de Formato", f"El reporte se guardó, pero ocurrió un error al aplicar el formato:\n{e}")
 
         except Exception as e:
-            messagebox.showerror("Error en el Proceso", f"Ocurrió un error:\n{e}")
+            messagebox.showerror("Error en el Proceso", f"Ocurrió un error general:\n{e}")

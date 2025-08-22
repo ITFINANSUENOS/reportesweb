@@ -74,11 +74,18 @@ class ReporteFranjasService:
                 df_franjas[(franja_reporte, 'Recaudo_Meta')] = df_pivot[recaudo_col]
         df_franjas = df_franjas.fillna(0)
 
-        # Paso 7: Calcular el Cumplimiento
+        # Paso 7: Calcular el Cumplimiento y formatear como porcentaje
         for franja in franjas_map.keys():
             meta = df_franjas[(franja, 'META_$')]
             recaudo = df_franjas[(franja, 'Recaudo_Meta')]
-            df_franjas[(franja, 'Cumplimiento_%')] = (recaudo / meta).where(meta != 0, 0)
+            
+            # Calcular el porcentaje (valor decimal)
+            porcentaje_decimal = (recaudo / meta).where(meta != 0, 0)
+            
+            # Formatear como string con el símbolo '%' y sin decimales
+            df_franjas[(franja, 'Cumplimiento_%')] = porcentaje_decimal.apply(
+                lambda x: f"{round(x * 100)}%" if pd.notnull(x) else "0%"
+            )
 
         # Paso 8: Asignar los Totales
         df_totales = df_filtrado.groupby(['Zona', 'Regional_Venta']).agg(

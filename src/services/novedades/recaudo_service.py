@@ -25,5 +25,7 @@ class RecaudoR91Service:
         columnas_finales = ['Credito', 'Recaudo_Anticipado', 'Recaudo_Meta', 'Total_Recaudo']
         df_resultado = df_r91[columnas_finales]
         
+        df_resultado = df_resultado.drop_duplicates(subset=['Credito'], keep='last')
+        
         print("✅ Cálculo de recaudos completado.")
         return df_resultado
