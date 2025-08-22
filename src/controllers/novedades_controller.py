@@ -4,6 +4,7 @@ from pathlib import Path
 from src.services.novedades.novedades_service import NovedadesService
 from src.services.novedades.analisis_service import AnalisisService
 from src.services.novedades.recaudo_service import RecaudoR91Service 
+from src.services.novedades.franjas_service import ReporteFranjasService
 from src.models.novedad_model import configuracion
 
 class NovedadesAnalisisController:
@@ -154,7 +155,6 @@ class NovedadesAnalisisController:
                 if col in df_final.columns:
                     df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
             
-            
             columnas_fecha_sin_hora = [
                 'Fecha_Desembolso', 'Fecha_Facturada',
                 'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso'
@@ -262,6 +262,9 @@ class NovedadesAnalisisController:
             df_final = df_final[[col for col in orden_columnas_analisis if col in df_final.columns]]
             df_novedades_detallado = df_novedades_detallado[[col for col in orden_columnas_detalle if col in df_novedades_detallado.columns]]
             
+            franjas_service = ReporteFranjasService()
+            df_reporte_franjas = franjas_service.generar_reporte(df_final)
+
             # 6. Guardar el reporte multi-hoja
             ruta_salida = filedialog.asksaveasfilename(
                 defaultextension=".xlsx", 
@@ -269,9 +272,44 @@ class NovedadesAnalisisController:
             )
             if not ruta_salida: return
 
+            df_reporte_franjas_reset = df_reporte_franjas.reset_index(drop=True)
+
             with pd.ExcelWriter(ruta_salida, engine='openpyxl') as writer:
                 df_final.to_excel(writer, sheet_name='Analisis_de_Cartera', index=False)
                 df_novedades_detallado.to_excel(writer, sheet_name='Detalle_Novedades', index=False)
+                df_reporte_franjas_reset.to_excel(writer, sheet_name='Reporte_Franjas', index=True)
+
+            print("🎨 Aplicando formato de celda avanzado al reporte de franjas...")
+            
+            # --- AQUI VIENE LA MAGIA DEL FORMATO ---
+            from openpyxl import load_workbook
+            from openpyxl.utils import get_column_letter
+            from openpyxl.styles import Alignment
+
+            wb = load_workbook(ruta_salida)
+            ws = wb["Reporte_Franjas"]
+
+            # Columnas que quieres combinar en el encabezado
+            columnas_combinadas = ["ZONA", "REGIONAL", "Total_Recaudo", "Recaudo_Anticipo"]
+
+            for col in range(1, ws.max_column + 1):
+                valor = ws.cell(row=1, column=col).value
+                if valor in columnas_combinadas:
+                    col_letra = get_column_letter(col)
+                    # Combina fila 1 y fila 2
+                    ws.merge_cells(f"{col_letra}1:{col_letra}2")
+                    # Centrar
+                    ws[f"{col_letra}1"].alignment = Alignment(horizontal="center", vertical="center")
+
+            # Centrar todo el encabezado
+            for row in ws.iter_rows(min_row=1, max_row=2, max_col=ws.max_column):
+                for cell in row:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            wb.save(ruta_salida)
+            
+            print("✅ Formato de celda aplicado exitosamente.")
+            # --- FIN: CÓDIGO DE FORMATO ---
 
             messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
 
