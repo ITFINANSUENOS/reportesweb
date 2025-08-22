@@ -1,4 +1,3 @@
-# En: src/services/recaudo_r91_service.py
 import pandas as pd
 
 class RecaudoR91Service:
