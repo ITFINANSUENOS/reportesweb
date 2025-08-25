@@ -98,34 +98,114 @@ class NovedadesAnalisisController:
         return pd.concat(df_list, ignore_index=True)
 
 
-    def _save_multiindex_without_index(self, writer, df, sheet_name):
+    # def _save_multiindex_without_index(self, writer, df, sheet_name):
+    #     """
+    #     Guarda un DataFrame con MultiIndex columns sin la columna de índice numérico
+    #     Versión modificada para manejar totales por zona
+    #     """
+    #     # Crear nueva hoja
+    #     workbook = writer.book
+    #     if sheet_name in workbook.sheetnames:
+    #         # Eliminar la hoja si ya existe
+    #         std = workbook[sheet_name]
+    #         workbook.remove(std)
+    #     worksheet = workbook.create_sheet(sheet_name)
+        
+    #     # Escribir encabezados MultiIndex
+    #     for col_idx, col_name in enumerate(df.columns, 1):
+    #         if isinstance(col_name, tuple):
+    #             # Escribir primer nivel
+    #             worksheet.cell(row=1, column=col_idx, value=col_name[0])
+    #             # Escribir segundo nivel
+    #             worksheet.cell(row=2, column=col_idx, value=col_name[1])
+    #         else:
+    #             # Para columnas simples, mergear verticalmente
+    #             worksheet.cell(row=1, column=col_idx, value=col_name)
+    #             worksheet.merge_cells(start_row=1, start_column=col_idx, end_row=2, end_column=col_idx)
+        
+    #     # Escribir datos (empezando desde fila 3)
+    #     for row_idx, row_data in enumerate(df.values, 3):
+    #         for col_idx, value in enumerate(row_data, 1):
+    #             worksheet.cell(row=row_idx, column=col_idx, value=value)
+        
+    #     # Aplicar formato numérico a las columnas de valores
+    #     for col_idx in range(3, 14):  # Columnas de valores (C a N)
+    #         for row_idx in range(3, worksheet.max_row + 1):
+    #             cell = worksheet.cell(row=row_idx, column=col_idx)
+    #             if isinstance(cell.value, (int, float)):
+    #                 cell.number_format = '#,##0'
+
+    def _escribir_y_formatear_franjas(self, writer, df, sheet_name):
         """
-        Guarda un DataFrame con MultiIndex columns sin la columna de índice numérico
+        Función definitiva que escribe y formatea la hoja de franjas manualmente
+        para evitar el bug de pandas/openpyxl.
         """
-        # Crear nueva hoja
+        print(f"✍️ Escribiendo y formateando la hoja '{sheet_name}' manualmente...")
+        
         workbook = writer.book
-        if sheet_name in workbook.sheetnames:
-            # Eliminar la hoja si ya existe
-            std = workbook[sheet_name]
-            workbook.remove(std)
         worksheet = workbook.create_sheet(sheet_name)
         
-        # Escribir encabezados MultiIndex
-        for col_idx, col_name in enumerate(df.columns, 1):
-            if isinstance(col_name, tuple):
-                # Escribir primer nivel
-                worksheet.cell(row=1, column=col_idx, value=col_name[0])
-                # Escribir segundo nivel
-                worksheet.cell(row=2, column=col_idx, value=col_name[1])
+        from openpyxl.styles import Alignment, Font
+        alineacion_centrada = Alignment(horizontal='center', vertical='center')
+        fuente_negrita = Font(bold=True)
+
+        # 1. Escribir y formatear los encabezados (filas 1 y 2)
+        header_groups = {}
+        for col_idx, col_tuple in enumerate(df.columns, 1):
+            top_header = col_tuple[0]
+            sub_header = col_tuple[1]
+            
+            # Escribir los valores en las celdas
+            cell1 = worksheet.cell(row=1, column=col_idx, value=top_header)
+            cell2 = worksheet.cell(row=2, column=col_idx, value=sub_header)
+            
+            # Aplicar estilo a ambas celdas del encabezado
+            cell1.font = fuente_negrita
+            cell1.alignment = alineacion_centrada
+            cell2.font = fuente_negrita
+            cell2.alignment = alineacion_centrada
+            
+            # Guardar el rango de cada encabezado superior para unirlo después
+            if top_header not in header_groups:
+                header_groups[top_header] = {'start': col_idx, 'end': col_idx}
             else:
-                # Para columnas simples, mergear verticalmente
-                worksheet.cell(row=1, column=col_idx, value=col_name)
-                worksheet.merge_cells(start_row=1, start_column=col_idx, end_row=2, end_column=col_idx)
+                header_groups[top_header]['end'] = col_idx
         
-        # Escribir datos (empezando desde fila 3)
-        for row_idx, row_data in enumerate(df.values, 3):
-            for col_idx, value in enumerate(row_data, 1):
-                worksheet.cell(row=row_idx, column=col_idx, value=value)
+        # 2. Aplicar merges a los encabezados
+        # Merges horizontales (para las franjas)
+        for group_info in header_groups.values():
+            if group_info['start'] < group_info['end']:
+                worksheet.merge_cells(start_row=1, end_row=1, start_column=group_info['start'], end_column=group_info['end'])
+        
+        # Merges verticales (para ZONA, REGIONAL, etc.)
+        for col_idx, col_tuple in enumerate(df.columns, 1):
+            if col_tuple[1] == '':
+                worksheet.merge_cells(start_row=1, end_row=2, start_column=col_idx, end_column=col_idx)
+
+        # 3. Escribir los datos, fila por fila (empezando en la fila 3)
+        for row_idx, data_row in enumerate(df.itertuples(index=False), 3):
+            for col_idx, value in enumerate(data_row, 1):
+                cell = worksheet.cell(row=row_idx, column=col_idx, value=value)
+                # Si el valor es un porcentaje en formato texto, se alinea al centro
+                if isinstance(value, str) and '%' in value:
+                    cell.alignment = alineacion_centrada
+        
+        # 4. Aplicar merges a las celdas de datos por Zona
+        cols_to_merge = [1, 15, 16] # ZONA, Total_Recaudo, Recaudo_Anticipo
+        start_row = 3
+        
+        if worksheet.max_row >= start_row:
+            current_zone_value = worksheet.cell(row=start_row, column=1).value
+            for row_idx in range(start_row + 1, worksheet.max_row + 2):
+                next_zone_value = worksheet.cell(row=row_idx, column=1).value
+                if next_zone_value != current_zone_value:
+                    end_row = row_idx - 1
+                    if start_row < end_row:
+                        for col in cols_to_merge:
+                            worksheet.merge_cells(start_row=start_row, end_row=end_row, start_column=col, end_column=col)
+                            worksheet.cell(row=start_row, column=col).alignment = alineacion_centrada
+                    start_row = row_idx
+                    current_zone_value = next_zone_value
 
     def procesar_archivos(self, rutas_novedades, ruta_base, rutas_analisis, rutas_r91, ruta_usuarios):
         """
@@ -232,59 +312,22 @@ class NovedadesAnalisisController:
 
             # 6. Guardar el reporte multi-hoja
             ruta_salida = filedialog.asksaveasfilename(
-                defaultextension=".xlsx", 
-                initialfile="Reporte_Novedades_y_Analisis.xlsx"
+            defaultextension=".xlsx", 
+            initialfile="Reporte_Final_Analisis.xlsx"
             )
             if not ruta_salida: return
 
             print("💾 Guardando datos en el archivo Excel...")
             with pd.ExcelWriter(ruta_salida, engine='openpyxl') as writer:
-                # Guardar hojas normales con index=False
+                # Guardamos las hojas simples de forma normal
                 df_final.to_excel(writer, sheet_name='Analisis_de_Cartera', index=False)
                 df_novedades_detallado.to_excel(writer, sheet_name='Detalle_Novedades', index=False)
                 
-                # Guardar hoja con MultiIndex usando nuestro método personalizado
-                self._save_multiindex_without_index(writer, df_reporte_franjas, 'Reporte_Franjas')
+                # Usamos nuestra nueva función manual para la hoja compleja
+                self._escribir_y_formatear_franjas(writer, df_reporte_franjas, 'Reporte_Franjas')
             
-            print("✅ Datos guardados.")
-
-            # Aplicar formato a la hoja Reporte_Franjas
-            try:
-                print("🎨 Aplicando formato de celda final...")
-                
-                workbook = load_workbook(ruta_salida)
-                worksheet = workbook['Reporte_Franjas']
-                
-                alineacion_centrada = Alignment(horizontal='center', vertical='center')
-                fuente_negrita = Font(bold=True)
-
-                # a. Aplicar estilo a TODOS los encabezados (filas 1 y 2)
-                for row in worksheet.iter_rows(min_row=1, max_row=2, max_col=worksheet.max_column):
-                    for cell in row:
-                        cell.alignment = alineacion_centrada
-                        cell.font = fuente_negrita
-
-                # b. Realizar merges HORIZONTALES leyendo la fila 1
-                start_col_merge = -1
-                for col_idx in range(1, worksheet.max_column + 2):
-                    cell_value = worksheet.cell(row=1, column=col_idx).value
-                    if cell_value is not None:
-                        if start_col_merge != -1 and col_idx - start_col_merge > 1:
-                            worksheet.merge_cells(start_row=1, start_column=start_col_merge, end_row=1, end_column=col_idx - 1)
-                        start_col_merge = col_idx
-                
-                # c. Realizar merges VERTICALES leyendo la fila 2
-                for col_idx in range(1, worksheet.max_column + 1):
-                    if worksheet.cell(row=2, column=col_idx).value is None:
-                        worksheet.merge_cells(start_row=1, start_column=col_idx, end_row=2, end_column=col_idx)
-
-                workbook.save(ruta_salida)
-                
-                print("✅ Formato de celda aplicado exitosamente.")
-                messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
-
-            except Exception as e:
-                messagebox.showerror("Error de Formato", f"El reporte se guardó, pero ocurrió un error al aplicar el formato:\n{e}")
+            print("✅ Reporte final con formato guardado exitosamente.")
+            messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
 
         except Exception as e:
             messagebox.showerror("Error en el Proceso", f"Ocurrió un error general:\n{e}")
