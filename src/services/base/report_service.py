@@ -22,8 +22,6 @@ class ReportService:
         """
         Orquesta todo el proceso de ETL con la arquitectura correcta y de mejor rendimiento.
         """
-        # 1. Cargar todos los dataframes
-        dataframes_por_tipo = self.data_loader.load_dataframes(file_paths)
         
         if dataframes_preloaded:
             print("\n⚙️  Usando dataframes precargados desde el modo de actualización...")
@@ -46,7 +44,7 @@ class ReportService:
         metas_franjas_df = self.data_loader.safe_concat(dataframes_por_tipo.get("METAS_FRANJAS", []))
         asesores_sheets = dataframes_por_tipo.get("ASESORES", [])
         
-        if r91_df.empty: return None
+        if r91_df.empty: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
         reporte_final = r91_df.copy()
         print(f"📄 Reporte base creado con {len(reporte_final)} registros de R91 (sin eliminar duplicados).")

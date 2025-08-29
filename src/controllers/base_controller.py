@@ -90,6 +90,8 @@ class BaseMensualController:
             reporte_negativos = pd.DataFrame()
             reporte_correcciones = pd.DataFrame()
             
+            service_principal = ReportService(config=configuracion)
+            
             if modo_actualizacion:
                 # --- MODO ACTUALIZACIÓN RÁPIDA (DESDE EXCEL) ---
                 self.view.actualizar_estado("Iniciando sincronización rápida...", 10)
@@ -106,7 +108,6 @@ class BaseMensualController:
                     messagebox.showerror("Error al leer Excel", f"No se pudo leer el archivo Excel base: {e}")
                     return
 
-                service_principal = ReportService(config=configuracion)
                 dataframes_nuevos = service_principal.data_loader.load_dataframes(lista_final_rutas)
                 
                 update_service = UpdateBaseService(report_service=service_principal)
