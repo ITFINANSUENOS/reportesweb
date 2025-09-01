@@ -97,44 +97,6 @@ class NovedadesAnalisisController:
         
         return pd.concat(df_list, ignore_index=True)
 
-
-    # def _save_multiindex_without_index(self, writer, df, sheet_name):
-    #     """
-    #     Guarda un DataFrame con MultiIndex columns sin la columna de índice numérico
-    #     Versión modificada para manejar totales por zona
-    #     """
-    #     # Crear nueva hoja
-    #     workbook = writer.book
-    #     if sheet_name in workbook.sheetnames:
-    #         # Eliminar la hoja si ya existe
-    #         std = workbook[sheet_name]
-    #         workbook.remove(std)
-    #     worksheet = workbook.create_sheet(sheet_name)
-        
-    #     # Escribir encabezados MultiIndex
-    #     for col_idx, col_name in enumerate(df.columns, 1):
-    #         if isinstance(col_name, tuple):
-    #             # Escribir primer nivel
-    #             worksheet.cell(row=1, column=col_idx, value=col_name[0])
-    #             # Escribir segundo nivel
-    #             worksheet.cell(row=2, column=col_idx, value=col_name[1])
-    #         else:
-    #             # Para columnas simples, mergear verticalmente
-    #             worksheet.cell(row=1, column=col_idx, value=col_name)
-    #             worksheet.merge_cells(start_row=1, start_column=col_idx, end_row=2, end_column=col_idx)
-        
-    #     # Escribir datos (empezando desde fila 3)
-    #     for row_idx, row_data in enumerate(df.values, 3):
-    #         for col_idx, value in enumerate(row_data, 1):
-    #             worksheet.cell(row=row_idx, column=col_idx, value=value)
-        
-    #     # Aplicar formato numérico a las columnas de valores
-    #     for col_idx in range(3, 14):  # Columnas de valores (C a N)
-    #         for row_idx in range(3, worksheet.max_row + 1):
-    #             cell = worksheet.cell(row=row_idx, column=col_idx)
-    #             if isinstance(cell.value, (int, float)):
-    #                 cell.number_format = '#,##0'
-
     def _escribir_y_formatear_franjas(self, writer, df, sheet_name):
         """
         Función definitiva que escribe y formatea la hoja de franjas manualmente
