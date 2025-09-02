@@ -125,33 +125,43 @@ class ReporteFranjasService:
                 
         df_franjas = df_franjas.fillna(0)
 
-        # --- Paso 8: Calcular el Cumplimiento y formatear como porcentaje ---
         for franja in franjas_map.keys():
             meta = df_franjas[(franja, 'META_$')]
             recaudo = df_franjas[(franja, 'Recaudo_Meta')]
-            
-            # Calcular el porcentaje (valor decimal)
             porcentaje_decimal = np.where(meta != 0, recaudo / meta, 0)
-            
-            # Formatear como string con el símbolo '%' y sin decimales
             df_franjas[(franja, 'Cumplimiento_%')] = [
                 f"{round(x * 100)}%" if pd.notnull(x) else "0%" for x in porcentaje_decimal
             ]
 
-        # --- Paso 9: Asignar los Totales por Zona ---
+        # --- PASO 8: CALCULAR TOTALES POR ZONA (VERSIÓN CORREGIDA) ---
+        print("📊 Calculando totales por Zona con la lógica correcta...")
+        
+        # IMPORTANTE: Usamos df_filtrado para que los totales coincidan con los datos de las franjas.
+        # Agrupamos por ZONA y sumamos 'Recaudo_Meta' y 'Recaudo_Anticipado'.
+        df_totales_zona = df_filtrado.groupby('Zona').agg(
+            Suma_Recaudo_Meta=('Recaudo_Meta', 'sum'),
+            Suma_Recaudo_Anticipado=('Recaudo_Anticipado', 'sum')
+        ).reset_index()
+
+        # --- PASO 9: ASIGNAR LOS TOTALES CORRECTOS (VERSIÓN CORREGIDA) ---
         if not df_franjas.empty and not df_totales_zona.empty:
-            # Crear un diccionario de mapeo para los totales
-            total_recaudo_map = df_totales_zona.set_index('Zona')['Meta_T.R_$'].to_dict()
-            meta_tr_map = df_totales_zona.set_index('Zona')['Total_Recaudo'].to_dict()
+            # Mapeo para la suma de 'Recaudo_Meta'
+            total_recaudo_map = df_totales_zona.set_index('Zona')['Suma_Recaudo_Meta'].to_dict()
             
-            # Mapear los valores
+            # Mapeo para la suma de 'Recaudo_Anticipado'
+            recaudo_anticipo_map = df_totales_zona.set_index('Zona')['Suma_Recaudo_Anticipado'].to_dict()
+            
+            # Asignar los valores correctos a las columnas del reporte
             df_franjas[('Total_Recaudo', '')] = df_franjas[('ZONA', '')].map(total_recaudo_map).fillna(0)
-            df_franjas[('Recaudo_Anticipo', '')] = df_franjas[('ZONA', '')].map(meta_tr_map).fillna(0)
+            df_franjas[('Recaudo_Anticipo', '')] = df_franjas[('ZONA', '')].map(recaudo_anticipo_map).fillna(0)
         else:
             df_franjas[('Total_Recaudo', '')] = 0
             df_franjas[('Recaudo_Anticipo', '')] = 0
         
         df_franjas = df_franjas.fillna(0)
+        
+        # Ordenar por Zona para facilitar el formato en Excel
+        df_franjas = df_franjas.sort_values(by=[('ZONA', ''), ('REGIONAL', '')]).reset_index(drop=True)
 
         print("✅ Reporte de franjas generado.")
         return df_franjas
