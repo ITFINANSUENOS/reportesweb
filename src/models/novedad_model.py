@@ -41,12 +41,11 @@ configuracion = {
                        "Número corporativo": "Celular_Corporativo"
                         }
     },
+    #Tipos de datos para reporte base
     "BASE_MENSUAL": {
         "dtype_map": {
-            # --- Aquí defines los tipos de tu archivo base ---
-            # AJUSTA ESTOS NOMBRES Y TIPOS A TU ARCHIVO REAL
-            'Cedula_Cliente': str,          # Como texto para conservar ceros
-            'Numero_Credito': str,          # También como texto
+            'Cedula_Cliente': str,
+            'Numero_Credito': str,
             'Primera_Cuota_Mora':str,
             'Fecha_Desembolso': str,
             'Fecha_Facturada':str,
