@@ -62,7 +62,6 @@ class ReportProcessorService:
         """
         print("🎯 Calculando métricas de metas...")
 
-        # ... (El inicio de la función no cambia) ...
         for col in ['Meta_DC_Al_Dia', 'Meta_DC_Atraso', 'Meta_Atraso']:
             if col in reporte_df.columns:
                 reporte_df[col] = pd.to_numeric(reporte_df[col], errors='coerce').fillna(0)
@@ -164,9 +163,10 @@ class ReportProcessorService:
             reporte_df['Dias_Atraso'].between(1, 30),
             reporte_df['Dias_Atraso'].between(31, 90),
             reporte_df['Dias_Atraso'].between(91, 180),
-            reporte_df['Dias_Atraso'] > 180
+            reporte_df['Dias_Atraso'].between(181, 360),
+            reporte_df['Dias_Atraso'] > 360
         ]
-        valores_mora = ['AL DIA', '1 A 30', '31 A 90', '91 A 180','181 A 360']
+        valores_mora = ['AL DIA', '1 A 30', '31 A 90', '91 A 180','181 A 360','MAS DE 360']
         reporte_df['Franja_Mora'] = np.select(condiciones_mora, valores_mora, default='SIN INFO')
         
         mapa_franjas = {

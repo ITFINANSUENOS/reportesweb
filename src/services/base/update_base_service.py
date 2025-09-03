@@ -13,109 +13,111 @@ class UpdateBaseService:
 
     def _unir_y_actualizar_columnas(self, df_principal, df_actualizacion, llave, columnas_a_actualizar):
         """
-        Une dos DataFrames por una llave y actualiza de forma inteligente las columnas en común.
+        Une dos DataFrames por una llave y actualiza de forma robusta,
+        eliminando primero las columnas viejas para evitar conflictos.
         """
         if llave not in df_principal.columns or llave not in df_actualizacion.columns:
-            print(f"   - ⚠️ Advertencia: La llave '{llave}' no se encontró en ambos DataFrames. Se omite esta actualización.")
+            print(f"   - ⚠️ Advertencia: La llave '{llave}' no se encontró. Se omite la actualización.")
             return df_principal
 
-        # --- Limpieza de llaves (la que ya tenías y funciona bien) ---
+        # --- Limpieza de llaves (sin cambios) ---
         df_actualizacion_limpio = df_actualizacion.drop_duplicates(subset=[llave]).copy()
         df_principal[llave] = df_principal[llave].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
         df_actualizacion_limpio[llave] = df_actualizacion_limpio[llave].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
         df_principal = df_principal[df_principal[llave].notna() & (df_principal[llave] != '')]
         df_actualizacion_limpio = df_actualizacion_limpio[df_actualizacion_limpio[llave].notna() & (df_actualizacion_limpio[llave] != '')]
 
-         # --- LÓGICA DE UNIÓN Y ACTUALIZACIÓN DEFINITIVA ---
-    
-        # 1. Identificar columnas a actualizar
+        # --- LÓGICA DE UNIÓN SIMPLIFICADA Y CORREGIDA ---
+        
+        # 1. Determinar las columnas a reemplazar del archivo de actualización
         if columnas_a_actualizar == '__ALL__':
-            cols_para_actualizar = df_actualizacion_limpio.columns.drop(llave).tolist()
+            columnas_a_reemplazar = df_actualizacion_limpio.columns.drop(llave).tolist() # Convertimos a lista aquí
         else:
-            cols_para_actualizar = [col for col in columnas_a_actualizar if col in df_actualizacion_limpio.columns]
+            columnas_a_reemplazar = [col for col in columnas_a_actualizar if col in df_actualizacion_limpio.columns and col != llave]
 
-        # 2. Identificar columnas que existen en ambos DataFrames (potenciales duplicados)
-        columnas_en_comun = df_principal.columns.intersection(df_actualizacion_limpio.columns).drop(llave).tolist()
-
-        # 3. Hacer el merge. Se crearán columnas con sufijo '_nuevo' para las que estén en común.
-        #    Las columnas que solo existen en df_actualizacion_limpio se añadirán directamente.
-        df_fusionado = pd.merge(df_principal, df_actualizacion_limpio, on=llave, how='left', suffixes=('', '_nuevo'))
-
-        # 4. Consolidar columnas. Para cada columna que se deba actualizar y que estaba en común:
-        for col in cols_para_actualizar:
-            if col in columnas_en_comun:
-                col_nuevo = col + '_nuevo'
-                # Usamos el valor nuevo si no es nulo; si es nulo, conservamos el valor original.
-                df_fusionado[col] = df_fusionado[col_nuevo].fillna(df_fusionado[col])
-                # Eliminamos la columna temporal con el sufijo.
-                df_fusionado.drop(columns=[col_nuevo], inplace=True)
-                
-        return df_fusionado
+        # 2. Eliminar esas columnas del DataFrame principal para hacer espacio limpio
+        df_principal_limpio = df_principal.drop(columns=columnas_a_reemplazar, errors='ignore')
+        
+        # 3. Construir la lista final de columnas del dataframe de actualización
+        #    Esta es la forma más segura de construir la lista para el merge.
+        columnas_para_unir = [llave] + columnas_a_reemplazar
+        
+        # 4. Hacer un merge simple. 
+        df_actualizado = pd.merge(
+            df_principal_limpio,
+            df_actualizacion_limpio[columnas_para_unir],
+            on=llave,
+            how='left'
+        )
+        
+        return df_actualizado
 
     def _actualizar_datos_existentes(self, df_base, dataframes_nuevos):
-        print("\n🔄 Actualizando información de créditos existentes...")
-        print(f"--- [DEBUG] Iniciando _actualizar_datos_existentes con {len(df_base)} filas.") # PUNTO DE CONTROL
+        """
+        Aplica la secuencia COMPLETA de enriquecimiento, replicando el flujo de 'generate_consolidated_report'
+        para garantizar la consistencia total de los datos.
+        """
+        print("\n🔄 Sincronizando datos con el flujo de creación de reporte...")
 
-        # --- Limpieza Preventiva ---
-        print("   - 🛡️  Limpiando preventivamente columnas numéricas que contienen texto...")
-        columnas_a_limpiar = ['Saldo_Avales', 'Saldo_Interes_Corriente', 'Saldo_Capital', 'Saldo_Factura']
-        for col in columnas_a_limpiar:
-            if col in df_base.columns:
-                df_base[col] = pd.to_numeric(df_base[col], errors='coerce').fillna(0)
-        
-        config_actualizaciones = { 
-                    "ANALISIS":{
-                        "llave": "Credito", "columnas": ['Dias_Atraso', 'Cuotas_Pagadas', 'Saldo_Factura']},
-                    "R03": {
-                        "llave": "Cedula_Cliente", "columnas": '__ALL__'},
-                    "MATRIZ_CARTERA": {
-                        "llave": "Zona", "columnas": '__ALL__'},
-                    "METAS_FRANJAS": {
-                        "llave": "Zona", "columnas": '__ALL__'},
-                    "VENCIMIENTOS": {
-                        "llave": "Credito", "columnas": '__ALL__'},
-                    "ASESORES": {"sheets": [{"sheet_name": "ASESORES", "llave": "Codigo_Vendedor", "columnas": ['Nombre_Vendedor', 'Estado_Vendedor']}, {"sheet_name": "Centro Costos", "llave": "Codigo_Centro_Costos", "columnas": ['Nombre_Centro_Costos']}]},
-                    # ---- AÑADIDOS AL BUCLE PRINCIPAL ----
-                    "CRTMPCONSULTA1": {"llave": "Credito", "columnas": '__ALL__'},
-                    "FNZ001": {"llave": "Credito", "columnas": '__ALL__'},
-                    "SC04": {"llave": "Factura_Venta", "columnas": '__ALL__'}
-                    }
-
-        # --- PASO 1: Actualizar con datos de archivos nuevos (tu lógica actual) ---
-        for tipo_archivo, config in config_actualizaciones.items():
-            # ... (este bucle for se mantiene exactamente como lo tienes, no hay que cambiarlo) ...
-            archivos_nuevos = dataframes_nuevos.get(tipo_archivo, [])
-            if not archivos_nuevos: continue
-            print(f"   - Aplicando actualizaciones desde '{tipo_archivo}'...")
-            if "sheets" in config:
-                for sheet_config in config["sheets"]:
-                    df_hoja = next((item['data'] for item in archivos_nuevos if item.get('sheet_name') == sheet_config['sheet_name']), pd.DataFrame())
-                    if not df_hoja.empty:
-                        df_base = self._unir_y_actualizar_columnas(df_base, df_hoja, sheet_config['llave'], sheet_config['columnas'])
-            else:
-                df_nuevo_datos = self.data_loader.safe_concat(archivos_nuevos)
-                if tipo_archivo == 'R03' and 'CEDULA' in df_nuevo_datos.columns:
-                    df_nuevo_datos.rename(columns={'CEDULA': 'Cedula_Cliente'}, inplace=True)
-                if not df_nuevo_datos.empty:
-                    if config['llave'] == 'Credito' and 'Credito' not in df_nuevo_datos.columns:
-                        df_nuevo_datos = self.data_loader.create_credit_key(df_nuevo_datos)
-                    df_base = self._unir_y_actualizar_columnas(df_base, df_nuevo_datos, config['llave'], config['columnas'])
-
-
-        # --- PASO 2: Aplicar la SECUENCIA COMPLETA de transformaciones (LA PARTE QUE FALTABA) ---
-        print("\n🚀 Aplicando secuencia completa de transformaciones y enriquecimientos...")
-
-        # Cargar los dataframes necesarios para las transformaciones
+        # --- PASO 1: Cargar todos los dataframes de datos nuevos ---
+        print("   - Cargando todos los archivos de datos para la actualización...")
+        analisis_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("ANALISIS", [])))
+        vencimientos_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("VENCIMIENTOS", [])))
         crtmp_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("CRTMPCONSULTA1", [])))
         sc04_df = self.data_loader.safe_concat(dataframes_nuevos.get("SC04", []))
         fnz001_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("FNZ001", [])))
         fnz003_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("FNZ003", [])))
         metas_franjas_df = self.data_loader.safe_concat(dataframes_nuevos.get("METAS_FRANJAS", []))
+        r03_df = self.data_loader.safe_concat(dataframes_nuevos.get("R03", []))
+        matriz_cartera_df = self.data_loader.safe_concat(dataframes_nuevos.get("MATRIZ_CARTERA", []))
+        asesores_sheets = dataframes_nuevos.get("ASESORES", [])
+
+        # --- PASO 2: Procesar y unir datos en el orden correcto ---
+        print("\n🔍 Uniendo y actualizando datos en secuencia...")
+
+        # Vencimientos
+        processed_vencimientos, negativos_vencimientos = self.report_service.credit_details.process_vencimientos_data(vencimientos_df)
+        if not processed_vencimientos.empty:
+            df_base = df_base.drop(columns=processed_vencimientos.columns.drop('Credito'), errors='ignore')
+            df_base = pd.merge(df_base, processed_vencimientos, on='Credito', how='left')
         
-        # Ejecutar cada paso en el orden correcto
+        # Analisis
+        if not analisis_df.empty:
+            df_base = df_base.drop(columns=analisis_df.columns.drop('Credito'), errors='ignore')
+            df_base = pd.merge(df_base, analisis_df.drop_duplicates('Credito'), on='Credito', how='left')
+
+        # R03 (Codeudores)
+        if not r03_df.empty:
+            if 'CEDULA' in r03_df.columns: r03_df.rename(columns={'CEDULA': 'Cedula_Cliente'}, inplace=True)
+            old_cols = r03_df.columns.drop('Cedula_Cliente')
+            df_base = df_base.drop(columns=old_cols, errors='ignore')
+            df_base = pd.merge(df_base, r03_df.drop_duplicates('Cedula_Cliente'), on='Cedula_Cliente', how='left')
+
+        # Matriz Cartera
+        if not matriz_cartera_df.empty:
+            old_cols = matriz_cartera_df.columns.drop('Zona')
+            df_base = df_base.drop(columns=old_cols, errors='ignore')
+            df_base = pd.merge(df_base, matriz_cartera_df.drop_duplicates('Zona'), on='Zona', how='left')
+
+        # Asesores (y demás uniones que necesites replicar)
+        if asesores_sheets:
+            for item in asesores_sheets:
+                info_df = item["data"]
+                merge_key = item["config"]["merge_on"]
+                if not info_df.empty and merge_key in df_base.columns:
+                    old_cols = info_df.columns.drop(merge_key)
+                    df_base = df_base.drop(columns=old_cols, errors='ignore')
+                    df_base = pd.merge(df_base, info_df.drop_duplicates(subset=merge_key), on=merge_key, how='left')
+
+        # --- PASO 3: Aplicar la secuencia de transformaciones ---
+        print("\n🚀 Aplicando secuencia completa de transformaciones y enriquecimientos...")
         df_base['Empresa'] = np.where(df_base['Tipo_Credito'] == 'DF', 'FINANSUEÑOS', 'ARPESOD')
         df_base = self.report_service.products_sales.assign_sales_invoice(df_base, crtmp_df)
+        
+        # Esta es la línea que fallaba. Ahora funcionará porque el merge de CRTMPCONSULTA1
+        # no se hace aquí, sino que la función usa el crtmp_df que ya cargamos.
         df_base = self.report_service.products_sales.add_product_details(df_base, crtmp_df)
+        
         df_base = self.report_service.credit_details.enrich_credit_details(df_base, sc04_df, fnz001_df)
         df_base = self.report_service.credit_details.clean_installment_data(df_base)
         df_base = self.report_service.report_processor.map_call_center_data(df_base)
@@ -123,7 +125,13 @@ class UpdateBaseService:
         df_base = self.report_service.report_processor.calculate_goal_metrics(df_base, metas_franjas_df)
         df_base = self.report_service.credit_details.adjust_arrears_status(df_base)
         
-        return df_base, negativos_fnz003
+        # Combinar todos los dataframes de negativos que se generaron
+        negativos_finales = pd.DataFrame()
+        lista_negativos = [df for df in [negativos_vencimientos, negativos_fnz003] if not df.empty]
+        if lista_negativos:
+            negativos_finales = pd.concat(lista_negativos, ignore_index=True)
+            
+        return df_base, negativos_finales
     
     def sincronizar_reporte(self, df_base_anterior, dataframes_nuevos):
         print("🚀 Iniciando modo de actualización directa y simplificada...")
