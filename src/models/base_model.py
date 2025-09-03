@@ -3,7 +3,7 @@ configuracion = {
     "ANALISIS": {
         "engine": "xlrd",
         "usecols": ["direccion", "barrio", "nomciudad",
-                     "diasatras", "cuotaspag","cedula","saldofac","tipo","numero","fechafac"],
+                     "diasatras", "cuotaspag","cedula","saldofac","tipo","numero","fechadoc"],
         "rename_map": { "direccion": "Direccion",
                         "barrio": "Barrio",
                         "nomciudad": "Nombre_Ciudad",
@@ -13,7 +13,7 @@ configuracion = {
                         "tipo":"Tipo_Credito", 
                         "numero":"Numero_Credito",
                         "saldofac":"Saldo_Factura" ,
-                        "fechafac":"Fecha_Desembolso"
+                        "fechadoc":"Fecha_Desembolso"
                         }
     },
     "R91": {

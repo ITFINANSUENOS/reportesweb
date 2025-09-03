@@ -24,13 +24,14 @@ class AnalisisService:
             df_actualizado['Dias_Atraso_Final'].between(1, 30),
             df_actualizado['Dias_Atraso_Final'].between(31, 90),
             df_actualizado['Dias_Atraso_Final'].between(91, 180),
-            df_actualizado['Dias_Atraso_Final'] > 180
+            df_actualizado['Dias_Atraso_Final'].between(181, 360),
+            df_actualizado['Dias_Atraso_Final'] > 360
         ]
-        valores = ['AL DIA', '1 A 30', '31 A 90', '91 A 180', '181 A 360']
+        valores = ['AL DIA', '1 A 30', '31 A 90', '91 A 180', '181 A 360', 'MAS DE 360']
         df_actualizado['Franja_Mora_Final'] = np.select(condiciones, valores, default=None)
 
         # 4. Calcular el 'Rodamiento' (el resto de la lógica no cambia)
-        franja_map = {'AL DIA': 0, '1 A 30': 1, '31 A 90': 2, '91 A 180': 3, '181 A 360': 4}
+        franja_map = {'AL DIA': 0, '1 A 30': 1, '31 A 90': 2, '91 A 180': 3, '181 A 360': 4, 'MAS DE 360': 5}
         df_actualizado['Franja_Mora_Num'] = df_actualizado['Franja_Mora'].map(franja_map)
         df_actualizado['Franja_Mora_Final_Num'] = df_actualizado['Franja_Mora_Final'].map(franja_map)
 
