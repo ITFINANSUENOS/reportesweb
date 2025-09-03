@@ -23,7 +23,7 @@ class ReporteFranjasService:
                 df_analisis_cartera[col] = pd.to_numeric(df_analisis_cartera[col], errors='coerce').fillna(0)
 
         # Segundo, limpiar las columnas de texto que usaremos para agrupar
-        columnas_texto = ['Zona', 'Regional_Venta', 'Franja_Mora']
+        columnas_texto = ['Zona', 'Regional_Cobro', 'Franja_Mora']
         for col in columnas_texto:
             if col in df_analisis_cartera.columns:
                 df_analisis_cartera[col] = df_analisis_cartera[col].astype(str).str.strip().str.lower()
@@ -57,7 +57,7 @@ class ReporteFranjasService:
         if 'Recaudo_Meta' not in df_filtrado.columns:
             df_filtrado['Recaudo_Meta'] = 0
             
-        df_agrupado = df_filtrado.groupby(['Zona', 'Regional_Venta', 'Franja_Mora']).agg({
+        df_agrupado = df_filtrado.groupby(['Zona', 'Regional_Cobro', 'Franja_Mora']).agg({
             'Meta_$': 'sum',
             'Recaudo_Meta': 'sum'
         }).reset_index()
@@ -66,7 +66,7 @@ class ReporteFranjasService:
         print("🔄 Pivotando tabla...")
         try:
             df_pivot = df_agrupado.pivot_table(
-                index=['Zona', 'Regional_Venta'], 
+                index=['Zona', 'Regional_Cobro'], 
                 columns='Franja_Mora',
                 values=['Meta_$', 'Recaudo_Meta'],
                 aggfunc='sum',
@@ -79,7 +79,7 @@ class ReporteFranjasService:
         except Exception as e:
             print(f"❌ Error al pivotar: {e}")
             # Crear un DataFrame vacío con la estructura esperada
-            df_pivot = pd.DataFrame(columns=['Zona', 'Regional_Venta'])
+            df_pivot = pd.DataFrame(columns=['Zona', 'Regional_Cobro'])
             for franja in franjas_validas:
                 df_pivot[f'Meta_$_{franja}'] = 0
                 df_pivot[f'Recaudo_Meta_{franja}'] = 0
@@ -100,8 +100,7 @@ class ReporteFranjasService:
         # --- Paso 7: Llenar el DataFrame ---
         if not df_pivot.empty and 'Zona' in df_pivot.columns:
             df_franjas[('ZONA', '')] = df_pivot['Zona']
-            df_franjas[('REGIONAL', '')] = df_pivot['Regional_Venta']
-        
+            df_franjas[('REGIONAL', '')] = df_pivot['Regional_Cobro']  
         franjas_map = {
             '1 A 30': '1 a 30', 
             '31 A 90': '31 a 90',
