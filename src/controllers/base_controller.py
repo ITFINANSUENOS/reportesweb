@@ -51,7 +51,6 @@ class BaseMensualController:
             
             print(f"Archivos para {tipo_archivo}: {self.rutas_archivos[tipo_archivo]}")
 
-    # <<< FUNCIÓN NUEVA (NECESARIA PARA EL BOTÓN DE LA VISTA) >>>
     def seleccionar_reporte_base(self):
         """Abre un diálogo para seleccionar el archivo Excel del reporte anterior."""
         filetypes = [("Excel files", "*.xlsx *.xls")]
@@ -99,22 +98,28 @@ class BaseMensualController:
                 if not self.ruta_reporte_base:
                     messagebox.showerror("Error", "Para el modo actualización, primero debe seleccionar el reporte de Excel anterior.")
                     return
-
+                
+                print('Cargando base anterior desde excel...')
                 self.view.actualizar_estado(f"Cargando base anterior desde Excel...", 20)
                 try:
-                    # dtype=str es crucial para evitar que Excel altere cédulas y créditos
                     df_base_anterior = pd.read_excel(self.ruta_reporte_base, dtype=str)
                 except Exception as e:
                     messagebox.showerror("Error al leer Excel", f"No se pudo leer el archivo Excel base: {e}")
                     return
-
-                dataframes_nuevos = service_principal.data_loader.load_dataframes(lista_final_rutas)
+            
+                # 1. USAMOS DATALOADER para cargar y estandarizar los nuevos archivos.
+                self.view.actualizar_estado("Estandarizando archivos nuevos...", 30)
+                dataframes_nuevos_estandarizados = service_principal.data_loader.load_dataframes(lista_final_rutas)
                 
-                update_service = UpdateBaseService(report_service=service_principal)
+                # 2. Creamos la instancia del UpdateService.
+                update_service = UpdateBaseService(report_service=service_principal,)
                 
+                # 3. Le pasamos los datos YA LIMPIOS al servicio de actualización.
                 self.view.actualizar_estado("Sincronizando cambios...", 60)
-                # El servicio de actualización ahora devuelve los 3 reportes
-                reporte_final, reporte_negativos, reporte_correcciones = update_service.sincronizar_reporte(df_base_anterior, dataframes_nuevos)
+                reporte_final, reporte_negativos, reporte_correcciones = update_service.sincronizar_reporte(
+                    df_base_anterior, 
+                    dataframes_nuevos_estandarizados # Usamos la variable con los datos estandarizados
+                )
 
             else:
                 # --- MODO CONSTRUCCIÓN COMPLETA (como antes) ---
