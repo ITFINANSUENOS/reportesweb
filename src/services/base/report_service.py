@@ -18,7 +18,7 @@ class ReportService:
         self.products_sales = ProductsSalesService()
         self.report_processor = ReportProcessorService(config)
 
-    def generate_consolidated_report(self, file_paths, orden_columnas, start_date=None, end_date=None,dataframes_preloaded=None):
+    def generate_consolidated_report(self, file_paths, orden_columnas, start_date=None, end_date=None, dataframes_preloaded=None):
         """
         Orquesta todo el proceso de ETL con la arquitectura correcta y de mejor rendimiento.
         """

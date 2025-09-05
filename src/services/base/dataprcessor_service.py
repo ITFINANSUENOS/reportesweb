@@ -11,34 +11,27 @@ class ReportProcessorService:
     
     def calculate_balances(self, reporte_df, fnz003_df):
         """
-        Calcula saldos, los agrega al reporte, y devuelve una lista de créditos
-        con saldos negativos encontrados en FNZ003.
+        Calcula saldos de forma robusta, asegurando que las columnas sean siempre numéricas.
         """
         print("📊 Calculando saldos...")
-        
-        creditos_negativos_fnz003 = pd.DataFrame() # Inicia df de negativos vacío
+        creditos_negativos_fnz003 = pd.DataFrame()
+
+        for col in ['Saldo_Capital', 'Saldo_Avales', 'Saldo_Interes_Corriente']:
+            if col not in reporte_df.columns:
+                reporte_df[col] = 0
 
         reporte_df['Saldo_Capital'] = np.where(reporte_df['Empresa'] == 'ARPESOD', reporte_df.get('Saldo_Factura'), np.nan)
         
         if not fnz003_df.empty:
-            # Aseguramos que 'Saldo' sea numérico para los cálculos
             fnz003_df['Saldo'] = pd.to_numeric(fnz003_df['Saldo'], errors='coerce').fillna(0)
             
-            # --- NUEVO: Detección de saldos negativos en FNZ003 ---
             negativos_df = fnz003_df[fnz003_df['Saldo'] < 0].copy()
             if not negativos_df.empty:
                 print(f"   - ⚠️ Se encontraron {len(negativos_df)} saldos negativos en FNZ003.")
-                
-                # Creamos la llave 'Credito' para poder unir los datos
-                # Asegúrate de que tu data_loader esté disponible como self.data_loader
                 negativos_df = self.data_loader.create_credit_key(negativos_df) 
-                
-                # Creamos la columna 'Observacion' usando el 'Concepto'
                 negativos_df['Observacion'] = 'Saldo negativo en: ' + negativos_df['Concepto'].astype(str)
                 creditos_negativos_fnz003 = negativos_df[['Credito', 'Observacion']].drop_duplicates()
-            # --- FIN DEL BLOQUE NUEVO ---
 
-            # El resto de la lógica de cálculo de saldos no cambia
             mapa_capital = fnz003_df[fnz003_df['Concepto'].isin(['CAPITAL', 'ABONO DIF TASA'])].groupby('Credito')['Saldo'].sum()
             mapa_avales = fnz003_df[fnz003_df['Concepto'] == 'AVAL'].groupby('Credito')['Saldo'].sum()
             mapa_interes = fnz003_df[fnz003_df['Concepto'] == 'INTERES CORRIENTE'].groupby('Credito')['Saldo'].sum()
@@ -48,12 +41,11 @@ class ReportProcessorService:
             reporte_df.loc[mask_fns, 'Saldo_Avales'] = reporte_df.loc[mask_fns, 'Credito'].map(mapa_avales)
             reporte_df.loc[mask_fns, 'Saldo_Interes_Corriente'] = reporte_df.loc[mask_fns, 'Credito'].map(mapa_interes)
         
-        # Limpieza final de las columnas de saldo (sin cambios)
-        reporte_df['Saldo_Capital'] = pd.to_numeric(reporte_df['Saldo_Capital'], errors='coerce').fillna(0).astype(int)
-        reporte_df['Saldo_Avales'] = np.where(reporte_df['Empresa'] == 'FINANSUEÑOS', reporte_df.get('Saldo_Avales').fillna(0).astype(int), 'NO APLICA')
-        reporte_df['Saldo_Interes_Corriente'] = np.where(reporte_df['Empresa'] == 'FINANSUEÑOS', reporte_df.get('Saldo_Interes_Corriente').fillna(0).astype(int), 'NO APLICA')
+        # Limpieza final: Rellenamos vacíos con 0 y convertimos todo a entero.
+        for col in ['Saldo_Capital', 'Saldo_Avales', 'Saldo_Interes_Corriente']:
+            if col in reporte_df.columns:
+                reporte_df[col] = pd.to_numeric(reporte_df[col], errors='coerce').fillna(0).astype(int)
         
-        # La función ahora devuelve el reporte y la lista de negativos
         return reporte_df, creditos_negativos_fnz003
 
     def calculate_goal_metrics(self, reporte_df, metas_franjas_df):
@@ -341,7 +333,22 @@ class ReportProcessorService:
                 else:
                     reporte_df[col].fillna(default_value, inplace=True)
         
- 
+        
+        print("💅 Aplicando formato de presentación final ('NO APLICA')...")
+    
+        # Definimos la condición (créditos que no son de FINANSUEÑOS)
+        mask_no_fns = reporte_df['Empresa'] != 'FINANSUEÑOS'
+        columnas_a_formatear = ['Saldo_Avales', 'Saldo_Interes_Corriente']
+
+        for col in columnas_a_formatear:
+            if col in reporte_df.columns:
+                # Primero, convertimos la columna a tipo 'object' para que pueda aceptar texto
+                reporte_df[col] = reporte_df[col].astype(object)
+                # Donde la condición se cumple y el valor es 0, lo reemplazamos por 'NO APLICA'
+                reporte_df.loc[mask_no_fns, col] = 'NO APLICA'
+        # --- FIN DEL NUEVO BLOQUE ---
+
+
         print("👔 Limpiando y completando la columna 'Lider_Zona' y 'Movil_Lider'")
         if 'Lider_Zona' in reporte_df.columns and 'Regional_Venta' in reporte_df.columns:
             print("👔 Limpiando y completando 'Lider_Zona' y 'Movil_Lider'...")
