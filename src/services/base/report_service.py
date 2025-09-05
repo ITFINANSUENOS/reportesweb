@@ -4,7 +4,7 @@ import numpy as np
 from src.services.base.dataloader_service import DataLoaderService
 from src.services.base.creditdetails_service import CreditDetailsService
 from src.services.base.product_service import ProductsSalesService
-from src.services.base.dataprcessor_service import ReportProcessorService
+from src.services.base.dataprocessor_service import ReportProcessorService
 
 class ReportService:
     """

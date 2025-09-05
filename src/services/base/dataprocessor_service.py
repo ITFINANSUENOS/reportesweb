@@ -240,8 +240,25 @@ class ReportProcessorService:
         
         # 1. Usamos una copia del DataFrame con créditos únicos como base de todo.
         df_auditoria = df.drop_duplicates(subset=['Credito']).copy()
+        
+          # --- INICIO DE LA CORRECCIÓN ---
+        # 2. Consolidamos la información de 'Celular' antes de usarla.
+        #    Esto resuelve el conflicto de 'Celular_x' y 'Celular_y'.
+        print("    - Consolidando columnas 'Celular' en conflicto...")
+        if 'Celular_y' in df_auditoria.columns and 'Celular_x' in df_auditoria.columns:
+            # Damos prioridad a Celular_y (de VENCIMIENTOS) y rellenamos vacíos con Celular_x
+            df_auditoria['Celular'] = df_auditoria['Celular_y'].fillna(df_auditoria['Celular_x'])
+        elif 'Celular_y' in df_auditoria.columns:
+            df_auditoria['Celular'] = df_auditoria['Celular_y']
+        elif 'Celular_x' in df_auditoria.columns:
+            df_auditoria['Celular'] = df_auditoria['Celular_x']
+        
+        # Si después de todo no hay columna 'Celular', la creamos vacía para evitar errores.
+        if 'Celular' not in df_auditoria.columns:
+            df_auditoria['Celular'] = np.nan
+        # --- FIN DE LA CORRECCIÓN ---
 
-        # 2. Aplicamos cada regla directamente sobre esta copia para crear las columnas de estado.
+        # 3. Aplicamos cada regla directamente sobre esta copia para crear las columnas de estado.
         
         # --- Reglas de Nulos o Valores Específicos ---
         df_auditoria['Estado_Fecha_Desembolso'] = np.where(pd.to_datetime(df_auditoria['Fecha_Desembolso'], errors='coerce').isnull(), 'CORREGIR', 'BIEN')
@@ -278,11 +295,11 @@ class ReportProcessorService:
                 col = f"{col_base}{i}"
                 df_auditoria[f'Estado_{col}'] = np.where(df_auditoria[col].isnull() | (df_auditoria[col] == 'SIN CODEUDOR'), 'CORREGIR', 'BIEN')
 
-        # 3. Filtramos para quedarnos solo con las filas que tienen al menos un problema
+        # 4. Filtramos para quedarnos solo con las filas que tienen al menos un problema
         columnas_de_estado = [col for col in df_auditoria.columns if col.startswith('Estado_')]
         mascara_final = (df_auditoria[columnas_de_estado] == 'CORREGIR').any(axis=1)
         
-        # 4. Seleccionamos las columnas a mostrar en el reporte final
+        # 5. Seleccionamos las columnas a mostrar en el reporte final
         columnas_a_mostrar = ['Credito', 'Cedula_Cliente', 'Nombre_Cliente'] + sorted(columnas_de_estado)
         df_a_corregir = df_auditoria.loc[mascara_final, columnas_a_mostrar]
         
