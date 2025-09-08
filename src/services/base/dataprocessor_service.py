@@ -48,22 +48,31 @@ class ReportProcessorService:
         
         return reporte_df, creditos_negativos_fnz003
 
-    def calculate_goal_metrics(self, reporte_df, metas_franjas_df):
+    def calculate_goal_metrics(self, reporte_df, metas_franjas_df = None):
         """
         Calcula las diferentes métricas de metas.
         """
         print("🎯 Calculando métricas de metas...")
+
 
         for col in ['Meta_DC_Al_Dia', 'Meta_DC_Atraso', 'Meta_Atraso']:
             if col in reporte_df.columns:
                 reporte_df[col] = pd.to_numeric(reporte_df[col], errors='coerce').fillna(0)
         reporte_df['Meta_General'] = reporte_df['Meta_DC_Al_Dia'] + reporte_df['Meta_DC_Atraso'] + reporte_df['Meta_Atraso']
 
-        if metas_franjas_df.empty:
-            return reporte_df
+        columnas_metas_a_borrar = []
 
-        reporte_df = pd.merge(reporte_df, metas_franjas_df, on='Zona', how='left')
-        columnas_metas_a_borrar = [col for col in metas_franjas_df.columns if col != 'Zona']
+        if 'Meta_1_A_30' not in reporte_df.columns:
+            print("   - Columnas de metas no encontradas. Uniendo desde el archivo de metas por franjas...")
+            if metas_franjas_df is not None and not metas_franjas_df.empty:
+                reporte_df = pd.merge(reporte_df, metas_franjas_df, on='Zona', how='left')
+                # 3. La movemos aquí adentro, donde sabemos que metas_franjas_df existe
+                columnas_metas_a_borrar = [col for col in metas_franjas_df.columns if col != 'Zona']
+            else:
+                print("   - ⚠️ ADVERTENCIA: No se pudo realizar la unión. Los cálculos de metas por franja serán 0.")
+                for col in ['Meta_1_A_30', 'Meta_31_A_90', 'Meta_91_A_180', 'Meta_181_A_360', 'Total_Recaudo', 'Meta_%', 'Meta_$']:
+                    reporte_df[col] = 0
+     
         
         columnas_porcentaje = ['Meta_1_A_30', 'Meta_31_A_90', 'Meta_91_A_180', 'Meta_181_A_360', 'Total_Recaudo']
         for col in columnas_porcentaje:
@@ -85,7 +94,11 @@ class ReportProcessorService:
         ]
         reporte_df['Meta_%'] = np.select(condiciones, valores, default=0)
         reporte_df['Meta_$'] = reporte_df['Meta_General'] * reporte_df['Meta_%']
-        reporte_df['Meta_T.R_%'] = reporte_df['Total_Recaudo']
+        # Asignamos Total_Recaudo a Meta_T.R_% solo si la columna existe
+        if 'Total_Recaudo' in reporte_df.columns:
+            reporte_df['Meta_T.R_%'] = reporte_df['Total_Recaudo']
+        else:
+            reporte_df['Meta_T.R_%'] = 0
 
         # --- INICIA BLOQUE DE DEPURACIÓN PROFUNDA ---
         # Este bloque revisará las columnas justo antes de la línea que da el error.

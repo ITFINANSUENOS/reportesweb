@@ -24,20 +24,31 @@ class UpdateBaseService:
         esqueleto_df = self.data_loader.create_credit_key(df_r91_nuevo)
         print(f"\n[LOG] Esqueleto creado a partir de R91 con {len(esqueleto_df)} registros.")
 
-        # --- CAMBIO CLAVE 1: Definimos la llave compuesta ---
-        JOIN_KEYS = ['Credito', 'Cedula_Cliente']
-
         # --- PASO 2: Consolidar y unir cada fuente de datos ---
         for tipo, config in configuracion.items():
             if tipo == "R91":
                 continue
             
+            # --- INICIO DE LA CORRECCIÓN ---
+            # 1. Establecemos la llave por defecto al inicio de CADA vuelta del bucle.
+            join_keys = ['Credito', 'Cedula_Cliente']
+            
+            # 2. El 'if' ahora solo SOBREESCRIBE el valor por defecto en casos especiales.
+            if tipo in ["MATRIZ_CARTERA", "METAS_FRANJAS"]:
+                join_keys = ['Zona']
+            elif tipo in ["ASESORES", "SC04"]:
+                # Simplificamos la omisión de casos especiales
+                print(f"   - Omitiendo '{tipo}' en la consolidación inicial (se procesará después).")
+                continue
+            # --- FIN DE LA CORRECCIÓN ---
+
             columnas_del_tipo = list(config.get("rename_map", {}).values())
             if not columnas_del_tipo:
                 continue
 
-            # Nos aseguramos que las columnas de la llave siempre estén presentes
-            for key in JOIN_KEYS:
+            # Ahora 'join_keys' siempre existirá en este punto.
+            keys_to_add = join_keys if isinstance(join_keys, list) else [join_keys]
+            for key in keys_to_add:
                 if key not in columnas_del_tipo:
                     columnas_del_tipo.append(key)
 
@@ -49,24 +60,20 @@ class UpdateBaseService:
             df_consolidado = pd.DataFrame()
 
             if not df_nuevos_datos.empty:
-                if 'Credito' not in df_nuevos_datos.columns:
+                if 'Credito' not in df_nuevos_datos.columns and 'Credito' in join_keys:
                      df_nuevos_datos = self.data_loader.create_credit_key(df_nuevos_datos)
                 
-                # Usamos ignore_index para evitar errores de Reindexing
                 df_combinado = pd.concat([df_nuevos_datos, df_datos_viejos], ignore_index=True)
-                
-                # --- CAMBIO CLAVE 2: Usamos la llave compuesta para eliminar duplicados ---
-                df_consolidado = df_combinado.drop_duplicates(subset=JOIN_KEYS, keep='first')
+                df_consolidado = df_combinado.drop_duplicates(subset=join_keys, keep='first')
             elif not df_datos_viejos.empty:
-                df_consolidado = df_datos_viejos.drop_duplicates(subset=JOIN_KEYS, keep='first')
+                df_consolidado = df_datos_viejos.drop_duplicates(subset=join_keys, keep='first')
             
             if df_consolidado.empty:
                 continue
 
-            print(f"   - Consolidando y uniendo datos de '{tipo}'...")
+            print(f"   - Consolidando y uniendo datos de '{tipo}' usando la llave: {join_keys}...")
             
-            # --- CAMBIO CLAVE 3: Usamos la llave compuesta para el merge ---
-            esqueleto_df = pd.merge(esqueleto_df, df_consolidado, on=JOIN_KEYS, how='left', suffixes=('', f'_{tipo}_dup'))
+            esqueleto_df = pd.merge(esqueleto_df, df_consolidado, on=join_keys, how='left', suffixes=('', f'_{tipo}_dup'))
 
         print("\n[LOG] Todas las fuentes de datos han sido unidas al esqueleto.")
         reporte_df = esqueleto_df.copy()
@@ -84,11 +91,11 @@ class UpdateBaseService:
         # Es casi idéntica a la que tenías antes, pero ahora actúa sobre la base consolidada.
         
         # Cargar DataFrames necesarios para las funciones
-        crtmp_df = self.data_loader.safe_concat(dataframes_nuevos.get("CRTMPCONSULTA1", []))
+        crtmp_df = self.data_loader.create_credit_key(
+            self.data_loader.safe_concat(dataframes_nuevos.get("CRTMPCONSULTA1", [])))
         sc04_df = self.data_loader.safe_concat(dataframes_nuevos.get("SC04", []))
         fnz001_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("FNZ001", [])))
         fnz003_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("FNZ003", [])))
-        metas_franjas_df = self.data_loader.safe_concat(dataframes_nuevos.get("METAS_FRANJAS", []))
         vencimientos_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_nuevos.get("VENCIMIENTOS", [])))
         
         _, negativos_vencimientos = self.report_service.credit_details.process_vencimientos_data(vencimientos_df)
@@ -101,7 +108,7 @@ class UpdateBaseService:
         reporte_df = self.report_service.credit_details.clean_installment_data(reporte_df)
         reporte_df = self.report_service.report_processor.map_call_center_data(reporte_df)
         reporte_df, negativos_fnz003 = self.report_service.report_processor.calculate_balances(reporte_df, fnz003_df)
-        reporte_df = self.report_service.report_processor.calculate_goal_metrics(reporte_df, metas_franjas_df)
+        reporte_df = self.report_service.report_processor.calculate_goal_metrics(reporte_df)
         reporte_df = self.report_service.credit_details.adjust_arrears_status(reporte_df)
 
         negativos_finales = pd.concat([negativos_vencimientos, negativos_fnz003], ignore_index=True)
