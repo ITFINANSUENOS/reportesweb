@@ -46,7 +46,7 @@ class CreditDetailsService:
             reporte_df.loc[mask_arp, 'Valor_Cuota'] = reporte_df.loc[mask_arp, 'Factura_Venta'].map(mapa_valor_arp)
             reporte_df.loc[mask_arp, 'Valor_Desembolso'] = reporte_df.loc[mask_arp, 'Factura_Venta'].map(mapa_desembolso_arp)
         
-        # --- Preparar datos de FINANSUEÑOS (Desembolsos) ---
+        # --- Preparar datos de FINANSUEÑOS ---
         if not fnz001_df.empty:
             fnz001_df.drop_duplicates(subset='Credito', keep='last', inplace=True)
 

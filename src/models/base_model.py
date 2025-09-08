@@ -46,7 +46,8 @@ configuracion = {
                        "VENCE": "Fecha_Cuota_Vigente" }
     },
     "R03":{
-        "usecols": ["CODEUDOR1","NOMBRE1","VINTELEFON","CIUNOMBRE1","CODEUDOR2","NOMBRE2","VINTELEFO2","CIUNOMBRE2","CEDULA"],
+        "usecols": ["CODEUDOR1","NOMBRE1","VINTELEFON","CIUNOMBRE1","CODEUDOR2","NOMBRE2",
+                    "VINTELEFO2","CIUNOMBRE2","CEDULA","TIPO","NUMERO"],
         "rename_map": { 
                        "CODEUDOR1": "Codeudor1", 
                        "NOMBRE1": "Nombre_Codeudor1", 
@@ -56,7 +57,9 @@ configuracion = {
                        "NOMBRE2": "Nombre_Codeudor2", 
                        "VINTELEFO2": "Telefono_Codeudor2", 
                        "CIUNOMBRE2": "Ciudad_Codeudor2", 
-                       "CEDULA": "Cedula_Cliente" }
+                       "CEDULA": "Cedula_Cliente",
+                       "TIPO":"Tipo_Credito",
+                       "NUMERO":"Numero_Credito"}
     },
     "SC04":{
         "usecols":["FACTURA","SLCVALOR","SLCNCUOTAS","SLCPAGOINI"],

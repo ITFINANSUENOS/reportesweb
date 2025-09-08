@@ -6,10 +6,6 @@ from src.services.novedades.analisis_service import AnalisisService
 from src.services.novedades.recaudo_service import RecaudoR91Service 
 from src.services.novedades.franjas_service import ReporteFranjasService
 from src.models.novedad_model import configuracion
-from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Font
-from openpyxl.utils.dataframe import dataframe_to_rows
-
 
 class NovedadesAnalisisController:
     def __init__(self):

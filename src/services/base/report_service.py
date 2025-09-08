@@ -39,7 +39,7 @@ class ReportService:
         fnz003_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_por_tipo.get("FNZ003", [])))
         sc04_df = self.data_loader.safe_concat(dataframes_por_tipo.get("SC04", []))
         fnz001_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_por_tipo.get("FNZ001", [])))
-        r03_df = self.data_loader.safe_concat(dataframes_por_tipo.get("R03", []))
+        r03_df = self.data_loader.create_credit_key(self.data_loader.safe_concat(dataframes_por_tipo.get("R03", [])))
         matriz_cartera_df = self.data_loader.safe_concat(dataframes_por_tipo.get("MATRIZ_CARTERA", []))
         metas_franjas_df = self.data_loader.safe_concat(dataframes_por_tipo.get("METAS_FRANJAS", []))
         asesores_sheets = dataframes_por_tipo.get("ASESORES", [])
@@ -58,10 +58,10 @@ class ReportService:
             reporte_final = pd.merge(reporte_final, processed_vencimientos, on='Credito', how='left')
         
         if not analisis_df.empty:
-             reporte_final = pd.merge(reporte_final, analisis_df.drop_duplicates('Credito'), on='Credito', how='left', suffixes=('', '_Analisis'))
+             reporte_final = pd.merge(reporte_final, analisis_df, on='Credito', how='left', suffixes=('', '_Analisis'))
         
         if not r03_df.empty:
-            reporte_final = pd.merge(reporte_final, r03_df.drop_duplicates('Cedula_Cliente'), on='Cedula_Cliente', how='left', suffixes=('', '_R03'))
+            reporte_final = pd.merge(reporte_final, r03_df, on='Credito', how='left', suffixes=('', '_R03'))
 
         if not matriz_cartera_df.empty:
             reporte_final['Zona'] = reporte_final['Zona'].astype(str).str.strip()

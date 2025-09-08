@@ -19,7 +19,7 @@ class ProductsSalesService:
         reporte_df['Factura_Venta'] = np.nan
         reporte_df['Factura_Venta'] = reporte_df['Factura_Venta'].astype('object') # Convertir a tipo objeto para aceptar strings
 
-        # --- Lógica para FINANSUEÑOS (sin cambios) ---
+        # --- Lógica para FINANSUEÑOS ---
         filtro_fns = reporte_df['Empresa'] == 'FINANSUEÑOS'
         if filtro_fns.any():
             print("   - Procesando facturas de FINANSUEÑOS...")
@@ -37,7 +37,7 @@ class ProductsSalesService:
                 facturas_asignadas = reporte_df.loc[filtro_fns, 'Credito'].map(mapa_facturas).astype(str)
                 reporte_df.loc[filtro_fns, 'Factura_Venta'] = facturas_asignadas
 
-        # --- Lógica para ARPESOD (CORREGIDA) ---
+        # --- Lógica para ARPESOD ---
         print("   - Procesando facturas de ARPESOD...")
         prefijos = ['RTC', 'PR', 'NC', 'NT', 'NF']
         filtro_arp_especial = (reporte_df['Empresa'] == 'ARPESOD') & (reporte_df['Credito'].str.startswith(tuple(prefijos), na=False))
@@ -89,7 +89,6 @@ class ProductsSalesService:
                     reporte_df[col] = value
             return reporte_df
 
-        # --- PREPARACIÓN DE DATOS (sin cambios) ---
         crtmp_detalles = crtmp_df.copy()
         crtmp_detalles['Factura_Venta'] = crtmp_detalles['Tipo_Credito'].astype(str) + '-' + crtmp_detalles['Numero_Credito'].astype(str)
         crtmp_detalles['Nombre_Producto'] = crtmp_detalles['Nombre_Producto'].fillna('PRODUCTO NO REGISTRADO')
@@ -108,21 +107,12 @@ class ProductsSalesService:
 
         info_facturas = detalles_adicionales.join(productos, how='outer').join(obsequios, how='outer')
 
-        # --- LÓGICA DE DETECCIÓN INTELIGENTE ---
-        
-        # 1. Antes de unir, identificamos las columnas que podrían causar conflicto.
         conflicting_cols = [col for col in info_facturas.columns if col in reporte_df.columns]
-        
-        # 2. Si hay columnas en conflicto, las eliminamos del reporte principal ANTES de unir.
-        #    Esto asegura que la información nueva siempre reemplace a la vieja.
         if conflicting_cols:
             print(f"[LOG] Modo Actualización detectado. Eliminando columnas viejas: {conflicting_cols}")
             reporte_df = reporte_df.drop(columns=conflicting_cols)
-
-        # 3. Realizamos la unión. Ahora NUNCA habrá conflicto de nombres.
         reporte_df = pd.merge(reporte_df, info_facturas, on='Factura_Venta', how='left')
-
-        # 4. Limpieza final. Este bloque ahora funciona para AMBOS casos.
+        
         print("[LOG] Realizando limpieza final de columnas de producto...")
         reporte_df['Nombre_Producto'] = reporte_df['Nombre_Producto'].fillna('NO REGISTRA')
         reporte_df['Obsequio'] = reporte_df['Obsequio'].fillna('SIN OBSEQUIOS')

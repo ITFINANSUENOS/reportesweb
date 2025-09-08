@@ -66,7 +66,6 @@ class ReportProcessorService:
             print("   - Columnas de metas no encontradas. Uniendo desde el archivo de metas por franjas...")
             if metas_franjas_df is not None and not metas_franjas_df.empty:
                 reporte_df = pd.merge(reporte_df, metas_franjas_df, on='Zona', how='left')
-                # 3. La movemos aquí adentro, donde sabemos que metas_franjas_df existe
                 columnas_metas_a_borrar = [col for col in metas_franjas_df.columns if col != 'Zona']
             else:
                 print("   - ⚠️ ADVERTENCIA: No se pudo realizar la unión. Los cálculos de metas por franja serán 0.")
@@ -86,7 +85,7 @@ class ReportProcessorService:
         dias_atraso = reporte_df['Dias_Atraso']
         condiciones = [
             dias_atraso.between(1, 30), dias_atraso.between(31, 90),
-            dias_atraso.between(91, 180), dias_atraso > 180
+            dias_atraso.between(91, 180), dias_atraso.between(181, 360)
         ]
         valores = [
             reporte_df['Meta_1_A_30'], reporte_df['Meta_31_A_90'],
@@ -102,7 +101,6 @@ class ReportProcessorService:
 
         # --- INICIA BLOQUE DE DEPURACIÓN PROFUNDA ---
         # Este bloque revisará las columnas justo antes de la línea que da el error.
-        
         print("\n--- DEPURACIÓN PROFUNDA ANTES DE LA MULTIPLICACIÓN FINAL ---")
         columnas_a_revisar = ['Saldo_Capital', 'Saldo_Avales', 'Saldo_Interes_Corriente', 'Meta_T.R_%']
         for col in columnas_a_revisar:
@@ -123,7 +121,6 @@ class ReportProcessorService:
                     print(f"  - No se pudo revisar la columna por el error: {e}")
         print("--- FIN DE LA DEPURACIÓN ---\n")
 
-        # Esta es la línea donde probablemente ocurre el error
         saldo_capital_num = pd.to_numeric(reporte_df['Saldo_Capital'], errors='coerce').fillna(0)
         saldo_avales_num = pd.to_numeric(reporte_df['Saldo_Avales'], errors='coerce').fillna(0)
         saldo_interes_num = pd.to_numeric(reporte_df['Saldo_Interes_Corriente'], errors='coerce').fillna(0)
@@ -215,16 +212,12 @@ class ReportProcessorService:
         Filtra el reporte final por un rango de fechas en la columna 'Fecha_Cuota_Vigente'.
         Este filtro es opcional.
         """
-        # Si no se proveen fechas, no se hace nada.
         if not start_date or not end_date:
             return reporte_df
 
         print(f"🔍 Aplicando filtro de fecha: desde {start_date} hasta {end_date}")
 
         df = reporte_df.copy()
-
-        # Asegurarse de que la columna de fecha sea del tipo correcto
-        # Se usa 'coerce' para convertir errores en NaT (Not a Time)
         df['Fecha_Cuota_Vigente'] = pd.to_datetime(df['Fecha_Cuota_Vigente'], format='%d/%m/%Y', errors='coerce')
 
         # Convertir las fechas de entrada a datetime
@@ -254,9 +247,6 @@ class ReportProcessorService:
         # 1. Usamos una copia del DataFrame con créditos únicos como base de todo.
         df_auditoria = df.drop_duplicates(subset=['Credito']).copy()
         
-          # --- INICIO DE LA CORRECCIÓN ---
-        # 2. Consolidamos la información de 'Celular' antes de usarla.
-        #    Esto resuelve el conflicto de 'Celular_x' y 'Celular_y'.
         print("    - Consolidando columnas 'Celular' en conflicto...")
         if 'Celular_y' in df_auditoria.columns and 'Celular_x' in df_auditoria.columns:
             # Damos prioridad a Celular_y (de VENCIMIENTOS) y rellenamos vacíos con Celular_x
@@ -266,16 +256,12 @@ class ReportProcessorService:
         elif 'Celular_x' in df_auditoria.columns:
             df_auditoria['Celular'] = df_auditoria['Celular_x']
         
-        # Si después de todo no hay columna 'Celular', la creamos vacía para evitar errores.
         if 'Celular' not in df_auditoria.columns:
             df_auditoria['Celular'] = np.nan
-        # --- FIN DE LA CORRECCIÓN ---
 
-        # 3. Aplicamos cada regla directamente sobre esta copia para crear las columnas de estado.
         
         # --- Reglas de Nulos o Valores Específicos ---
         df_auditoria['Estado_Fecha_Desembolso'] = np.where(pd.to_datetime(df_auditoria['Fecha_Desembolso'], errors='coerce').isnull(), 'CORREGIR', 'BIEN')
-        # REGLA CORREGIDA: 'Fecha_Facturada' solo valida si está vacía.
         df_auditoria['Estado_Fecha_Facturada'] = np.where(pd.to_datetime(df_auditoria['Fecha_Facturada'], errors='coerce').isnull(), 'CORREGIR', 'BIEN')
         df_auditoria['Estado_Factura'] = np.where(df_auditoria['Factura_Venta'] == 'NO ASIGNADA', 'CORREGIR', 'BIEN')
         
