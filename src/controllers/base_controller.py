@@ -12,21 +12,18 @@ from src.services.base.update_base_service import UpdateBaseService
 class BaseMensualController:
     def __init__(self,view=None):
         self.view = view
-        self.rutas_archivos = {} # Diccionario para almacenar las rutas
+        self.rutas_archivos = {} 
         self.ruta_reporte_base = None
-        # La variable self.cache_path ya no se usará para leer, pero la dejamos por si la usas en otro lado.
-        self.cache_path = Path(__file__).resolve().parent.parent.parent / "cache" / "reporte_base_mensual.feather"
-
-    def abrir_vista(self, parent):
-        """Crea y muestra la ventana para cargar la base mensual."""
-        if self.view is None or not self.view.winfo_exists():
-            # Pasamos el controlador de la ventana principal si existe
-            main_controller = getattr(self.view, 'main_window_controller', None)
-            self.view = BaseMensualView(parent, self, main_controller)
-        self.view.deiconify() # Muestra la ventana si estaba oculta
 
     def set_view(self, view):
         self.view = view
+        
+    def abrir_vista(self, parent):
+        """Crea y muestra la ventana para cargar la base mensual."""
+        if self.view is None or not self.view.winfo_exists():
+            main_controller = getattr(self.view, 'main_window_controller', None)
+            self.view = BaseMensualView(parent, self, main_controller)
+        self.view.deiconify() 
 
     def seleccionar_archivo(self, tipo_archivo):
         """Abre un diálogo para seleccionar uno o varios archivos."""
@@ -114,15 +111,13 @@ class BaseMensualController:
                 # 2. Creamos la instancia del UpdateService.
                 update_service = UpdateBaseService(report_service=service_principal,)
                 
-                # 3. Le pasamos los datos YA LIMPIOS al servicio de actualización.
                 self.view.actualizar_estado("Sincronizando cambios...", 60)
                 reporte_final, reporte_negativos, reporte_correcciones = update_service.sincronizar_reporte(
                     df_base_anterior, 
-                    dataframes_nuevos_estandarizados # Usamos la variable con los datos estandarizados
+                    dataframes_nuevos_estandarizados 
                 )
 
             else:
-                # --- MODO CONSTRUCCIÓN COMPLETA (como antes) ---
                 self.view.actualizar_estado("Iniciando construcción completa...", 10)
                 reporte_final, reporte_negativos, reporte_correcciones = service_principal.generate_consolidated_report(
                     file_paths=lista_final_rutas,
@@ -165,8 +160,6 @@ class BaseMensualController:
                     styled_df = reporte_correcciones.style.applymap(aplicar_estilos)
                     styled_df.to_excel(writer, sheet_name='Registros_Para_Corregir', index=False)
                     print("   - ✅ Hoja 'Registros_Para_Corregir' añadida con colores.")
-
-            # <<< LÓGICA DE CACHÉ ELIMINADA >>>
             
             self.view.actualizar_estado("¡Éxito! Reporte guardado.", 100)
             messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}") 
