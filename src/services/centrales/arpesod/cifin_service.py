@@ -1,10 +1,10 @@
 import pandas as pd
 
-class DataProcessorService:
+class ArpesodDataProcessorService:
     def __init__(self, df, ruta_correcciones, column_mapping):
         self.df = df
         self.ruta_correcciones = ruta_correcciones
-        self.map = column_mapping  # Mapa de columnas genéricas a nombres reales
+        self.map = column_mapping 
 
     def run_all_transformations(self):
         print("Servicio: Ejecutando todas las transformaciones...")
@@ -19,60 +19,75 @@ class DataProcessorService:
         return self.df
     
     def _correct_data_from_excel(self):
-        print("  - Corrigiendo desde Excel...")
+        """
+        Realiza la limpieza y filtrado de datos basado en reglas de negocio 
+        definidas en un archivo Excel de correcciones.
+        """
+        print("  - Corrigiendo y filtrando datos desde Excel...")
 
-        # --- Parte A: Corregir Cédulas ---
-        
-        # Asegura que la columna de identificación en el DataFrame principal sea texto sin espacios.
-        self.df['NUMERO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].astype(int)
-        self.df[self.map['id_number']] = self.df[self.map['id_number']].astype(str).str.strip()
+        # --- Carga inicial de las hojas de Excel ---
+        # Es más eficiente cargarlas una sola vez al principio.
+        # Usamos dtype=str para evitar problemas de conversión automática de números.
+        try:
+            df_R91 = pd.read_excel(self.ruta_correcciones, sheet_name='R91', usecols=['MCDZONA', 'MCDVINCULA', 'VINNOMBRE'], dtype=str)
+            df_cedulas_original = pd.read_excel(self.ruta_correcciones, sheet_name='CEDULAS_NO_REPORTAR', usecols=['NIT', 'NOMBRE'], dtype=str)
+            df_facturas_eliminar = pd.read_excel(self.ruta_correcciones, sheet_name='FACTURAS_ELIMINAR', dtype=str)
+        except FileNotFoundError:
+            print(f"❌ ERROR: No se pudo encontrar el archivo de correcciones en {self.ruta_correcciones}")
+            return
+        except Exception as e:
+            print(f"❌ ERROR: No se pudo leer una de las hojas del archivo de correcciones: {e}")
+            return
 
-        df_cedulas = pd.read_excel(self.ruta_correcciones, sheet_name='Cedulas a corregir')
+        # --- PASO 1: Combinar cédulas de R91 con la lista de no reportar ---
+        print("    -> Procesando cédulas a no reportar...")
         
-        # Estandariza las columnas en el archivo de corrección también.
-        cedulas_malas = df_cedulas['CEDULA MAL'].astype(str).str.strip()
-        cedulas_buenas = df_cedulas['CEDULA CORRECTA'].astype(str).str.strip()
+        # 1.1. Filtrar R91 para obtener solo los registros de la zona '1CE'.
+        cedulas_1CE = df_R91[df_R91['MCDZONA'] == '1CE'].copy()
         
-        mapa_cedulas = pd.Series(cedulas_buenas.values, index=cedulas_malas).to_dict()
-        self.df[self.map['id_number']] = self.df[self.map['id_number']].replace(mapa_cedulas)
+        # 1.2. Seleccionar y renombrar las columnas para que coincidan con el formato de 'CEDULAS_NO_REPORTAR'.
+        cedulas_1CE = cedulas_1CE[['MCDVINCULA', 'VINNOMBRE']]
+        cedulas_1CE.rename(columns={'MCDVINCULA': 'NIT', 'VINNOMBRE': 'NOMBRE'}, inplace=True)
+        
+        # 1.3. Unir la lista original con los nuevos registros de R91.
+        df_cedulas_completo = pd.concat([df_cedulas_original, cedulas_1CE], ignore_index=True)
+        
+        # 1.4. Eliminar duplicados basándose en la columna 'NIT', manteniendo la primera aparición.
+        df_cedulas_completo.drop_duplicates(subset=['NIT'], keep='first', inplace=True)
 
-        # --- Parte B: Actualizar campos 'CORREGIR' ---
+        # --- PASO 2: Eliminar del DataFrame principal los NITs de la lista consolidada ---
+        # Convertimos los NITs a un conjunto (set) para una búsqueda mucho más rápida.
+        nits_a_eliminar = set(df_cedulas_completo['NIT'].str.strip())
         
-        # <-- CORRECCIÓN: Lee el archivo una sola vez.
-        df_vinculado = pd.read_excel(self.ruta_correcciones, sheet_name='Vinculado')
-        # <-- CORRECCIÓN: Estandariza la columna de código antes de usarla como índice.
-        df_vinculado['CODIGO'] = df_vinculado['CODIGO'].astype(str).str.strip()
-        df_vinculado = df_vinculado.set_index('CODIGO')
+        # Obtenemos el nombre de la columna de identificación de self.map para ser flexibles.
+        columna_id_df = self.map['id_number']  # Esto será 'NUMERO DE IDENTIFICACION'
         
-        mapa_vinc = {
-            self.map['full_name']: 'NOMBRE', 
-            self.map['address']: 'DIRECCI', 
-            self.map['email']: 'VINEMAIL', 
-            self.map['phone']: 'TELEFONO'
-        }
+        # Aseguramos que la columna en self.df sea de tipo string y sin espacios para una comparación segura.
+        self.df[columna_id_df] = self.df[columna_id_df].astype(str).str.strip()
         
-        for col_df, col_vinc in mapa_vinc.items():
-            mascara = self.df[col_df].astype(str).str.strip().str.contains('CORREGIR', case=False, na=False)
-            if mascara.any():
-                # La columna 'id_number' ya está limpia y corregida gracias a los pasos anteriores.
-                ids_a_buscar = self.df.loc[mascara, self.map['id_number']]
-                valores_nuevos = ids_a_buscar.map(df_vinculado[col_vinc])
-                self.df.loc[mascara, col_df] = valores_nuevos
+        registros_antes = len(self.df)
+        # El símbolo '~' invierte la condición, es decir, nos quedamos con las filas cuyo ID NO ESTÁ en la lista.
+        self.df = self.df[~self.df[columna_id_df].isin(nits_a_eliminar)]
+        print(f"    -> Se eliminaron {registros_antes - len(self.df)} registros por coincidencia de NIT.")
 
-        # --- Parte C: Actualizar Tipos de Identificación ---
+        # --- PASO 3: Eliminar del DataFrame principal las facturas específicas ---
+        # La columna en el Excel se llama 'NUMERO DE LA CUENTA U OBLIGACION'
+        columna_facturas_excel = 'NUMERO DE LA CUENTA U OBLIGACION'
+        facturas_a_eliminar = set(df_facturas_eliminar[columna_facturas_excel].astype(str).str.strip())
         
-        self.df[self.map['id_type']] = 1 # Valor por defecto
-        df_tipos = pd.read_excel(self.ruta_correcciones, sheet_name='Tipos de identificacion')
+        # En self.df, la columna se llama 'numero_obligacion' (mapeada por 'account_number').
+        columna_obligacion_df = self.map['account_number'] # Esto será 'numero_obligacion'
         
-        # Estandariza la columna de cédulas en el archivo de tipos.
-        cedulas_tipos = df_tipos['CEDULA CORRECTA'].astype(str).str.strip()
+        # Aseguramos que la columna sea string y sin espacios.
+        self.df[columna_obligacion_df] = self.df[columna_obligacion_df].astype(str).str.strip()
         
-        mapa_tipos = pd.Series(df_tipos['CODIGO CIFIN'].values, index=cedulas_tipos).to_dict()
-        
-        # La columna 'id_number' ya está limpia y corregida.
-        self.df[self.map['id_type']] = self.df[self.map['id_number']].map(mapa_tipos).combine_first(self.df[self.map['id_type']])
-        self.df[self.map['id_type']] = pd.to_numeric(self.df[self.map['id_type']], errors='coerce').astype('Int64').astype(str).str[:2].str.zfill(2)
+        registros_antes = len(self.df)
+        # Aplicamos el mismo filtro para las facturas.
+        self.df = self.df[~self.df[columna_obligacion_df].isin(facturas_a_eliminar)]
+        print(f"    -> Se eliminaron {registros_antes - len(self.df)} registros por coincidencia de factura.")
 
+        
+       
     def _update_data_from_sheets(self):
         print("  - Actualizando desde FNZ001 y R05...")
         self.df[self.map['account_number']] = self.df[self.map['account_number']].astype(str).str.replace(' ', '').str[:20].str.ljust(20)

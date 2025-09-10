@@ -1,6 +1,6 @@
 import pandas as pd
 
-class DataProcessorService:
+class FinansuenosDataProcessorService:
     def __init__(self, df, ruta_correcciones, column_mapping):
         self.df = df
         self.ruta_correcciones = ruta_correcciones

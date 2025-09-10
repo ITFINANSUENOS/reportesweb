@@ -42,7 +42,7 @@ class MainWindow:
         self.base_mensual_controller.set_view(base_carga_frame)
         convenios_frame = ConveniosAnticiposView(container, self.convenios_controller, self.anticipos_controller, self)
         centrales_menu_frame = CentralesMenuView(container, self)
-        centrales_arpesod_frame = CentralesArpesodView(container, self)
+        centrales_arpesod_frame = CentralesArpesodView(container, self.datacredito_controller, self.cifin_controller, self)
         centrales_finansuenos_frame = CentralesFinansuenosView(container, self.datacredito_controller, self.cifin_controller, self)
         base_menu_frame = BaseMensualMenuView(container, self)
         novedades_frame = NovedadesView(container, self.novedades_analisis_controller, self)
