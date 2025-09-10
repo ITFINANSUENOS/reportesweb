@@ -80,6 +80,8 @@ class CentralesFinansuenosView(ttk.Frame):
         
         ttk.Button(cifin_frame, text="Generar Reporte CIFIN", command=self.procesar_cifin, style='Accent.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10))
         cifin_frame.grid_columnconfigure(0, weight=1)
+        self.status_label = ttk.Label(scrollable_frame, text="Listo para iniciar.", anchor="center")
+        self.status_label.pack(fill=tk.X, padx=20, pady=(10, 20))
         
     # --- Métodos de la clase (sin cambios) ---
     def seleccionar_dc_plano(self):
@@ -91,7 +93,15 @@ class CentralesFinansuenosView(ttk.Frame):
         if filepath: self.dc_correcciones_path.set(filepath)
         
     def procesar_datacredito(self):
-        messagebox.showinfo("Proceso Datacredito", "Iniciando proceso para Datacredito...")
+        # 1. Validar que los archivos fueron seleccionados
+        plano_path = self.dc_plano_path.get()
+        correcciones_path = self.dc_correcciones_path.get()
+
+        if not plano_path or not correcciones_path:
+            messagebox.showerror("Error", "Debe seleccionar ambos archivos para Datacredito.")
+            return
+        self.datacredito_controller.set_empresa_actual("finansuenos")
+        self.datacredito_controller.run_processing_datacredito(self, plano_path, correcciones_path)
         
     def seleccionar_cifin_plano(self):
         filepath = filedialog.askopenfilename(title="Seleccionar plano CIFIN", filetypes=[("Archivos de texto", "*.txt")])
@@ -102,4 +112,22 @@ class CentralesFinansuenosView(ttk.Frame):
         if filepath: self.cifin_correcciones_path.set(filepath)
         
     def procesar_cifin(self):
-        messagebox.showinfo("Proceso CIFIN", "Iniciando proceso para CIFIN...")
+        if not self.cifin_plano_path.get():
+            messagebox.showerror("Error", "Debe seleccionar un archivo plano de CIFIN")
+            return
+            
+        if not self.cifin_correcciones_path.get():
+            messagebox.showerror("Error", "Debe seleccionar un archivo de correcciones")
+            return
+            
+        # Establecer que es FINANSUEÑOS antes de procesar
+        self.cifin_controller.set_empresa_actual("finansuenos")
+        self.cifin_controller.run_processing(
+            self.cifin_plano_path.get(), 
+            self.cifin_correcciones_path.get()
+        )
+        
+    def update_status(self, message):
+        """Actualiza el texto de la etiqueta de estado."""
+        self.status_label.config(text=message)
+        print(f"Estado actualizado: {message}") # Útil para depurar en consola

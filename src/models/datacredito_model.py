@@ -1,5 +1,6 @@
 import pandas as pd
-from src.services.datacredito.dataprocessor_service import DataProcessorService
+from src.services.datacredito.dataprocessor_service import FinansuenosDataProcessorService
+from src.services.centrales.arpesod.datacredito_service import ArpesodDataProcessorService
 
 class DataCreditoModel:
     """Gestiona los datos y la lógica de negocio para el reporte de Datacredito."""
@@ -37,12 +38,17 @@ class DataCreditoModel:
         self.df['NUMERO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].astype(str).str.strip()
         print("Modelo: Archivo plano cargado.")
 
-    def process_data(self, correcciones_path):
+    def process_data(self, correcciones_path,empresa_actual):
         """Orquesta el procesamiento de datos utilizando el servicio."""
         if self.df is None:
             raise ValueError("El DataFrame no ha sido cargado. Llama a 'load_plano_file' primero.")
         
-        processor = DataProcessorService(self.df.copy(), correcciones_path)
+        if empresa_actual == "arpesod":
+            processor = ArpesodDataProcessorService(self.df.copy(), correcciones_path)
+        elif empresa_actual == "finansuenos":
+            processor = FinansuenosDataProcessorService(self.df.copy(), correcciones_path)
+        else:
+            raise ValueError(f"Tipo de empresa no válido: {empresa_actual}")
         self.df = processor.run_all_transformations()
 
     def save_processed_file(self, output_path):

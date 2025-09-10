@@ -1,7 +1,5 @@
 import pandas as pd
-from src.services.cifin.cifin_service import DataProcessorService # <-- Importa la clase
 
-# Tu clase CifinModel se mantiene igual
 class CifinModel:
     def __init__(self):
         self.df = None

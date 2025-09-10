@@ -1,6 +1,6 @@
 import pandas as pd
 
-class DataProcessorService:
+class FinansuenosDataProcessorService:
     """Clase responsable de todas las transformaciones de datos."""
     def __init__(self, df, ruta_correcciones):
         self.df = df
