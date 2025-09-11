@@ -58,10 +58,10 @@ class ReportService:
             reporte_final = pd.merge(reporte_final, processed_vencimientos, on='Credito', how='left')
         
         if not analisis_df.empty:
-             reporte_final = pd.merge(reporte_final, analisis_df, on='Credito', how='left', suffixes=('', '_Analisis'))
+             reporte_final = pd.merge(reporte_final, analisis_df.drop_duplicates('Credito'), on='Credito', how='left', suffixes=('', '_Analisis'))
         
         if not r03_df.empty:
-            reporte_final = pd.merge(reporte_final, r03_df, on='Credito', how='left', suffixes=('', '_R03'))
+            reporte_final = pd.merge(reporte_final, r03_df.drop_duplicates('Credito'), on='Credito', how='left', suffixes=('', '_R03'))
 
         if not matriz_cartera_df.empty:
             reporte_final['Zona'] = reporte_final['Zona'].astype(str).str.strip()
