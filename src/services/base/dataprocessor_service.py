@@ -98,9 +98,7 @@ class ReportProcessorService:
             reporte_df['Meta_T.R_%'] = reporte_df['Total_Recaudo']
         else:
             reporte_df['Meta_T.R_%'] = 0
-
-        # --- INICIA BLOQUE DE DEPURACIÓN PROFUNDA ---
-        # Este bloque revisará las columnas justo antes de la línea que da el error.
+            
         print("\n--- DEPURACIÓN PROFUNDA ANTES DE LA MULTIPLICACIÓN FINAL ---")
         columnas_a_revisar = ['Saldo_Capital', 'Saldo_Avales', 'Saldo_Interes_Corriente', 'Meta_T.R_%']
         for col in columnas_a_revisar:
