@@ -1,6 +1,6 @@
 # Entorno virtual (cambia el nombre si usas otro)
 entorno/
-.venv/
+venv/
 env/
 
 # Archivos de Python generados
