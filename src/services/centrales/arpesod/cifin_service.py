@@ -30,8 +30,11 @@ class ArpesodDataProcessorService:
         # Usamos dtype=str para evitar problemas de conversión automática de números.
         try:
             df_R91 = pd.read_excel(self.ruta_correcciones, sheet_name='R91', usecols=['MCDZONA', 'MCDVINCULA', 'VINNOMBRE'], dtype=str)
+            print(f'Cargando R91 con {len(df_R91.head())} registros. ')
             df_cedulas_original = pd.read_excel(self.ruta_correcciones, sheet_name='CEDULAS_NO_REPORTAR', usecols=['NIT', 'NOMBRE'], dtype=str)
+            print(f'Cargando Cedulas a no reportar con {len(df_cedulas_original.head())} registros.')
             df_facturas_eliminar = pd.read_excel(self.ruta_correcciones, sheet_name='FACTURAS_ELIMINAR', dtype=str)
+            print(f'Cargando Facturas a eliminar con {len(df_facturas_eliminar.head())} registros.')
         except FileNotFoundError:
             print(f"❌ ERROR: No se pudo encontrar el archivo de correcciones en {self.ruta_correcciones}")
             return
