@@ -124,11 +124,15 @@ class ReportProcessorService:
         saldo_interes_num = pd.to_numeric(reporte_df['Saldo_Interes_Corriente'], errors='coerce').fillna(0)
         total_saldo_fns = saldo_capital_num + saldo_avales_num + saldo_interes_num
         
-        reporte_df['Meta_T.R_$'] = np.where(
-            reporte_df['Empresa'] == 'FINANSUEÑOS', 
-            total_saldo_fns, 
-            saldo_capital_num
-        ) * reporte_df['Meta_T.R_%']
+        meta_general_fs = reporte_df['Meta_General_fs']
+        
+        # reporte_df['Meta_T.R_$'] = np.where(
+        #     reporte_df['Empresa'] == 'FINANSUEÑOS', 
+        #     total_saldo_fns, 
+        #     saldo_capital_num
+        # ) * reporte_df['Meta_T.R_%']
+        
+        reporte_df['Meta_T.R.$'] = meta_general_fs * reporte_df['Meta_T.R_%']
 
         reporte_df.drop(columns=columnas_metas_a_borrar, inplace=True, errors='ignore')
         return reporte_df
