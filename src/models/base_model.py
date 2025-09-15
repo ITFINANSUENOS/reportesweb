@@ -18,7 +18,7 @@ configuracion = {
     },
     "R91": {
         "usecols": ["VINNOMBRE", "MCDZONA", "MCDVINCULA", "MCDNUMCRU1", "VENNOMBRE",
-                    "MCDTIPCRU1","VENCODIGO", "MCDCCOSTO", "MCDCOBRA",
+                    "MCDTIPCRU1","VENCODIGO", "MCDCCOSTO", "MCDCOBRA","META_SALDO"
                     "META_INTER", "META_DC_AL", "META_DC_AT", "META_ATRAS"],
         "rename_map": { 
                        "MCDTIPCRU1": "Tipo_Credito", 
@@ -32,7 +32,8 @@ configuracion = {
                        "MCDCCOSTO" : "Codigo_Centro_Costos", 
                        "META_INTER" : "Meta_Intereses", 
                        "META_DC_AL" : "Meta_DC_Al_Dia", 
-                       "META_DC_AT" : "Meta_DC_Atraso", 
+                       "META_DC_AT" : "Meta_DC_Atraso",
+                       "META_SALDO" : "Meta_General_fs", 
                        "META_ATRAS" : "Meta_Atraso" }
     },
     "VENCIMIENTOS": {
@@ -200,6 +201,7 @@ ORDEN_COLUMNAS_FINAL = [
     'Saldo_Avales',
     'Meta_Intereses',
     'Meta_General',
+    'Meta_General_fs',
     'Meta_%',
     'Meta_$',
     'Meta_T.R_%',
