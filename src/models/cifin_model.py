@@ -38,7 +38,8 @@ class CifinModel:
             )
             self.df.replace(['nan', 'NaN'], '', inplace=True)
             self.df.rename(columns={'Nº_identificacion': 'NUMERO DE IDENTIFICACION'}, inplace=True)
-            print("Modelo: Archivo plano cargado exitosamente.")
+            print(f"Modelo: Archivo plano cargado exitosamente.", self.df.head())
+            
             return self.df
         except Exception as e:
             print(f"❌ ERROR al cargar el archivo: {e}")
