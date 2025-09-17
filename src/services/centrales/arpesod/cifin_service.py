@@ -1,20 +1,74 @@
 import pandas as pd
+import re
+# Asegúrate de haber instalado rapidfuzz con: pip install rapidfuzz
+from rapidfuzz.distance import Levenshtein
 
 class ArpesodDataProcessorService:
+    """
+    Servicio para procesar y transformar datos de Arpesod, aplicando una serie de 
+    limpiezas, validaciones y formatos definidos por las reglas de negocio.
+    """
     def __init__(self, df, ruta_correcciones, column_mapping):
-        self.df = df
+        self.df = df.copy() # Trabajar sobre una copia para evitar efectos secundarios
         self.ruta_correcciones = ruta_correcciones
-        self.map = column_mapping 
+        self.map = column_mapping
 
+    def _tiene_diversidad(self, texto: str, umbral: int = 3) -> bool:
+        """
+        Verifica si el texto tiene un número mínimo de caracteres alfabéticos únicos.
+        """
+        if not isinstance(texto, str):
+            return False
+        letras_unicas = set(c for c in texto.lower() if c.isalpha())
+        return len(letras_unicas) >= umbral
+
+    def _es_correo_valido_estricto(self, correo: str) -> bool:
+        """
+        Valida un correo electrónico usando una lógica estricta y avanzada.
+        """
+        if not isinstance(correo, str) or not correo:
+            return False
+        correo = correo.strip()
+        pattern = re.compile(
+            r"^(?![.-])(?!(?:.*[.]{2}))[A-Z0-9._%+-ñÑ]{3,}@[A-Z0-9.-]{3,}\.[A-Z]{2,}$",
+            re.IGNORECASE
+        )
+        if not pattern.match(correo):
+            return False
+        try:
+            usuario, _ = correo.split('@', 1)
+            usuario = usuario.lower()
+        except ValueError:
+            return False # No tiene un solo @
+
+        if usuario.isdigit():
+            return False
+            
+        if not self._tiene_diversidad(usuario):
+            return False
+
+        blacklist = [
+            "notiene", "sincorreo", "pendiente", "corregir", "noregistra",
+            "nulo", "ninguno", "vacio", "nodisponible"
+        ]
+        for item_prohibido in blacklist:
+            if Levenshtein.distance(usuario, item_prohibido) <= 2:
+                return False
+
+        return True
+
+    # --- MÉTODOS PRINCIPALES DEL PROCESO ---
     def run_all_transformations(self):
+        """
+        Ejecuta la secuencia completa de transformaciones sobre el DataFrame.
+        """
         print("Servicio: Ejecutando todas las transformaciones...")
         self._correct_data_from_excel()
         self._update_data_from_sheets()
         self._clean_and_validate_data()
         self._apply_final_formatting()
-        self._final_cleanup()         
+        self._final_cleanup()
         self._apply_padding_formats()
-            
         print("Servicio: Transformaciones completadas.")
         return self.df
     
@@ -24,259 +78,198 @@ class ArpesodDataProcessorService:
         definidas en un archivo Excel de correcciones.
         """
         print("  - Corrigiendo y filtrando datos desde Excel...")
-
-        # --- Carga inicial de las hojas de Excel ---
-        # Es más eficiente cargarlas una sola vez al principio.
-        # Usamos dtype=str para evitar problemas de conversión automática de números.
         try:
             df_R91 = pd.read_excel(self.ruta_correcciones, sheet_name='R91', usecols=['MCDZONA', 'MCDVINCULA', 'VINNOMBRE'], dtype=str)
-            print(f'Cargando R91 con {len(df_R91.head())} registros. ')
             df_cedulas_original = pd.read_excel(self.ruta_correcciones, sheet_name='CEDULAS_NO_REPORTAR', usecols=['NIT', 'NOMBRE'], dtype=str)
-            print(f'Cargando Cedulas a no reportar con {len(df_cedulas_original.head())} registros.')
             df_facturas_eliminar = pd.read_excel(self.ruta_correcciones, sheet_name='FACTURAS_ELIMINAR', dtype=str)
-            print(f'Cargando Facturas a eliminar con {len(df_facturas_eliminar.head())} registros.')
-        except FileNotFoundError:
-            print(f"❌ ERROR: No se pudo encontrar el archivo de correcciones en {self.ruta_correcciones}")
-            return
         except Exception as e:
-            print(f"❌ ERROR: No se pudo leer una de las hojas del archivo de correcciones: {e}")
+            print(f"❌ ERROR: No se pudo leer el archivo de correcciones: {e}")
             return
 
-        # --- PASO 1: Combinar cédulas de R91 con la lista de no reportar ---
-        print("    -> Procesando cédulas a no reportar...")
+        # Procesar cédulas a no reportar
+        cedulas_1CE = df_R91[df_R91['MCDZONA'] == '1CE'][['MCDVINCULA', 'VINNOMBRE']].rename(columns={'MCDVINCULA': 'NIT', 'VINNOMBRE': 'NOMBRE'})
+        df_cedulas_completo = pd.concat([df_cedulas_original, cedulas_1CE]).drop_duplicates(subset=['NIT'], keep='first')
         
-        # 1.1. Filtrar R91 para obtener solo los registros de la zona '1CE'.
-        cedulas_1CE = df_R91[df_R91['MCDZONA'] == '1CE'].copy()
-        
-        # 1.2. Seleccionar y renombrar las columnas para que coincidan con el formato de 'CEDULAS_NO_REPORTAR'.
-        cedulas_1CE = cedulas_1CE[['MCDVINCULA', 'VINNOMBRE']]
-        cedulas_1CE.rename(columns={'MCDVINCULA': 'NIT', 'VINNOMBRE': 'NOMBRE'}, inplace=True)
-        
-        # 1.3. Unir la lista original con los nuevos registros de R91.
-        df_cedulas_completo = pd.concat([df_cedulas_original, cedulas_1CE], ignore_index=True)
-        
-        # 1.4. Eliminar duplicados basándose en la columna 'NIT', manteniendo la primera aparición.
-        df_cedulas_completo.drop_duplicates(subset=['NIT'], keep='first', inplace=True)
-
-        # --- PASO 2: Eliminar del DataFrame principal los NITs de la lista consolidada ---
-        # Convertimos los NITs a un conjunto (set) para una búsqueda mucho más rápida.
-        nits_a_eliminar = set(df_cedulas_completo['NIT'].str.strip())
-        
-        # Obtenemos el nombre de la columna de identificación de self.map para ser flexibles.
-        columna_id_df = self.map['id_number']  # Esto será 'NUMERO DE IDENTIFICACION'
-        
-        # Aseguramos que la columna en self.df sea de tipo string y sin espacios para una comparación segura.
-        self.df[columna_id_df] = self.df[columna_id_df].astype(str).str.strip()
-        
+        # Eliminar NITs
+        nits_a_eliminar = set(df_cedulas_completo['NIT'].astype(str).str.strip())
+        col_id = self.map['id_number']
+        self.df[col_id] = self.df[col_id].astype(str).str.strip()
         registros_antes = len(self.df)
-        # El símbolo '~' invierte la condición, es decir, nos quedamos con las filas cuyo ID NO ESTÁ en la lista.
-        self.df = self.df[~self.df[columna_id_df].isin(nits_a_eliminar)]
+        self.df = self.df[~self.df[col_id].str.lstrip('0').isin(nits_a_eliminar)]
         print(f"    -> Se eliminaron {registros_antes - len(self.df)} registros por coincidencia de NIT.")
 
-        # --- PASO 3: Eliminar del DataFrame principal las facturas específicas ---
-        # La columna en el Excel se llama 'NUMERO DE LA CUENTA U OBLIGACION'
-        columna_facturas_excel = 'NUMERO DE LA CUENTA U OBLIGACION'
-        facturas_a_eliminar = set(df_facturas_eliminar[columna_facturas_excel].astype(str).str.strip())
-        
-        # En self.df, la columna se llama 'numero_obligacion' (mapeada por 'account_number').
-        columna_obligacion_df = self.map['account_number'] # Esto será 'numero_obligacion'
-        
-        # Aseguramos que la columna sea string y sin espacios.
-        self.df[columna_obligacion_df] = self.df[columna_obligacion_df].astype(str).str.strip()
-        
+        # Eliminar facturas
+        facturas_a_eliminar = set(df_facturas_eliminar['NUMERO DE LA CUENTA U OBLIGACION'].astype(str).str.strip())
+        col_obligacion = self.map['account_number']
+        self.df[col_obligacion] = self.df[col_obligacion].astype(str).str.strip()
         registros_antes = len(self.df)
-        # Aplicamos el mismo filtro para las facturas.
-        self.df = self.df[~self.df[columna_obligacion_df].isin(facturas_a_eliminar)]
+        self.df = self.df[~self.df[col_obligacion].isin(facturas_a_eliminar)]
         print(f"    -> Se eliminaron {registros_antes - len(self.df)} registros por coincidencia de factura.")
 
-        
-       
     def _update_data_from_sheets(self):
-        print("  - Actualizando desde FNZ001 y R05...")
-        self.df[self.map['account_number']] = self.df[self.map['account_number']].astype(str).str.replace(' ', '').str[:20].str.ljust(20)
+        """
+        Actualiza valores del DataFrame principal cruzando información con
+        las hojas FNZ001 y R05 del archivo de correcciones.
+        """
+        print("  - Actualizando desde FNZ001 y R05...")
+        # Lógica de actualización con FNZ001
+        self.df[self.map['account_number']] = self.df[self.map['account_number']].astype(str).str.replace(' ', '').str[:20]
         
         df_fnz = pd.read_excel(self.ruta_correcciones, sheet_name='FNZ001', usecols=['DSM_TP', 'DSM_NUM', 'VLR_FNZ'])
         df_fnz['VLR_FNZ'] = (pd.to_numeric(df_fnz['VLR_FNZ'], errors='coerce').fillna(0) / 1000).astype(int)
         df_fnz['llave_base'] = df_fnz['DSM_TP'].astype(str).str.replace(' ', '') + df_fnz['DSM_NUM'].astype(str).str.replace(' ', '')
         tabla_fnz = pd.concat([pd.DataFrame({'FACTURA': df_fnz['llave_base'], 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C1', 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C2', 'VALOR': df_fnz['VLR_FNZ']})])
-        mapa_fnz = pd.Series(tabla_fnz.VALOR.values, index=tabla_fnz.FACTURA.astype(str).str.ljust(20)).to_dict()
+        mapa_fnz = pd.Series(tabla_fnz.VALOR.values, index=tabla_fnz.FACTURA.astype(str)).to_dict()
         self.df[self.map['initial_value']] = self.df[self.map['account_number']].map(mapa_fnz).combine_first(self.df[self.map['initial_value']])
 
-        # 1. Leer las columnas correctas, incluyendo 'ABONO'
+        # Lógica de actualización con R05
         df_r05 = pd.read_excel(self.ruta_correcciones, sheet_name='R05', usecols=['MCNTIPCRU2', 'MCNNUMCRU2', 'ABONO'])
         df_r05['ABONO'] = pd.to_numeric(df_r05['ABONO'], errors='coerce').fillna(0)
-        df_r05['llave_base'] = df_r05['MCNTIPCRU2'].astype(str).str.replace(' ', '') + df_r05['MCNNUMCRU2'].astype(str).str.replace(' ', '')
+        tipo_cru = df_r05['MCNTIPCRU2'].astype(str).str.strip().str.upper() # <-- CAMBIO: Limpia espacios y convierte a mayúsculas
+        num_cru = df_r05['MCNNUMCRU2'].astype(str).str.strip().str.upper()   # <-- CAMBIO: Limpia espacios y convierte a mayúsculas
+
+        # Se combinan las claves y LUEGO se aplica el formato final
+        df_r05['llave_base'] = (tipo_cru + num_cru).str.replace(' ', '').str[:20] # <-- CAMBIO: Se quitan espacios internos y se trunca a 20
+        # --- FIN DE CAMBIOS ---
+
         abonos_sumados = df_r05.groupby('llave_base')['ABONO'].sum().reset_index()
         abonos_sumados['ABONO'] = (abonos_sumados['ABONO'] / 1000).astype(int)
-        # 6. Crear la tabla final con C1 y C2
+
+        # Esta parte ya estaba bien, pero se beneficia de la clave limpia
         tabla_r05 = pd.concat([
             pd.DataFrame({'LLAVE': abonos_sumados['llave_base'], 'VALOR_ABONO': abonos_sumados['ABONO']}),
             pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C1', 'VALOR_ABONO': abonos_sumados['ABONO']}),
             pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C2', 'VALOR_ABONO': abonos_sumados['ABONO']})
         ])
 
-        mapa_r05 = pd.Series(tabla_r05.VALOR_ABONO.values, index=tabla_r05.LLAVE.astype(str).str.ljust(20)).to_dict()
-        columna_destino_key = 'actual_value_paid' 
-        nuevos_valores = self.df[self.map['account_number']].map(mapa_r05).fillna(0).astype(int)
-        self.df[self.map[columna_destino_key]] = nuevos_valores
+        # Importante: Asegurarse de que las claves con C1/C2 también se trunquen
+        tabla_r05['LLAVE'] = tabla_r05['LLAVE'].str[:20] # <-- CAMBIO ADICIONAL: Seguridad para claves con sufijo
+        mapa_r05 = pd.Series(tabla_r05.VALOR_ABONO.values, index=tabla_r05.LLAVE).to_dict()
         
-        
-    def _clean_and_validate_data(self):
-        print("  - Limpiando y validando datos...")
-        letter_replacements = {'Ñ':'N','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U','Ü':'U','Ÿ':'Y','Â':'A','Ã':'A','š':'S','©':'C',
-                               'ñ':'N','á':'A','é':'E','í':'I','ó':'O','ú':'U','ü':'U','ÿ':'Y','â':'A','ã':'A'}
-        
-        chars_to_remove = ['@','°','|','¬','¡','“','#','$','%','&','/','(',')','=','‘','\\','¿','+','~','´´','´','[','{','^','-',
-                           '_','.',':',',',';','<','>','Æ','±']
+        # Obtén las claves de tu DataFrame principal que deberían coincidir
+        claves_df = set(self.df[self.map['account_number']].unique())
 
-        string_cols = self.df.select_dtypes(include='object').columns.drop(self.map['email'], errors='ignore')
+        # Obtén las claves de tu diccionario de R05
+        claves_mapa = set(mapa_r05.keys())
+
+        # Muestra algunas claves de ejemplo de cada lado
+        print(f"Ejemplo de claves en el DataFrame principal: {list(claves_df)[:5]}")
+        print(f"Ejemplo de claves en el mapa de R05: {list(claves_mapa)[:5]}")
+
+        # Encuentra las que están en tu DF pero no en el mapa
+        diferencia = claves_df - claves_mapa
+        if diferencia:
+            print(f"Se encontraron {len(diferencia)} claves en el DF que NO están en el mapa R05.")
+            print(f"Ejemplo de claves no encontradas: {list(diferencia)[:5]}")
+        else:
+            print("Todas las claves del DF parecen estar en el mapa. ¡Revisa los valores!")
+
+        # La línea final de mapeo ahora debería funcionar correctamente
+        self.df[self.map['actual_value_paid']] = self.df[self.map['account_number']].map(mapa_r05).fillna(0).astype(int)
+
+    def _clean_and_validate_data(self):
+        """
+        Aplica limpiezas generales a columnas de texto, numéricas y fechas.
+        Aquí se incluye la validación estricta de correos electrónicos.
+        """
+        print("  - Limpiando y validando datos...")
+        letter_replacements = {'Ñ':'N','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U'}
+        chars_to_remove = ['@','°','|','¬','¡','“','#','$','%','&','/','(',')','=','‘','\\','¿','+','~','´´','´','[','{','^','-','_','.',':',',',';','<','>']
+
+        # Limpieza de columnas de texto (excluyendo email temporalmente)
+        string_cols = self.df.select_dtypes(include='object').columns.drop(self.map.get('email', ''), errors='ignore')
         for col in string_cols:
-            self.df[col] = self.df[col].astype(str)
+            self.df[col] = self.df[col].astype(str).str.upper()
             for old, new in letter_replacements.items(): self.df[col] = self.df[col].str.replace(old, new, regex=False)
             for char in chars_to_remove: self.df[col] = self.df[col].str.replace(char, '', regex=False)
         
+        # Limpieza y validación de fechas
         for col_name in [self.map['open_date'], self.map['due_date']]:
             self.df[col_name] = pd.to_numeric(self.df[col_name], errors='coerce').fillna(0).astype('Int64').astype(str)
         self.df.loc[self.df[self.map['due_date']] < self.df[self.map['open_date']], self.map['due_date']] = self.df[self.map['open_date']]
         
-
+        # Limpieza de columnas numéricas
         numeric_cols_keys = ['initial_value', 'balance_due', 'available_value', 'monthly_fee', 'arrears_value']
-        # Obtiene los nombres reales de las columnas desde el mapa
         columnas_numericas = [self.map[k] for k in numeric_cols_keys if k in self.map]
-
         for col in columnas_numericas:
             self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
             self.df.loc[self.df[col] <= 10, col] = 0
         self.df[columnas_numericas] = self.df[columnas_numericas].astype(int)
-        
-    def _final_cleanup(self):
-        """
-        Limpia CUALQUIER valor nulo o texto 'nan' restante en todas las
-        columnas no numéricas justo antes de entregar el resultado.
-        """
-        print("  - Realizando limpieza final de valores nulos...")
-        
-        # 1. Define tus columnas numéricas para excluirlas
-        numeric_keys = ['initial_value', 'balance_due', 'available_value', 'monthly_fee', 'arrears_value', 'actual_value_paid']
-        columnas_numericas = [self.map[k] for k in numeric_keys if k in self.map]
-        
-        # 2. Identifica las columnas de texto a limpiar
-        columnas_a_limpiar = self.df.columns.drop(columnas_numericas)
-        
-        # 3. Itera y limpia cada columna de texto de forma robusta
-        for col in columnas_a_limpiar:
 
-            self.df[col] = self.df[col].astype(str).str.strip()
-            self.df[col] = self.df[col].replace(r'(?i)^nan$', '', regex=True).fillna('')    
-            
+        # --- VALIDACIÓN ESTRICTA DE CORREOS ELECTRÓNICOS (NUEVA LÓGICA) ---
+        print("    -> Validando correos electrónicos con lógica estricta...")
+        col_email = self.map['email']
+        self.df[col_email] = self.df[col_email].astype(str).fillna('')
+        correos_invalidos = ~self.df[col_email].apply(self._es_correo_valido_estricto)
+        self.df.loc[correos_invalidos, col_email] = ''
+        print(f"      -> Se invalidaron {correos_invalidos.sum()} correos por formato incorrecto o patrones no válidos.")
 
     def _apply_final_formatting(self):
-        print("  - Aplicando formatos finales...")
+        """
+        Aplica formatos específicos y reglas de negocio a columnas individuales
+        como ciudad, departamento, nombres y teléfonos.
+        """
+        print("  - Aplicando formatos finales...")
         
-        col_ciudad = self.map['city']
-        self.df[col_ciudad] = self.df[col_ciudad].astype(str).str.strip().str.upper()
-        cond_ciudad_invalida = (
-            self.df[col_ciudad].isin(['', '0', 'NAN', 'NONE']) |  # Valores vacíos/inválidos
-            self.df[col_ciudad].str.isdigit() |                   # Solo números
-            self.df[col_ciudad].isnull()                          # Valores nulos
-        )
-        self.df.loc[cond_ciudad_invalida, col_ciudad] = 'POPAYAN'
+        # Formato de Ciudad y Departamento
+        for col, default in [(self.map['city'], 'POPAYAN'), (self.map['department'], 'CAUCA')]:
+            self.df[col] = self.df[col].astype(str).str.strip().str.upper()
+            cond_invalida = self.df[col].isin(['', '0', 'NAN', 'NONE']) | self.df[col].str.isdigit() | self.df[col].isnull()
+            self.df.loc[cond_invalida, col] = default
         
-        # Departamento - siempre Cauca si no hay valor válido
-        col_depto = self.map['department']
-        self.df[col_depto] = self.df[col_depto].astype(str).str.strip().str.upper()
-        cond_depto_invalido = (
-            self.df[col_depto].isin(['', '0', 'NAN', 'NONE']) |   # Valores vacíos/inválidos
-            self.df[col_depto].str.isdigit() |                    # Solo números
-            self.df[col_depto].isnull()                           # Valores nulos
-        )
-        self.df.loc[cond_depto_invalido, col_depto] = 'CAUCA'
-        
+        # Formato de Nombre Completo y correcciones específicas
         self.df[self.map['full_name']] = self.df[self.map['full_name']].astype(str).str.replace(r'\s+', ' ', regex=True).str.strip().str.upper()
         self.df[self.map['id_number']] = self.df[self.map['id_number']].astype(str)
+        correcciones_nombre = {'1118291452': 'FANDINO LAYNE ASTRID', '1025529458': 'MARTINEZ MUNOZ JOSE MANUEL', '25559122': 'RAMIREZ DE CASTRO MARIA ESTELLA'}
+        for cedula, nombre in correcciones_nombre.items():
+            self.df.loc[self.df[self.map['id_number']] == cedula, self.map['full_name']] = nombre
         
-        self.df.loc[self.df[self.map['id_number']] == '1118291452', self.map['full_name']] = 'FANDINO LAYNE ASTRID'
-        self.df.loc[self.df[self.map['id_number']] == '1025529458', self.map['full_name']] = 'MARTINEZ MUNOZ JOSE MANUEL'
-        self.df.loc[self.df[self.map['id_number']] == '25559122', self.map['full_name']] = 'RAMIREZ DE CASTRO MARIA ESTELLA'
-        
-        
-        for key in ['home_phone', 'company_phone']:
+        # Formato y validación de Teléfonos
+        for key in ['home_phone', 'company_phone', 'phone']:
             if key in self.map:
                 col = self.map[key]
-                self.df[col] = (
-                    self.df[col].astype(str)
-                    .str.replace(r'\D', '', regex=True)  # Elimina todo lo que no sea dígito
-                    .replace('^0+$', ' ', regex=True)    # Reemplaza puros ceros por espacio
-                    .str.strip()                         # Elimina espacios sobrantes
-                )
-                
-                # 2. Definir condiciones de validez
-                es_fijo_valido = self.df[col].str.len() == 7
-                es_celular_valido = (self.df[col].str.len() == 10) & (self.df[col].str.startswith('3'))
-                
-                # 3. Marcar como inválido si no cumple NINGUNA de las dos condiciones
-                mascara_invalida = ~(es_fijo_valido | es_celular_valido)
-                self.df.loc[mascara_invalida, col] = '' # Reemplaza por vacío
+                self.df[col] = self.df[col].astype(str).str.replace(r'\D', '', regex=True).replace('^0+$', '', regex=True).str.strip()
+                es_fijo = self.df[col].str.len() == 7
+                es_celular = (self.df[col].str.len() == 10) & self.df[col].str.startswith('3')
+                self.df.loc[~(es_fijo | es_celular), col] = ''
 
+        # Asignación de periodicidad (código original)
+        self.df[self.map['periodicity']] = '05'
 
-        if 'phone' in self.map:
-            col_celular = self.map['phone']
-            # 1. Limpiar y dejar solo números
-            self.df[col_celular] = self.df[col_celular].astype(str).str.replace(r'\D', '', regex=True)
-            
-            # 2. Definir la única condición de validez
-            es_celular_valido = (self.df[col_celular].str.len() == 10) & (self.df[col_celular].str.startswith('3'))
-            
-            # 3. Marcar como inválido si NO cumple la condición
-            mascara_invalida = ~es_celular_valido
-            self.df.loc[mascara_invalida, col_celular] = ''
-
-            self.df[self.map['email']] = self.df[self.map['email']].astype(str).str.strip()
-            for placeholder in ['CORREGIR', 'PENDIENTE', 'NOTIENE', 'SINC', 'NN@', 'AAA@']:
-                self.df.loc[self.df[self.map['email']].str.contains(placeholder, case=False, na=False), self.map['email']] = ''
-            self.df.loc[~self.df[self.map['email']].str.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', na=False), self.map['email']] = ''
-            
-            self.df[self.map['periodicity']] = '05'
-        
     def _final_cleanup(self):
         """
-        Limpia CUALQUIER valor nulo o texto 'nan' restante en todas las
-        columnas no numéricas justo antes de aplicar el padding.
+        Limpia cualquier valor nulo o texto 'nan' restante en todas las
+        columnas no numéricas antes de aplicar el formato final de padding.
         """
         print("  - Realizando limpieza final de valores nulos...")
         numeric_keys = ['initial_value', 'balance_due', 'available_value', 'monthly_fee', 'arrears_value', 'actual_value_paid']
         columnas_numericas = [self.map[k] for k in numeric_keys if k in self.map]
-        columnas_a_limpiar = self.df.columns.drop(columnas_numericas)
+        columnas_texto = self.df.columns.drop(columnas_numericas)
         
-        for col in columnas_a_limpiar:
-            self.df[col] = self.df[col].astype(str).str.strip()
-            self.df[col] = self.df[col].replace(r'(?i)^nan$', '', regex=True).fillna('')  
-    
+        for col in columnas_texto:
+            self.df[col] = self.df[col].astype(str).str.strip().replace(r'(?i)^nan$', '', regex=True).fillna('')
+
     def _apply_padding_formats(self):
         """
         Aplica los formatos de longitud fija (.ljust y .zfill) como último paso.
         """
         print("  - Aplicando formatos de longitud y relleno finales...")
         
-        # Primero nos aseguramos que todas las columnas a rellenar sean de texto
-        # para evitar errores.
-        cols_to_pad = [
-            'arrears_age', 'full_name', 'address', 'city', 'department',
-            'email', 'phone', 'id_number','cellular'
-        ]
-        for key in cols_to_pad:
+        # Mapeo de columnas a su formato de padding
+        padding_map = {
+            'arrears_age': ('zfill', 2), 'full_name': ('ljust', 60),
+            'account_number': ('ljust', 20), 'address': ('ljust', 60),
+            'city': ('ljust', 20), 'department': ('ljust', 20),
+            'email': ('ljust', 60), 'phone': ('ljust', 60),
+            'home_phone': ('ljust', 20), 'company_phone': ('ljust', 20),
+            'id_number': ('zfill', 15)
+        }
+        
+        for key, (method, length) in padding_map.items():
             if key in self.map:
-                self.df[self.map[key]] = self.df[self.map[key]].astype(str)
-
-        # Ahora aplicamos los formatos de longitud
-        self.df[self.map['arrears_age']] = self.df[self.map['arrears_age']].str.zfill(2)
-        self.df[self.map['full_name']] = self.df[self.map['full_name']].str.ljust(60)
-        self.df[self.map['account_number']] = self.df[self.map['account_number']].str.ljust(20)
-        self.df[self.map['address']] = self.df[self.map['address']].str.ljust(60)
-        self.df[self.map['city']] = self.df[self.map['city']].str.ljust(20)
-        self.df[self.map['department']] = self.df[self.map['department']].str.ljust(20)
-        self.df[self.map['email']] = self.df[self.map['email']].str.ljust(60)
-        self.df[self.map['phone']] = self.df[self.map['phone']].str.ljust(60)
-        self.df[self.map['home_phone']] = self.df[self.map['home_phone']].str.ljust(20)
-        self.df[self.map['company_phone']] = self.df[self.map['company_phone']].str.ljust(20)
-        self.df[self.map['id_number']] = self.df[self.map['id_number']].str.zfill(15)          
+                col_name = self.map[key]
+                self.df[col_name] = self.df[col_name].astype(str)
+                if method == 'zfill':
+                    self.df[col_name] = self.df[col_name].str.zfill(length)
+                else: # ljust
+                    self.df[col_name] = self.df[col_name].str.ljust(length)
