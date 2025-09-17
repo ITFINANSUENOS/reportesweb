@@ -43,6 +43,35 @@ class ReportService:
         matriz_cartera_df = self.data_loader.safe_concat(dataframes_por_tipo.get("MATRIZ_CARTERA", []))
         metas_franjas_df = self.data_loader.safe_concat(dataframes_por_tipo.get("METAS_FRANJAS", []))
         asesores_sheets = dataframes_por_tipo.get("ASESORES", [])
+
+        # ✨ Consolidar créditos duplicados (mismo crédito, mismo cliente)
+        if not r91_df.empty:
+            print("\n consolidating duplicate credits from R91...")
+            
+            # Columnas que se deben sumar
+            columnas_a_sumar = [
+                'Meta_Intereses', 'Meta_DC_Al_Dia', 'Meta_DC_Atraso',
+                'Meta_Saldo', 'Meta_Atraso'
+            ]
+            
+            # Columnas por las que se agrupará
+            columnas_agrupacion = ['Credito', 'Cedula_Cliente']
+            
+            # Asegurarnos de que las columnas a sumar existan en el DataFrame
+            columnas_a_sumar_existentes = [col for col in columnas_a_sumar if col in r91_df.columns]
+            
+            # Crear el diccionario de agregación dinámicamente
+            agg_dict = {col: 'sum' for col in columnas_a_sumar_existentes}
+            
+            # Para el resto de las columnas, mantener el primer valor
+            for col in r91_df.columns:
+                if col not in columnas_agrupacion and col not in columnas_a_sumar_existentes:
+                    agg_dict[col] = 'first'
+                    
+            # Aplicar el groupby y la agregación
+            r91_df = r91_df.groupby(columnas_agrupacion, as_index=False).agg(agg_dict)
+            
+            print(f"✅ R91 consolidado. Total de registros únicos: {len(r91_df)}")
         
         if r91_df.empty: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
