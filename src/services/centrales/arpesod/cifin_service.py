@@ -9,7 +9,7 @@ class ArpesodDataProcessorService:
     limpiezas, validaciones y formatos definidos por las reglas de negocio.
     """
     def __init__(self, df, ruta_correcciones, column_mapping):
-        self.df = df.copy() # Trabajar sobre una copia para evitar efectos secundarios
+        self.df = df.copy() 
         self.ruta_correcciones = ruta_correcciones
         self.map = column_mapping
 
@@ -111,61 +111,113 @@ class ArpesodDataProcessorService:
         Actualiza valores del DataFrame principal cruzando información con
         las hojas FNZ001 y R05 del archivo de correcciones.
         """
-        print("  - Actualizando desde FNZ001 y R05...")
-        # Lógica de actualización con FNZ001
-        self.df[self.map['account_number']] = self.df[self.map['account_number']].astype(str).str.replace(' ', '').str[:20]
+        print("  - Actualizando desde SALDOS_INICIALES...")
+         # Se mantiene la limpieza de la columna clave en el DataFrame principal
+        self.df[self.map['account_number']] = self.df[self.map['account_number']].astype(str).str.replace(' ', '').str.strip().str[:20]
+
+        print(" - Verificando saldos negativos desde 'SALDOS_INICIALES'...")
+        try:
+            # 1. Leer la hoja de Excel con los saldos a comparar
+            df_saldos = pd.read_excel(
+                self.ruta_correcciones,
+                sheet_name='SALDOS_INICIALES',
+                usecols=['NUMERO_CUENTA', 'VALOR_INICIAL']
+            )
+
+            # 2. Limpiar la clave de la misma forma que en el DataFrame principal para asegurar el cruce
+            df_saldos['NUMERO_CUENTA_LIMPIA'] = df_saldos['NUMERO_CUENTA'].astype(str).str.replace(' ', '').str.strip().str[:20]
+
+            # 3. Cruzar el DF principal con los saldos usando 'merge' en un DF temporal
+            df_comparacion = pd.merge(
+                left=self.df[[self.map['account_number'], self.map['initial_value']]],
+                right=df_saldos[['NUMERO_CUENTA_LIMPIA', 'VALOR_INICIAL']],
+                left_on=self.map['account_number'],
+                right_on='NUMERO_CUENTA_LIMPIA',
+                how='inner'
+            )
+
+            # 4. Realizar el cálculo de la diferencia
+            df_comparacion['VALOR_INICIAL'] = pd.to_numeric(df_comparacion['VALOR_INICIAL'], errors='coerce').fillna(0)
+            df_comparacion[self.map['initial_value']] = pd.to_numeric(df_comparacion[self.map['initial_value']], errors='coerce').fillna(0)
+            df_comparacion['Diferencia'] = df_comparacion['VALOR_INICIAL'] - df_comparacion[self.map['initial_value']]
+
+            # 5. Filtrar para obtener solo los resultados negativos
+            df_negativos = df_comparacion[df_comparacion['Diferencia'] < 0].copy()
+
+            # 6. Si se encontraron saldos negativos, exportarlos a una nueva hoja
+            if not df_negativos.empty:
+                print(f"  -> Se encontraron {len(df_negativos)} saldos negativos. Exportando a la hoja 'SALDOS_NEGATIVOS'...")
+                
+                # --- CAMBIO APLICADO AQUÍ ---
+                # Preparar el DataFrame para el reporte con las 4 columnas solicitadas para máxima claridad
+                reporte_df = df_negativos[[
+                    self.map['account_number'],
+                    self.map['initial_value'],
+                    'VALOR_INICIAL',
+                    'Diferencia'
+                ]].rename(columns={
+                    # Renombramos para que los encabezados en Excel sean claros
+                    self.map['account_number']: 'account_number',
+                    self.map['initial_value']: 'initial_value_dataframe', # El valor original en tu DF
+                    'VALOR_INICIAL': 'VALOR_INICIAL_excel',      # El valor con el que se comparó
+                    'Diferencia': 'Diferencia'                  # El resultado negativo
+                })
+
+                # Usar ExcelWriter para AÑADIR la nueva hoja al archivo existente
+                with pd.ExcelWriter(self.ruta_correcciones, mode='a', engine='openpyxl', if_sheet_exists='replace') as writer:
+                    reporte_df.to_excel(writer, sheet_name='SALDOS_NEGATIVOS', index=False)
+                
+                print("  -> Hoja 'SALDOS_NEGATIVOS' generada exitosamente con el detalle completo.")
+            else:
+                print("  -> No se encontraron saldos negativos.")
+
+        except Exception as e:
+            print(f"  ADVERTENCIA: No se pudo procesar la hoja 'SALDOS_INICIALES' para buscar negativos. Error: {e}")
+
+        # # Lógica de actualización con R05
+        # df_r05 = pd.read_excel(self.ruta_correcciones, sheet_name='R05', usecols=['MCNTIPCRU2', 'MCNNUMCRU2', 'ABONO'])
+        # df_r05['ABONO'] = pd.to_numeric(df_r05['ABONO'], errors='coerce').fillna(0)
+        # tipo_cru = df_r05['MCNTIPCRU2'].astype(str).str.strip().str.upper() # <-- CAMBIO: Limpia espacios y convierte a mayúsculas
+        # num_cru = df_r05['MCNNUMCRU2'].astype(str).str.strip().str.upper()   # <-- CAMBIO: Limpia espacios y convierte a mayúsculas
+
+        # # Se combinan las claves y LUEGO se aplica el formato final
+        # df_r05['llave_base'] = (tipo_cru + num_cru).str.replace(' ', '').str[:20] # <-- CAMBIO: Se quitan espacios internos y se trunca a 20
+        # # --- FIN DE CAMBIOS ---
+
+        # abonos_sumados = df_r05.groupby('llave_base')['ABONO'].sum().reset_index()
+        # abonos_sumados['ABONO'] = (abonos_sumados['ABONO'] / 1000).astype(int)
+
+        # # Esta parte ya estaba bien, pero se beneficia de la clave limpia
+        # tabla_r05 = pd.concat([
+        #     pd.DataFrame({'LLAVE': abonos_sumados['llave_base'], 'VALOR_ABONO': abonos_sumados['ABONO']}),
+        #     pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C1', 'VALOR_ABONO': abonos_sumados['ABONO']}),
+        #     pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C2', 'VALOR_ABONO': abonos_sumados['ABONO']})
+        # ])
+
+        # # Importante: Asegurarse de que las claves con C1/C2 también se trunquen
+        # tabla_r05['LLAVE'] = tabla_r05['LLAVE'].str[:20] # <-- CAMBIO ADICIONAL: Seguridad para claves con sufijo
+        # mapa_r05 = pd.Series(tabla_r05.VALOR_ABONO.values, index=tabla_r05.LLAVE).to_dict()
         
-        df_fnz = pd.read_excel(self.ruta_correcciones, sheet_name='FNZ001', usecols=['DSM_TP', 'DSM_NUM', 'VLR_FNZ'])
-        df_fnz['VLR_FNZ'] = (pd.to_numeric(df_fnz['VLR_FNZ'], errors='coerce').fillna(0) / 1000).astype(int)
-        df_fnz['llave_base'] = df_fnz['DSM_TP'].astype(str).str.replace(' ', '') + df_fnz['DSM_NUM'].astype(str).str.replace(' ', '')
-        tabla_fnz = pd.concat([pd.DataFrame({'FACTURA': df_fnz['llave_base'], 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C1', 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C2', 'VALOR': df_fnz['VLR_FNZ']})])
-        mapa_fnz = pd.Series(tabla_fnz.VALOR.values, index=tabla_fnz.FACTURA.astype(str)).to_dict()
-        self.df[self.map['initial_value']] = self.df[self.map['account_number']].map(mapa_fnz).combine_first(self.df[self.map['initial_value']])
+        # # Obtén las claves de tu DataFrame principal que deberían coincidir
+        # claves_df = set(self.df[self.map['account_number']].unique())
 
-        # Lógica de actualización con R05
-        df_r05 = pd.read_excel(self.ruta_correcciones, sheet_name='R05', usecols=['MCNTIPCRU2', 'MCNNUMCRU2', 'ABONO'])
-        df_r05['ABONO'] = pd.to_numeric(df_r05['ABONO'], errors='coerce').fillna(0)
-        tipo_cru = df_r05['MCNTIPCRU2'].astype(str).str.strip().str.upper() # <-- CAMBIO: Limpia espacios y convierte a mayúsculas
-        num_cru = df_r05['MCNNUMCRU2'].astype(str).str.strip().str.upper()   # <-- CAMBIO: Limpia espacios y convierte a mayúsculas
+        # # Obtén las claves de tu diccionario de R05
+        # claves_mapa = set(mapa_r05.keys())
 
-        # Se combinan las claves y LUEGO se aplica el formato final
-        df_r05['llave_base'] = (tipo_cru + num_cru).str.replace(' ', '').str[:20] # <-- CAMBIO: Se quitan espacios internos y se trunca a 20
-        # --- FIN DE CAMBIOS ---
+        # # Muestra algunas claves de ejemplo de cada lado
+        # print(f"Ejemplo de claves en el DataFrame principal: {list(claves_df)[:5]}")
+        # print(f"Ejemplo de claves en el mapa de R05: {list(claves_mapa)[:5]}")
 
-        abonos_sumados = df_r05.groupby('llave_base')['ABONO'].sum().reset_index()
-        abonos_sumados['ABONO'] = (abonos_sumados['ABONO'] / 1000).astype(int)
+        # # Encuentra las que están en tu DF pero no en el mapa
+        # diferencia = claves_df - claves_mapa
+        # if diferencia:
+        #     print(f"Se encontraron {len(diferencia)} claves en el DF que NO están en el mapa R05.")
+        #     print(f"Ejemplo de claves no encontradas: {list(diferencia)[:5]}")
+        # else:
+        #     print("Todas las claves del DF parecen estar en el mapa. ¡Revisa los valores!")
 
-        # Esta parte ya estaba bien, pero se beneficia de la clave limpia
-        tabla_r05 = pd.concat([
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'], 'VALOR_ABONO': abonos_sumados['ABONO']}),
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C1', 'VALOR_ABONO': abonos_sumados['ABONO']}),
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C2', 'VALOR_ABONO': abonos_sumados['ABONO']})
-        ])
-
-        # Importante: Asegurarse de que las claves con C1/C2 también se trunquen
-        tabla_r05['LLAVE'] = tabla_r05['LLAVE'].str[:20] # <-- CAMBIO ADICIONAL: Seguridad para claves con sufijo
-        mapa_r05 = pd.Series(tabla_r05.VALOR_ABONO.values, index=tabla_r05.LLAVE).to_dict()
-        
-        # Obtén las claves de tu DataFrame principal que deberían coincidir
-        claves_df = set(self.df[self.map['account_number']].unique())
-
-        # Obtén las claves de tu diccionario de R05
-        claves_mapa = set(mapa_r05.keys())
-
-        # Muestra algunas claves de ejemplo de cada lado
-        print(f"Ejemplo de claves en el DataFrame principal: {list(claves_df)[:5]}")
-        print(f"Ejemplo de claves en el mapa de R05: {list(claves_mapa)[:5]}")
-
-        # Encuentra las que están en tu DF pero no en el mapa
-        diferencia = claves_df - claves_mapa
-        if diferencia:
-            print(f"Se encontraron {len(diferencia)} claves en el DF que NO están en el mapa R05.")
-            print(f"Ejemplo de claves no encontradas: {list(diferencia)[:5]}")
-        else:
-            print("Todas las claves del DF parecen estar en el mapa. ¡Revisa los valores!")
-
-        # La línea final de mapeo ahora debería funcionar correctamente
-        self.df[self.map['actual_value_paid']] = self.df[self.map['account_number']].map(mapa_r05).fillna(0).astype(int)
+        # # La línea final de mapeo ahora debería funcionar correctamente
+        # self.df[self.map['actual_value_paid']] = self.df[self.map['account_number']].map(mapa_r05).fillna(0).astype(int)
 
     def _clean_and_validate_data(self):
         """
