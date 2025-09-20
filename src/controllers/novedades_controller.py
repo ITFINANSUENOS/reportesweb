@@ -246,13 +246,13 @@ class NovedadesAnalisisController:
                 'Regional_Venta', 'Codeudor1', 'Nombre_Codeudor1', 'Telefono_Codeudor1',
                 'Ciudad_Codeudor1', 'Codeudor2', 'Nombre_Codeudor2', 'Telefono_Codeudor2',
                 'Ciudad_Codeudor2', 'Valor_Desembolso', 'Total_Cuotas', 'Valor_Cuota',
-                'Dias_Atraso', 'Franja_Mora', 'Saldo_Capital', 'Saldo_Interes_Corriente',
+                'Dias_Atraso', 'Franja_Meta', 'Saldo_Capital', 'Saldo_Interes_Corriente',
                 'Saldo_Avales', 'Meta_Intereses', 'Meta_General', 'Meta_%', 'Meta_$',
                 'Meta_T.R_%', 'Meta_T.R_$', 'Cuotas_Pagadas', 'Cuota_Vigente',
                 'Fecha_Cuota_Vigente', 'Valor_Cuota_Vigente', 'Fecha_Cuota_Atraso',
                 'Primera_Cuota_Mora', 'Valor_Cuota_Atraso', 'Valor_Vencido',
                 'Fecha_Ultima_Novedad', 'Cantidad_Novedades', 'Dias_Atraso_Final',
-                'Franja_Mora_Final', 'Rodamiento', 'Recaudo_Anticipado', 'Recaudo_Meta',
+                'Franja_Meta_Final', 'Rodamiento', 'Recaudo_Anticipado', 'Recaudo_Meta',
                 'Total_Recaudo'
             ]
 
