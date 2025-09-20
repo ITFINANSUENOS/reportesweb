@@ -23,7 +23,7 @@ class ReporteFranjasService:
                 df_analisis_cartera[col] = pd.to_numeric(df_analisis_cartera[col], errors='coerce').fillna(0)
 
         # Segundo, limpiar las columnas de texto que usaremos para agrupar
-        columnas_texto = ['Zona', 'Regional_Cobro', 'Franja_Mora']
+        columnas_texto = ['Zona', 'Regional_Cobro', 'Franja_Meta']
         for col in columnas_texto:
             if col in df_analisis_cartera.columns:
                 df_analisis_cartera[col] = df_analisis_cartera[col].astype(str).str.strip().str.lower()
@@ -31,7 +31,7 @@ class ReporteFranjasService:
         # --- Paso 2: Filtrar solo las franjas relevantes para el pivot ---
         print("🔍 Filtrando franjas de mora para el reporte...")
         franjas_validas = ['1 a 30', '31 a 90', '91 a 180', '181 a 360']
-        df_filtrado = df_analisis_cartera[df_analisis_cartera['Franja_Mora'].isin(franjas_validas)].copy()
+        df_filtrado = df_analisis_cartera[df_analisis_cartera['Franja_Meta'].isin(franjas_validas)].copy()
 
         # --- Paso 3: Calcular totales por Zona (incluyendo 'al día') ---
         print("🧮 Calculando totales por Zona (incluyendo 'al día')...")
@@ -57,7 +57,7 @@ class ReporteFranjasService:
         if 'Recaudo_Meta' not in df_filtrado.columns:
             df_filtrado['Recaudo_Meta'] = 0
             
-        df_agrupado = df_filtrado.groupby(['Zona', 'Regional_Cobro', 'Franja_Mora']).agg({
+        df_agrupado = df_filtrado.groupby(['Zona', 'Regional_Cobro', 'Franja_Meta']).agg({
             'Meta_$': 'sum',
             'Recaudo_Meta': 'sum'
         }).reset_index()
@@ -67,7 +67,7 @@ class ReporteFranjasService:
         try:
             df_pivot = df_agrupado.pivot_table(
                 index=['Zona', 'Regional_Cobro'], 
-                columns='Franja_Mora',
+                columns='Franja_Meta',
                 values=['Meta_$', 'Recaudo_Meta'],
                 aggfunc='sum',
                 fill_value=0

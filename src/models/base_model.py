@@ -195,7 +195,7 @@ ORDEN_COLUMNAS_FINAL = [
     'Total_Cuotas',
     'Valor_Cuota',
     'Dias_Atraso',
-    'Franja_Mora',
+    'Franja_Meta',
     'Saldo_Capital',
     'Saldo_Interes_Corriente',
     'Saldo_Avales',
