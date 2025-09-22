@@ -58,6 +58,7 @@ configuracion = {
             'Valor_Desembolso': float,               
             'Meta_Intereses':float,          
             'Meta_General':float,
+            'Meta_Saldo':float,
             'Meta_$':float,
             'Meta_T.R_$':float,
             'Valor_Cuota_Atraso':float,
