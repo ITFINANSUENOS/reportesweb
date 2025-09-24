@@ -192,7 +192,7 @@ class ReportProcessorService:
             '121 A 150', '151 A 180', '181 A 210', '211 A 270',
             '271 A 360', 'MAS DE 360'
         ]
-        reporte_df['Franja_Cartea'] = np.select(condiciones_cartea, valores_cartea, default='SIN INFO')
+        reporte_df['Franja_Cartera'] = np.select(condiciones_cartea, valores_cartea, default='SIN INFO')
         
         mapa_franjas = {
             '1 A 30': ('call_center_1_30_dias', 'call_center_nombre_1_30', 'call_center_telefono_1_30'),
@@ -340,37 +340,44 @@ class ReportProcessorService:
 
         # --- PASO 2: Formatear TODAS las columnas de fecha ---
         print("📅 Formateando fechas a solo día/mes/año...")
-        
+
         columnas_de_fecha = [
             'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso', 
             'Fecha_Facturada', 'Fecha_Desembolso', 'Fecha_Ultima_Novedad'
         ]
-        
+
         for col in columnas_de_fecha:
             if col in reporte_df.columns:
-                # --- CAMBIO CLAVE: de .dt.normalize() a .dt.date ---
-                # .dt.date extrae solo la fecha, eliminando la hora por completo.
-                # Excel lo reconocerá como un tipo de dato de fecha puro.
-                reporte_df[col] = pd.to_datetime(reporte_df[col], errors='coerce').dt.date
+                # MÁSCARA: Selecciona solo las filas que NO son 'ANTICIPADO'
+                mask_no_anticipado = reporte_df[col] != 'ANTICIPADO'
+                
+                # Aplica la conversión de fecha ÚNICAMENTE a esas filas
+                reporte_df.loc[mask_no_anticipado, col] = pd.to_datetime(
+                    reporte_df.loc[mask_no_anticipado, col], 
+                    errors='coerce'
+                ).dt.date
 
         # --- PASO 3: Rellenar vacíos y formatear el resto de columnas ---
-        
         columnas_vencimiento = {
             'Fecha_Cuota_Vigente': 'VIGENCIA EXPIRADA', 'Cuota_Vigente': 'VIGENCIA EXPIRADA',
             'Valor_Cuota_Vigente': 'VIGENCIA EXPIRADA', 'Fecha_Cuota_Atraso': 'SIN MORA',
             'Primera_Cuota_Mora': 'SIN MORA', 'Valor_Cuota_Atraso': 0, 'Valor_Vencido': 0
         }
-        
+
+        # Usaremos una columna de referencia que siempre tendrá 'ANTICIPADO' cuando aplique
+        # 'Cuota_Vigente' es una buena candidata.
+        ref_col_anticipado = 'Cuota_Vigente'
+
         for col, default_value in columnas_vencimiento.items():
-            if col not in reporte_df.columns:
-                reporte_df[col] = default_value
-            else:
-                # Para las fechas, si después de procesar siguen vacías (NaT),
-                # las llenamos con el texto correspondiente.
-                if 'Fecha' in col:
-                    reporte_df[col] = reporte_df[col].fillna(default_value)
-                else:
-                    reporte_df[col].fillna(default_value, inplace=True)
+            if col in reporte_df.columns:
+                # MÁSCARA: Identifica las filas que se deben rellenar.
+                # CONDICIONES:
+                # 1. El valor en la columna actual está vacío (isnull).
+                # 2. El crédito NO está marcado como 'ANTICIPADO' en nuestra columna de referencia.
+                mask_para_rellenar = reporte_df[col].isnull() & (reporte_df[ref_col_anticipado] != 'ANTICIPADO')
+                
+                # Rellenamos solo las filas que cumplen AMBAS condiciones.
+                reporte_df.loc[mask_para_rellenar, col] = default_value
         
         
         print("💅 Aplicando formato de presentación final ('NO APLICA')...")

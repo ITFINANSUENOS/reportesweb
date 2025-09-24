@@ -18,7 +18,20 @@ class AnalisisService:
         # 2. Unir el análisis al reporte base (left merge es clave)
         df_actualizado = pd.merge(df_base, df_analisis_unido[['Credito', 'Dias_Atraso_Final']], on='Credito', how='left')
         
-        # 3. Calcular la 'Franja_Meta_Final'
+         # --- INICIO DE CÓDIGO DE DEPURACIÓN ---
+        print("\n--- Depurando Tipos de Datos ---")
+        print(f"Tipo de 'Dias_Atraso_Final': {type(df_actualizado['Dias_Atraso_Final'])}")
+        print(f"Tipo de 'Dias_Atraso': {type(df_actualizado['Dias_Atraso'])}")
+
+        print("\n--- Primeras 5 filas de las columnas ---")
+        print("Columna 'Dias_Atraso_Final':")
+        print(df_actualizado['Dias_Atraso_Final'].head())
+        print("\nColumna 'Dias_Atraso':")
+        print(df_actualizado['Dias_Atraso'].head())
+        print("--------------------------------------\n")
+        # --- FIN DE CÓDIGO DE DEPURACIÓN ---
+
+
         condiciones = [
             df_actualizado['Dias_Atraso_Final'] == 0,
             df_actualizado['Dias_Atraso_Final'].between(1, 30),
@@ -29,6 +42,28 @@ class AnalisisService:
         ]
         valores = ['AL DIA', '1 A 30', '31 A 90', '91 A 180', '181 A 360', 'MAS DE 360']
         df_actualizado['Franja_Meta_Final'] = np.select(condiciones, valores, default=None)
+
+        # AQUÍ ESTÁ LA CORRECCIÓN ---> Añade .fillna(False) a cada condición
+        condiciones_cartea = [
+            (df_actualizado['Dias_Atraso_Final'] == 0).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(1, 30)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(31, 60)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(61, 90)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(91, 120)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(121, 150)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(151, 180)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(181, 210)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(211, 270)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'].between(271, 360)).fillna(False),
+            (df_actualizado['Dias_Atraso_Final'] > 360).fillna(False)
+        ]
+        valores_cartea = [
+            'AL DIA', '1 A 30', '31 A 60', '61 A 90', '91 A 120',
+            '121 A 150', '151 A 180', '181 A 210', '211 A 270',
+            '271 A 360', 'MAS DE 360'
+        ]
+        df_actualizado['Franja_Cartera_Final'] = np.select(condiciones_cartea, valores_cartea, default='SIN INFO')
+
 
         # 4. Calcular el 'Rodamiento' (el resto de la lógica no cambia)
         franja_map = {'AL DIA': 0, '1 A 30': 1, '31 A 90': 2, '91 A 180': 3, '181 A 360': 4, 'MAS DE 360': 5}
@@ -45,7 +80,30 @@ class AnalisisService:
         valores_rodamiento = ['PAGO TOTAL', 'NORMALIZO', 'MEJORO', 'EMPEORO', 'SE MANTIENE']
         df_actualizado['Rodamiento'] = np.select(cond_rodamiento, valores_rodamiento, default='SIN INFO')
 
-        df_actualizado.drop(columns=['Franja_Meta_Num', 'Franja_Meta_Final_Num'], inplace=True)
+         # 5. Calcular el 'Rodamiento_Cartera' (para Franja_Cartera)
+        franja_cartera_map = {
+            'AL DIA': 0, '1 A 30': 1, '31 A 60': 2, '61 A 90': 3,
+            '91 A 120': 4, '121 A 150': 5, '151 A 180': 6,
+            '181 A 210': 7, '211 A 270': 8, '271 A 360': 9, 'MAS DE 360': 10
+        }
+        df_actualizado['Franja_Cartera_Num'] = df_actualizado['Franja_Cartera'].map(franja_cartera_map)
+        df_actualizado['Franja_Cartera_Final_Num'] = df_actualizado['Franja_Cartera_Final'].map(franja_cartera_map)
+
+        cond_rodamiento_cartera = [
+            df_actualizado['Dias_Atraso_Final'].isnull(),
+            (df_actualizado['Franja_Cartera_Num'] > 1) & (df_actualizado['Franja_Cartera_Final_Num'] == 0),
+            df_actualizado['Franja_Cartera_Final_Num'] < df_actualizado['Franja_Cartera_Num'],
+            df_actualizado['Franja_Cartera_Final_Num'] > df_actualizado['Franja_Cartera_Num'],
+            df_actualizado['Franja_Cartera_Final_Num'] == df_actualizado['Franja_Cartera_Num']
+        ]
+        df_actualizado['Rodamiento_Cartera'] = np.select(cond_rodamiento_cartera, valores_rodamiento, default='SIN INFO')
+
+        # 6. Eliminar columnas numéricas auxiliares
+        df_actualizado.drop(
+            columns=['Franja_Meta_Num', 'Franja_Meta_Final_Num',
+                     'Franja_Cartera_Num', 'Franja_Cartera_Final_Num'],
+            inplace=True
+        )
         
         print("✅ Cálculo de rodamiento completado.")
         return df_actualizado

@@ -1,4 +1,6 @@
+import datetime
 from tkinter import filedialog, messagebox
+import numpy as np
 import pandas as pd
 from pathlib import Path
 from src.services.novedades.novedades_service import NovedadesService
@@ -17,51 +19,27 @@ class NovedadesAnalisisController:
         """Asigna la vista a este controlador."""
         self.view = view
 
-     # --- MÉTODO NUEVO Y RECOMENDADO para cargar el reporte base ---
     def _cargar_reporte_base(self, ruta_base, config):
         """
-        Carga el archivo de reporte base usando la configuración definida en el modelo.
-        Aplica el mapa de tipos y convierte las columnas de fecha.
+        Carga el archivo de reporte base, permitiendo que pandas detecte
+        automáticamente los tipos de datos de fecha y texto.
         """
         print("🔄 Cargando reporte base con configuración del modelo...")
         
-        # 1. Obtiene la configuración específica para "BASE_MENSUAL" de forma segura
         config_base = config.get("BASE_MENSUAL", {})
         mapa_de_tipos = config_base.get("dtype_map", None)
 
         if not mapa_de_tipos:
-            messagebox.showwarning("Configuración Faltante", "No se encontró el 'dtype_map' para 'BASE_MENSUAL' en la configuración.")
-            # Como fallback, lo leemos como texto para evitar errores
-            return pd.read_excel(ruta_base, dtype=mapa_de_tipos,parse_dates=False)
+            messagebox.showwarning("Configuración Faltante", "No se encontró el 'dtype_map' en la configuración.")
+            return pd.read_excel(ruta_base) # Leer sin mapa si no existe
 
-        # 2. Lee el Excel usando el mapa de tipos que definiste
+        # Simplemente leemos el Excel con el mapa de tipos simplificado.
+        # Pandas ahora cargará las fechas como datetime y el texto como str automáticamente.
         df_base = pd.read_excel(ruta_base, dtype=mapa_de_tipos)
         
-         # --- LÍNEAS NUEVAS PARA LIMPIAR LA COLUMNA PROBLEMÁTICA ---
-        if 'Valor_Cuota_Vigente' in df_base.columns:
-            # Convierte a número, los errores (texto) se volverán NaN
-            df_base['Valor_Cuota_Vigente'] = pd.to_numeric(df_base['Valor_Cuota_Vigente'], errors='coerce')
-            # Rellena los NaN resultantes con 0 para tener una columna numérica limpia
-            df_base['Valor_Cuota_Vigente'] = df_base['Valor_Cuota_Vigente'].fillna(0)
+        print("✅ Reporte base cargado exitosamente con tipos de datos correctos.")
+        return df_base
 
-        # --- NUEVO BLOQUE DE LIMPIEZA PARA 'Primera_Cuota_Mora' ---
-        if 'Primera_Cuota_Mora' in df_base.columns:
-            df_base['Primera_Cuota_Mora'] = pd.to_numeric(df_base['Primera_Cuota_Mora'], errors='coerce').fillna(0)
-            # Como es un entero, podemos convertir el tipo al final para que no tenga decimales
-            df_base['Primera_Cuota_Mora'] = df_base['Primera_Cuota_Mora'].astype('Int64')    
-
-        # 3. Convierte TODAS las columnas de fecha de una vez
-        columnas_fecha = [
-            'Fecha_Desembolso', 'Fecha_Facturada', 'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso'
-        ]
-        for col in columnas_fecha:
-            if col in df_base.columns:
-                df_base[col] = pd.to_datetime(df_base[col], errors='coerce')
-        
-        print("✅ Reporte base cargado exitosamente usando el mapa de tipos.")
-        return df_base   
-    
-    
     def _cargar_y_unir_archivos(self, file_paths, config_key):
         """
         Función interna para leer y concatenar múltiples archivos,
@@ -211,7 +189,7 @@ class NovedadesAnalisisController:
                 if col in df_novedades_detallado.columns:
                     # Usamos .astype(str) por si hay algún valor no textual (como NaN) y luego .str.upper()
                     df_novedades_detallado[col] = df_novedades_detallado[col].astype(str).str.upper()
-                
+                    
             # 3. Calcular Rodamiento
             analisis_service = AnalisisService(configuracion)
             df_con_rodamiento = analisis_service.calcular_rodamiento(df_base_enriquecido, df_analisis_unido)
@@ -226,13 +204,26 @@ class NovedadesAnalisisController:
                 if col in df_final.columns:
                     df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
             
-            columnas_fecha_sin_hora = [
-                'Fecha_Desembolso', 'Fecha_Facturada',
-                'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso'
-            ]
-            for col in columnas_fecha_sin_hora:
+            # 1. Formatear las columnas de FECHAS PURAS para quitar la hora.
+            columnas_fecha_puras_sin_hora = ['Fecha_Desembolso', 'Fecha_Facturada']
+            for col in columnas_fecha_puras_sin_hora:
                 if col in df_final.columns:
+                    # La parte .dt.date elimina la hora
                     df_final[col] = pd.to_datetime(df_final[col], errors='coerce').dt.date
+
+            # 2. Formatear las columnas de FECHAS MIXTAS (FECHA y TEXTO) para quitar la hora.
+            columnas_fecha_mixtas = ['Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso']
+            for col in columnas_fecha_mixtas:
+                if col in df_final.columns:
+                    # La parte .date() elimina la hora solo de los objetos de fecha
+                    df_final[col] = df_final[col].apply(
+                        lambda x: x.date() if isinstance(x, (pd.Timestamp, datetime.datetime)) else x
+                    )
+            
+             # PASO DE VERIFICACIÓN (OPCIONAL): Puedes descomentar esto para depurar
+            print("Tipos de datos en 'Fecha_Cuota_Vigente' antes de guardar:")
+            print(df_final['Fecha_Cuota_Vigente'].apply(type).value_counts())
+            # --- FIN DEL BLOQUE CORREGIDO ---
             
             orden_columnas_analisis = [
                 'Empresa', 'Credito', 'Fecha_Desembolso', 'Factura_Venta', 'Fecha_Facturada',
@@ -246,14 +237,14 @@ class NovedadesAnalisisController:
                 'Regional_Venta', 'Codeudor1', 'Nombre_Codeudor1', 'Telefono_Codeudor1',
                 'Ciudad_Codeudor1', 'Codeudor2', 'Nombre_Codeudor2', 'Telefono_Codeudor2',
                 'Ciudad_Codeudor2', 'Valor_Desembolso', 'Total_Cuotas', 'Valor_Cuota',
-                'Dias_Atraso', 'Franja_Mora', 'Saldo_Capital', 'Saldo_Interes_Corriente',
+                'Dias_Atraso', 'Franja_Meta','Franja_Cartera', 'Saldo_Capital', 'Saldo_Interes_Corriente',
                 'Saldo_Avales', 'Meta_Intereses', 'Meta_General','Meta_Saldo', 'Meta_%', 'Meta_$',
                 'Meta_T.R_%', 'Meta_T.R_$', 'Cuotas_Pagadas', 'Cuota_Vigente',
                 'Fecha_Cuota_Vigente', 'Valor_Cuota_Vigente', 'Fecha_Cuota_Atraso',
                 'Primera_Cuota_Mora', 'Valor_Cuota_Atraso', 'Valor_Vencido',
                 'Fecha_Ultima_Novedad', 'Cantidad_Novedades', 'Dias_Atraso_Final',
-                'Franja_Meta_Final', 'Rodamiento', 'Recaudo_Anticipado', 'Recaudo_Meta',
-                'Total_Recaudo'
+                'Franja_Meta_Final','Franja_Cartera_Final', 'Rodamiento','Rodamiento_Cartera' ,
+                'Recaudo_Anticipado', 'Recaudo_Meta','Total_Recaudo'
             ]
 
             orden_columnas_detalle = [
@@ -270,8 +261,8 @@ class NovedadesAnalisisController:
 
             # 6. Guardar el reporte multi-hoja
             ruta_salida = filedialog.asksaveasfilename(
-            defaultextension=".xlsx", 
-            initialfile="Reporte_Final_Analisis.xlsx"
+                defaultextension=".xlsx", 
+                initialfile="Reporte_Final_Analisis.xlsx"
             )
             if not ruta_salida: return
 
