@@ -124,6 +124,29 @@ class CreditDetailsService:
             resumen_creditos['Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Cuota_Vigente'])
             resumen_creditos['Valor_Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Valor_Cuota_Vigente'])
 
+        print("🔍 Identificando créditos con estado anticipado...")
+        df_futuras = df[df['Fecha_Cuota_Vigente'] > today + pd.offsets.MonthEnd(0)]
+        creditos_con_cuotas_futuras = set(df_futuras['Credito'].unique())
+        creditos_con_cuotas_este_mes = set(df_vigentes['Credito'].unique())
+        creditos_anticipados = creditos_con_cuotas_futuras - creditos_con_cuotas_este_mes
+        
+        if creditos_anticipados:
+            print(f"  - ✅ Se identificaron {len(creditos_anticipados)} créditos que serán marcados como 'ANTICIPADO'.")
+            
+            # Columnas a sobrescribir con el estado 'ANTICIPADO'
+            columnas_a_marcar = [
+                'Fecha_Cuota_Atraso', 'Primera_Cuota_Mora', 'Valor_Cuota_Atraso',
+                'Fecha_Cuota_Vigente', 'Cuota_Vigente', 'Valor_Cuota_Vigente'
+            ]
+            
+            # Se crea una máscara para ubicar las filas de los créditos anticipados
+            mask_anticipados = resumen_creditos.index.isin(creditos_anticipados)
+            
+            # Se asigna el texto 'ANTICIPADO' a las columnas especificadas para esas filas
+            for col in columnas_a_marcar:
+                if col in resumen_creditos.columns:
+                     resumen_creditos.loc[mask_anticipados, col] = 'ANTICIPADO'  
+
         print("✅ Resumen de vencimientos creado.")
         return resumen_creditos.reset_index(), creditos_con_negativos
 
