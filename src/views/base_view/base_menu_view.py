@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+
 class BaseMensualMenuView(ttk.Frame):
     """
     Vista que sirve como sub-menú para el módulo de Base Mensual.

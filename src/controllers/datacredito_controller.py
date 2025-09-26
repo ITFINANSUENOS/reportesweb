@@ -11,7 +11,7 @@ class DataCreditoController:
     
     def set_empresa_actual(self, empresa_actual):
         """Establece el tipo de empresa para usar el servicio correcto"""
-        self.empresa_actual = empresa_actual
+        self.empresa_actual = empresa_actual.lower()
     
     def set_view(self, view):
         """
@@ -79,4 +79,4 @@ class DataCreditoController:
             messagebox.showerror("Error", error_message)
         finally:
             # Usa 'view.top.after' para limpiar el estado
-            view.top.after(5000, lambda: view.update_status("Listo para comenzar."))
+            view.after(5000, lambda: view.update_status("Listo para comenzar."))

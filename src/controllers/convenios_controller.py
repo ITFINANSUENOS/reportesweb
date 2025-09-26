@@ -15,16 +15,8 @@ class ConveniosController:
         """
         self.view = view    
         
-    def start_report_generation(self):
-        """Inicia el flujo completo a petición de la vista."""
-        input_path = filedialog.askopenfilename(
-            title='Selecciona el archivo para el Reporte Financiero',
-            filetypes=[('Archivos Excel', '*.xlsx')]
-        )
-        if not input_path:
-            self.view.update_display("Operación cancelada.", 0)
-            return
-
+    def start_report_generation(self,input_path):
+       
         try:
             # 1. Llamar al servicio para que genere los datos
             df_bancolombia, df_efecty = self.service.generate_report(
@@ -51,4 +43,5 @@ class ConveniosController:
         except Exception as e:
             messagebox.showerror("Error", f"Ocurrió un error en el reporte financiero: {str(e)}")
         finally:
-            self.view.update_display("Proceso finalizado.", 100)
+            if hasattr(self.view, 'update_status'):
+                self.view.update_status("Proceso finalizado.")
