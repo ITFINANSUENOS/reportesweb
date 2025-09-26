@@ -36,7 +36,7 @@ class CifinController:
         
     def set_empresa_actual(self, empresa_actual ):
         """Establece el tipo de empresa para usar el servicio correcto"""
-        self.empresa_actual = empresa_actual
+        self.empresa_actual = empresa_actual.lower()
     
 
     def set_view(self, view):
@@ -68,7 +68,7 @@ class CifinController:
             # 2. Crear el servicio específico según la empresa
             if self.empresa_actual == "arpesod":
                 procesador = ArpesodDataProcessorService(df_cargado, corrections_path, self.column_map)
-            elif self.empresa_actual == "finansuenos":
+            elif self.empresa_actual == "finansueños":
                 procesador = FinansuenosDataProcessorService(df_cargado, corrections_path, self.column_map)
             else:
                 raise ValueError(f"Tipo de empresa no válido: {self.empresa_actual}")

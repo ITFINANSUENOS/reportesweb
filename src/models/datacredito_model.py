@@ -45,7 +45,7 @@ class DataCreditoModel:
         
         if empresa_actual == "arpesod":
             processor = ArpesodDataProcessorService(self.df.copy(), correcciones_path)
-        elif empresa_actual == "finansuenos":
+        elif empresa_actual == "finansueños":
             processor = FinansuenosDataProcessorService(self.df.copy(), correcciones_path)
         else:
             raise ValueError(f"Tipo de empresa no válido: {empresa_actual}")

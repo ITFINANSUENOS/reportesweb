@@ -1,17 +1,16 @@
 import tkinter as tk
 from tkinter import ttk
-from pathlib import Path
-from tkinter.font import Font
 
 class BaseMensualView(ttk.Frame):
     """
     Vista para seleccionar todos los archivos necesarios para generar la base mensual.
     Ahora es un Frame que se puede poner dentro de la ventana principal.
     """
-    def __init__(self, parent, controller, main_window_controller):
+    def __init__(self, parent, controller,tab_controller):
         super().__init__(parent)
         self.controller = controller
-        self.main_window_controller = main_window_controller
+        self.controller.set_view(self) 
+        self.tab_controller = tab_controller
         self.rutas_labels = {} 
 
         # --- Estilo para esta vista ---
