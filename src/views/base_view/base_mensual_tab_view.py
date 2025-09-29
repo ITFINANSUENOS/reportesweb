@@ -121,7 +121,6 @@ class NovedadesView(ttk.Frame):
 
         self.configure(style='TFrame')
         
-        # --- ESTRUCTURA PARA EL SCROLL Y CENTRADO ---
         canvas = tk.Canvas(self, bg="#F0F0F0", highlightthickness=0)
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
@@ -138,12 +137,10 @@ class NovedadesView(ttk.Frame):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # --- Rejilla 5%-90%-5% en el scrollable_frame ---
         scrollable_frame.grid_columnconfigure(0, weight=5)
         scrollable_frame.grid_columnconfigure(1, weight=90)
         scrollable_frame.grid_columnconfigure(2, weight=5)
         
-        # --- El LabelFrame principal ahora va en la columna central ---
         content_frame = ttk.LabelFrame(scrollable_frame, text=" Módulo de Novedades y Análisis Mensual ", padding="20")
         content_frame.grid(row=0, column=1, sticky="nsew", pady=20)
 
@@ -164,22 +161,39 @@ class NovedadesView(ttk.Frame):
         content_frame.grid_columnconfigure(0, weight=1)
         ttk.Button(content_frame, text="▶ Procesar y Generar Reporte", command=self.procesar, style='Modern.TButton').grid(row=len(file_inputs)*2, column=0, columnspan=2, pady=(30, 10), ipady=5)
     
-    # El resto de los métodos de la clase no cambian...
+    def _get_excel_file_types(self):
+        """Función auxiliar para tener un único formato de tipos de archivo."""
+        return [
+            # Añadimos las extensiones en mayúsculas para asegurar compatibilidad
+            ("Archivos de Excel", "*.xlsx *.XLSX *.xlsm *.XLSM *.xls *.XLS"),
+            ("Todos los archivos", "*.*")
+        ]
+
     def seleccionar_r91(self):
-        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) R91", filetypes=[("Archivos de Excel", "*.xlsx *.xls")])
+        # --- CORREGIDO Y ESTANDARIZADO ---
+        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) R91", filetypes=self._get_excel_file_types())
         if filepaths: self.rutas_r91 = list(filepaths); self.label_r91_path.set(f"{len(self.rutas_r91)} archivo(s) seleccionado(s)")
+
     def seleccionar_reporte_base(self):
-        filepath = filedialog.askopenfilename(title="Seleccionar Reporte Base Mensual", filetypes=[("Archivos de Excel", "*.xlsx *.xls")])
+        # --- CORREGIDO Y ESTANDARIZADO ---
+        filepath = filedialog.askopenfilename(title="Seleccionar Reporte Base Mensual", filetypes=self._get_excel_file_types())
         if filepath: self.ruta_reporte_base = filepath; self.label_base_path.set(Path(filepath).name)
+
     def seleccionar_novedades(self):
-        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Novedades", filetypes=[("Archivos de Excel", "*.xlsx *.xls")])
+        # --- CORREGIDO Y ESTANDARIZADO ---
+        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Novedades", filetypes=self._get_excel_file_types())
         if filepaths: self.rutas_novedades = list(filepaths); self.label_novedades_path.set(f"{len(self.rutas_novedades)} archivo(s) seleccionado(s)")
+
     def seleccionar_usuarios(self):
-        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Usuarios", filetypes=[("Archivos de Excel", "*.xlsx *.xls")])
+        # --- CORREGIDO Y ESTANDARIZADO ---
+        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Usuarios", filetypes=self._get_excel_file_types())
         if filepaths: self.ruta_usuarios = list(filepaths); self.label_usuarios_path.set(f"{len(self.ruta_usuarios)} archivo(s) seleccionado(s)")
+
     def seleccionar_analisis(self):
-        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Análisis", filetypes=[("Archivos de Excel", "*.xlsx *.xls")])
+        # --- CORREGIDO Y ESTANDARIZADO ---
+        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Análisis", filetypes=self._get_excel_file_types())
         if filepaths: self.rutas_analisis = list(filepaths); self.label_analisis_path.set(f"{len(self.rutas_analisis)} archivo(s) seleccionado(s)")
+
     def procesar(self):
         self.controller.procesar_archivos(
             ruta_base=self.ruta_reporte_base, rutas_novedades=self.rutas_novedades,
