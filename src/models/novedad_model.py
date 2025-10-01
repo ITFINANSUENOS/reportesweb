@@ -33,12 +33,13 @@ configuracion = {
                         }
     },
     "USUARIOS": {
-        "usecols": ["Cargo","Nombre completo","Usuario de MANAGER","Número corporativo"],
+        "usecols": ["CEDULA","NOMBRE","USUARIO","AGRUPACIÓN","NUMERO CORPORATIVO"],
         "rename_map": { 
-                       "Cargo": "Cargo_Usuario",
-                       "Nombre completo": "Nombre_Usuario", 
-                       "Usuario de MANAGER": "Usuario_Novedad",
-                       "Número corporativo": "Celular_Corporativo"
+                       "AGRUPACIÓN": "Cargo_Usuario",
+                       "NOMBRE": "Nombre_Usuario",
+                       "CEDULA":"Cedula_Usuario", 
+                       "USUARIO": "Usuario_Novedad",
+                       "NUMERO CORPORATIVO": "Celular_Corporativo"
                         }
     },
     #Tipos de datos para reporte base
@@ -47,10 +48,6 @@ configuracion = {
             'Cedula_Cliente': str,
             'Numero_Credito': str,
             'Primera_Cuota_Mora':str,
-            # 'Fecha_Desembolso': str,
-            # 'Fecha_Facturada':str,
-            # 'Fecha_Cuota_Vigente':str,
-            # 'Fecha_Cuota_Atraso':str,
             'Cantidad_Producto':int,                    
             'Cantidad_Obsequio':int,
             'Valor_Cuota': float,        
