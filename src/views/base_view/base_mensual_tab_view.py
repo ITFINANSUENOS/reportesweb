@@ -11,8 +11,6 @@ class BaseMensualView(ttk.Frame):
         self.rutas_labels = {} 
 
         self.configure(style='TFrame')
-        
-        # --- ESTRUCTURA PARA EL SCROLL Y CENTRADO (APLICADA AQUÍ) ---
         canvas = tk.Canvas(self, bg="#F0F0F0", highlightthickness=0)
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
@@ -70,6 +68,25 @@ class BaseMensualView(ttk.Frame):
             "FNZ003": "Saldos FNZ003", "MATRIZ_CARTERA": "Matriz de Cartera",
             "METAS_FRANJAS": "Metas por Franjas", "ASESORES": "Asesores Activos",
         })
+        
+        # --- Frame para las fechas ---
+        dates_frame = ttk.LabelFrame(content_container, text=" Rango de Fechas del Reporte ", padding="10")
+        dates_frame.pack(fill='x', expand=True, pady=10)
+        
+        # --- Widget para Fecha de Inicio ---
+        ttk.Label(dates_frame, text="Fecha de Inicio:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        # La siguiente línea es la que soluciona el error
+        self.start_date_entry = ttk.Entry(dates_frame)
+        self.start_date_entry.grid(row=0, column=1, sticky="ew", padx=5)
+        
+        # --- Widget para Fecha de Fin (es muy probable que también lo necesites) ---
+        ttk.Label(dates_frame, text="Fecha de Fin:").grid(row=0, column=2, sticky="w", padx=(15, 5), pady=5)
+        self.end_date_entry = ttk.Entry(dates_frame)
+        self.end_date_entry.grid(row=0, column=3, sticky="ew", padx=5)
+
+        # Hacemos que los campos de entrada se expandan
+        dates_frame.grid_columnconfigure(1, weight=1)
+        dates_frame.grid_columnconfigure(3, weight=1)
 
         final_action_frame = ttk.Frame(content_container, padding="10")
         final_action_frame.pack(fill=tk.X, pady=20)

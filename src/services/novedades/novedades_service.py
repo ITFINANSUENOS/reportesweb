@@ -21,66 +21,62 @@ class NovedadesService:
         # --- 1. Preparar el DataFrame de Novedades Detallado ---
         df_novedades['Fecha_Novedad'] = pd.to_datetime(df_novedades['Fecha_Novedad'], errors='coerce')
         df_novedades.dropna(subset=['Cedula_Cliente', 'Fecha_Novedad'], inplace=True)
-        # Limpiamos espacios en blanco de la llave de unión
         df_novedades['Cedula_Cliente'] = df_novedades['Cedula_Cliente'].astype(str).str.strip()
 
         # --- SOLUCIÓN AL AUMENTO DE FILAS ---
-        # 2. Crear una lista de clientes ÚNICA y LIMPIA desde el reporte base
         info_cliente = df_base[['Cedula_Cliente', 'Nombre_Cliente']].copy()
         info_cliente['Cedula_Cliente'] = info_cliente['Cedula_Cliente'].astype(str).str.strip()
         info_cliente['Nombre_Cliente'] = info_cliente['Nombre_Cliente'].astype(str).str.strip()
-        
-        # Nos quedamos con el PRIMER nombre que aparezca para cada cédula única.
-        # Esto garantiza que la unión no duplique filas.
         info_cliente.drop_duplicates(subset=['Cedula_Cliente'], keep='first', inplace=True)
         
-        # 3. Unir novedades con la lista de clientes limpia
         reporte_novedades_detallado = pd.merge(df_novedades, info_cliente, on='Cedula_Cliente', how='left')
         
-        # Ordenamos las columnas para la hoja de novedades
-        columnas_novedades = ['Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad', 'Tipo_Novedad', 'Novedad', 'Valor', 'Fecha_Compromiso']
-        reporte_novedades_detallado = reporte_novedades_detallado[columnas_novedades]
-
         # --- 4. Preparar el Reporte Base Enriquecido (con resúmenes) ---
         df_base_enriquecido = df_base.copy()
         df_base_enriquecido['Cedula_Cliente'] = df_base_enriquecido['Cedula_Cliente'].astype(str).str.strip()
 
-        # Calcular resúmenes (el conteo por cliente sigue siendo útil)
         resumen_novedades = df_novedades.groupby('Cedula_Cliente').agg(
             Cantidad_Novedades=('Novedad', 'count'),
             Fecha_Ultima_Novedad=('Fecha_Novedad', 'max')
         ).reset_index()
 
-        # Unir los resúmenes al reporte base
         df_base_enriquecido = pd.merge(df_base_enriquecido, resumen_novedades, on='Cedula_Cliente', how='left')
         
-        # Rellenar vacíos y dar formato
         df_base_enriquecido['Cantidad_Novedades'].fillna(0, inplace=True)
         df_base_enriquecido['Cantidad_Novedades'] = df_base_enriquecido['Cantidad_Novedades'].astype(int)
         
-         # --- PASO FINAL: Formatear las columnas a solo FECHA ---
         print("📅 Formateando fechas (eliminando la hora)...")
-        # Formatear la fecha en el reporte base enriquecido
         if 'Fecha_Ultima_Novedad' in df_base_enriquecido.columns:
-            # .dt.date extrae solo la parte de la fecha, eliminando la hora por completo
             df_base_enriquecido['Fecha_Ultima_Novedad'] = pd.to_datetime(df_base_enriquecido['Fecha_Ultima_Novedad'], errors='coerce').dt.date
         
-        # Formatear las fechas en el reporte de detalle
         for col in ['Fecha_Novedad', 'Fecha_Compromiso']:
             if col in reporte_novedades_detallado.columns:
                 reporte_novedades_detallado[col] = pd.to_datetime(reporte_novedades_detallado[col], errors='coerce').dt.date
-          
-                
+        
+        # --- INICIO DE LA MODIFICACIÓN ---
+        print("🔄 Agrupando tipos de novedad en 'OTRAS GESTIONES'...")
+
+        # 1. Definimos los códigos que NO queremos agrupar.
+        codigos_especiales = ['C02', 'C04', 'C03', 'C10']
+
+        # 2. Usamos .loc para encontrar todas las filas cuyo 'Codigo_Novedad' NO ESTÉ en la lista
+        #    y cambiamos el valor de su columna 'Tipo_Novedad' a 'OTRAS GESTIONES'.
+        #    El símbolo '~' significa 'NO'.
+        reporte_novedades_detallado.loc[
+            ~reporte_novedades_detallado['Codigo_Novedad'].isin(codigos_especiales),
+            'Tipo_Novedad'
+        ] = 'OTRAS GESTIONES'
+        # --- FIN DE LA MODIFICACIÓN ---
+
         reporte_novedades_detallado.loc[
             reporte_novedades_detallado['Tipo_Novedad'] != 'COMPROMISO DE PAGO', 
             'Fecha_Compromiso'
         ] = 'SIN COMPROMISO'
         
         # Reordenar columnas para la hoja de novedades
-        columnas_novedades = ['Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad', 'Tipo_Novedad', 'Novedad','Valor','Fecha_Compromiso']
-        # Usamos reindex para asegurarnos de no perder columnas si se añade alguna nueva
+        columnas_novedades = ['Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad', 'Codigo_Novedad', 'Tipo_Novedad', 'Novedad','Valor','Fecha_Compromiso']
         columnas_existentes = [col for col in columnas_novedades if col in reporte_novedades_detallado.columns]
         reporte_novedades_detallado = reporte_novedades_detallado.reindex(columns=columnas_existentes)
-                        
+                                
         print("✅ Reportes de Novedades generados.")
         return df_base_enriquecido, reporte_novedades_detallado
