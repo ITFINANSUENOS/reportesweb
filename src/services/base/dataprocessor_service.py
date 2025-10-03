@@ -375,8 +375,6 @@ class ReportProcessorService:
                 # 1. El valor en la columna actual está vacío (isnull).
                 # 2. El crédito NO está marcado como 'ANTICIPADO' en nuestra columna de referencia.
                 mask_para_rellenar = reporte_df[col].isnull() & (reporte_df[ref_col_anticipado] != 'ANTICIPADO')
-                
-                # Rellenamos solo las filas que cumplen AMBAS condiciones.
                 reporte_df.loc[mask_para_rellenar, col] = default_value
         
         

@@ -1,9 +1,10 @@
 configuracion = {
     "NOVEDADES":{
-        "usecols":["VNTCEDULA","NOTA","VNTNEWFEC","VNTNEWUSER",
+        "usecols":["VNTCEDULA","NOTA","VNTNEWFEC","VNTNEWUSER","VNTTIPO",
                    "VTTNOMBRE","VALOR","ALARMA"],
         "rename_map":{
                       "VNTCEDULA":"Cedula_Cliente",
+                      "VNTTIPO":"Codigo_Novedad",
                       "VTTNOMBRE":"Tipo_Novedad",
                       "ALARMA":"Fecha_Compromiso",
                       "VNTNEWFEC":"Fecha_Novedad",

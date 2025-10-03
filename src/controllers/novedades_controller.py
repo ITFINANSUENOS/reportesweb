@@ -31,10 +31,8 @@ class NovedadesAnalisisController:
 
         if not mapa_de_tipos:
             messagebox.showwarning("Configuración Faltante", "No se encontró el 'dtype_map' en la configuración.")
-            return pd.read_excel(ruta_base) # Leer sin mapa si no existe
-
-        # Simplemente leemos el Excel con el mapa de tipos simplificado.
-        # Pandas ahora cargará las fechas como datetime y el texto como str automáticamente.
+            return pd.read_excel(ruta_base)
+        
         df_base = pd.read_excel(ruta_base, dtype=mapa_de_tipos)
         
         print("✅ Reporte base cargado exitosamente con tipos de datos correctos.")
@@ -167,14 +165,19 @@ class NovedadesAnalisisController:
             df_novedades_unido = self._cargar_y_unir_archivos(rutas_novedades, "NOVEDADES")
             df_analisis_unido = self._cargar_y_unir_archivos(rutas_analisis, "ANALISIS")
             df_r91_unido = self._cargar_y_unir_archivos(rutas_r91, "R91")
-            df_usuarios_unido = self._cargar_y_unir_archivos(ruta_usuarios, "USUARIOS")
-            
+            df_usuarios_unido = self._cargar_y_unir_archivos(ruta_usuarios, "USUARIOS")            
             df_novedades_unido['Usuario_Novedad'] = df_novedades_unido['Usuario_Novedad'].astype(str).str.lower()
-            df_usuarios_unido['Usuario_Novedad'] = df_usuarios_unido['Usuario_Novedad'].astype(str).str.lower()
             
             # 2. Aplicar Novedades
             novedades_service = NovedadesService(configuracion)
             df_base_enriquecido, df_novedades_detallado = novedades_service.aplicar_novedades(df_base, df_novedades_unido)
+            
+            print("🔧 Asegurando compatibilidad de tipos para la unión de usuarios...") 
+            if not df_novedades_detallado.empty:
+                df_novedades_detallado['Usuario_Novedad'] = df_novedades_detallado['Usuario_Novedad'].astype(str).str.strip().str.lower()
+            
+            if not df_usuarios_unido.empty:
+                df_usuarios_unido['Usuario_Novedad'] = df_usuarios_unido['Usuario_Novedad'].astype(str).str.strip().str.lower()
             
             df_novedades_detallado = pd.merge(
                 df_novedades_detallado, 
@@ -249,7 +252,7 @@ class NovedadesAnalisisController:
 
             orden_columnas_detalle = [
                 'Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad',
-                'Nombre_Usuario', 'Cargo_Usuario', 'Celular_Corporativo', 'Tipo_Novedad',
+                'Nombre_Usuario', 'Cargo_Usuario', 'Celular_Corporativo','Codigo_Novedad', 'Tipo_Novedad',
                 'Novedad', 'Fecha_Compromiso', 'Valor'
             ]
 

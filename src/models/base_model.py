@@ -2,7 +2,7 @@
 configuracion = {
     "ANALISIS": {
         "engine": "xlrd",
-        "usecols": ["direccion", "barrio", "nomciudad",
+        "usecols": ["direccion", "barrio", "nomciudad","ultpago",
                      "diasatras", "cuotaspag","cedula","saldofac","tipo","numero","fechadoc"],
         "rename_map": { "direccion": "Direccion",
                         "barrio": "Barrio",
@@ -13,6 +13,7 @@ configuracion = {
                         "tipo":"Tipo_Credito", 
                         "numero":"Numero_Credito",
                         "saldofac":"Saldo_Factura" ,
+                        "ultpago":"Fecha_Ultimo_Pago",
                         "fechadoc":"Fecha_Desembolso"
                         }
     },
@@ -213,6 +214,7 @@ ORDEN_COLUMNAS_FINAL = [
     'Valor_Cuota_Vigente',
     'Fecha_Cuota_Atraso',
     'Primera_Cuota_Mora',
+    'Fecha_Ultimo_Pago',
     'Valor_Cuota_Atraso',      
     'Valor_Vencido'
 ]
