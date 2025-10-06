@@ -15,11 +15,12 @@ configuracion = {
     },
     "ANALISIS":{
         "engine": "xlrd",
-        "usecols":["diasatras","tipo","numero"],
+        "usecols":["diasatras","tipo","numero","ultpago"],
         "rename_map":{
                       "tipo":"Tipo_Credito", 
                       "numero":"Numero_Credito",
-                      "diasatras":"Dias_Atraso_Final"
+                      "diasatras":"Dias_Atraso_Final",
+                      "ultpago":"Fecha_Ultimo_pago"
         }
     },
     "R91": {

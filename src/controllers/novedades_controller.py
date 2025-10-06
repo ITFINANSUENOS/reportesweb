@@ -65,6 +65,16 @@ class NovedadesAnalisisController:
                 engine=engine_to_use, # <-- Se añade el motor
                 usecols=file_config["usecols"]
             ).rename(columns=file_config["rename_map"])
+
+            if config_key == "NOVEDADES":
+                print(f"🔍 Identificando empresa para el archivo: {Path(path).name}")
+                if 'arpesod' in file_ext:
+                    df['Empresa'] = 'ARPESOD'
+                elif 'finansueños' in file_ext:
+                    df['Empresa'] = 'FINANSUEÑOS'
+                else:
+                    df['Empresa'] = 'OTRA'
+
             df_list.append(df)
         
         return pd.concat(df_list, ignore_index=True)
@@ -208,7 +218,7 @@ class NovedadesAnalisisController:
                     df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
             
             # 1. Formatear las columnas de FECHAS PURAS para quitar la hora.
-            columnas_fecha_puras_sin_hora = ['Fecha_Desembolso', 'Fecha_Facturada']
+            columnas_fecha_puras_sin_hora = ['Fecha_Desembolso', 'Fecha_Facturada','Fecha_Ultimo_pago']
             for col in columnas_fecha_puras_sin_hora:
                 if col in df_final.columns:
                     # La parte .dt.date elimina la hora
@@ -245,13 +255,13 @@ class NovedadesAnalisisController:
                 'Meta_T.R_%', 'Meta_T.R_$', 'Cuotas_Pagadas', 'Cuota_Vigente',
                 'Fecha_Cuota_Vigente', 'Valor_Cuota_Vigente', 'Fecha_Cuota_Atraso',
                 'Primera_Cuota_Mora', 'Valor_Cuota_Atraso', 'Valor_Vencido',
-                'Fecha_Ultima_Novedad', 'Cantidad_Novedades', 'Dias_Atraso_Final',
+                'Fecha_Ultima_Novedad', 'Cantidad_Novedades','Fecha_Ultimo_pago','Rango_Ultimo_pago', 'Dias_Atraso_Final',
                 'Franja_Meta_Final','Franja_Cartera_Final', 'Rodamiento','Rodamiento_Cartera' ,
-                'Recaudo_Anticipado', 'Recaudo_Meta','Total_Recaudo'
+                'Recaudo_Anticipado', 'Recaudo_Meta','Total_Recaudo','Total_Recaudo_Sin_Anti'
             ]
 
             orden_columnas_detalle = [
-                'Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad',
+                'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad',
                 'Nombre_Usuario', 'Cargo_Usuario', 'Celular_Corporativo','Codigo_Novedad', 'Tipo_Novedad',
                 'Novedad', 'Fecha_Compromiso', 'Valor'
             ]
