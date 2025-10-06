@@ -14,8 +14,47 @@ class AnalisisService:
             raise KeyError("El archivo de Análisis no contiene las columnas 'Tipo_Credito' o 'Numero_Credito' necesarias para crear la llave 'Credito'.")
 
         df_analisis_unido.drop_duplicates(subset=['Credito'], keep='last', inplace=True)
-        df_actualizado = pd.merge(df_base, df_analisis_unido[['Credito', 'Dias_Atraso_Final']], on='Credito', how='left')
+        df_actualizado = pd.merge(df_base, df_analisis_unido[['Credito', 'Dias_Atraso_Final','Fecha_Ultimo_pago']], on='Credito', how='left')
+
+        # --- NUEVO: Bloque para calcular 'Rango_Ultimo_pago' ---
+        print("📅 Calculando el rango de la fecha de último pago...")
+        # 1. Aseguramos que la columna de fecha sea del tipo datetime
+        df_actualizado['Fecha_Ultimo_pago'] = pd.to_datetime(df_actualizado['Fecha_Ultimo_pago'], errors='coerce')
+
+        # 2. Definimos la fecha de referencia (día 5 del mes actual)
+        hoy = pd.Timestamp.now()
+        fecha_referencia = hoy.replace(day=5)
+
+        # 3. Calculamos las fechas límite para cada rango
+        fecha_6_meses = fecha_referencia - pd.DateOffset(months=6)
+        fecha_12_meses = fecha_referencia - pd.DateOffset(months=12)
+        fecha_24_meses = fecha_referencia - pd.DateOffset(months=24)
+        fecha_48_meses = fecha_referencia - pd.DateOffset(months=48)
+
+        # 4. Definimos las condiciones de clasificación
+        condiciones_pago = [
+            df_actualizado['Fecha_Ultimo_pago'] > fecha_6_meses,
+            df_actualizado['Fecha_Ultimo_pago'].between(fecha_12_meses, fecha_6_meses, inclusive='right'),
+            df_actualizado['Fecha_Ultimo_pago'].between(fecha_24_meses, fecha_12_meses, inclusive='right'),
+            df_actualizado['Fecha_Ultimo_pago'].between(fecha_48_meses, fecha_24_meses, inclusive='right'),
+            df_actualizado['Fecha_Ultimo_pago'] <= fecha_48_meses
+        ]
         
+        # 5. Definimos los valores para cada rango
+        valores_pago = [
+            '6 MESES',
+            '6 A 12 MESES',
+            '1 a 2 AÑOS',
+            '2 A 4 AÑOS',
+            'MAS 4 AÑOS'
+        ]
+
+        # 6. Creamos la columna usando np.select
+        df_actualizado['Rango_Ultimo_pago'] = np.select(
+            condiciones_pago, 
+            valores_pago, 
+            default='SIN PAGO REGISTRADO'
+        )
         # --- Depuración (puedes eliminar esto si ya no lo necesitas) ---
         print("\n--- Depurando Tipos de Datos ---")
         # ... (código de depuración) ...
