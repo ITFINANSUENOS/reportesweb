@@ -176,9 +176,32 @@ class NovedadesAnalisisController:
             df_analisis_unido = self._cargar_y_unir_archivos(rutas_analisis, "ANALISIS")
             df_r91_unido = self._cargar_y_unir_archivos(rutas_r91, "R91")
             df_usuarios_unido = self._cargar_y_unir_archivos(ruta_usuarios, "USUARIOS")            
-            df_novedades_unido['Usuario_Novedad'] = df_novedades_unido['Usuario_Novedad'].astype(str).str.lower()
+            # --- INICIO DE LA SOLUCIÓN: Limpieza de Llaves ---
+            print("🧹 Estandarizando y limpiando llaves de unión en todos los archivos...")
+
+            # Limpiar Cedula_Cliente en df_base y df_novedades
+            if 'Cedula_Cliente' in df_base.columns:
+                df_base['Cedula_Cliente'] = df_base['Cedula_Cliente'].astype(str).str.strip()
+            if 'Cedula_Cliente' in df_novedades_unido.columns:
+                df_novedades_unido['Cedula_Cliente'] = df_novedades_unido['Cedula_Cliente'].astype(str).str.strip()
             
-            # 2. Aplicar Novedades
+            # Crear y limpiar la llave 'Credito' en los archivos que la usan
+            if not df_analisis_unido.empty:
+                df_analisis_unido['Credito'] = df_analisis_unido['Tipo_Credito'].astype(str) + '-' + df_analisis_unido['Numero_Credito'].astype(str)
+                df_analisis_unido['Credito'] = df_analisis_unido['Credito'].str.strip()
+
+            if not df_r91_unido.empty:
+                df_r91_unido['Credito'] = df_r91_unido['Tipo_Credito'].astype(str) + '-' + df_r91_unido['Numero_Credito'].astype(str)
+                df_r91_unido['Credito'] = df_r91_unido['Credito'].str.strip()
+            
+            # Limpiar la llave 'Usuario_Novedad' (esto ya lo tenías, pero es parte de la misma lógica)
+            if 'Usuario_Novedad' in df_novedades_unido.columns:
+                df_novedades_unido['Usuario_Novedad'] = df_novedades_unido['Usuario_Novedad'].astype(str).str.strip().str.lower()
+            if not df_usuarios_unido.empty:
+                df_usuarios_unido['Usuario_Novedad'] = df_usuarios_unido['Usuario_Novedad'].astype(str).str.strip().str.lower()
+            # --- FIN DE LA SOLUCIÓN ---
+            
+            # 2. Aplicar Novedades (Ahora usará las cédulas limpias)
             novedades_service = NovedadesService(configuracion)
             df_base_enriquecido, df_novedades_detallado = novedades_service.aplicar_novedades(df_base, df_novedades_unido)
             
