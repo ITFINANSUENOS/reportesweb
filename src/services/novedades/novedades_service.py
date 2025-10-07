@@ -29,7 +29,7 @@ class NovedadesService:
         info_cliente['Nombre_Cliente'] = info_cliente['Nombre_Cliente'].astype(str).str.strip()
         info_cliente.drop_duplicates(subset=['Cedula_Cliente'], keep='first', inplace=True)
         
-        reporte_novedades_detallado = pd.merge(df_novedades, info_cliente, on='Cedula_Cliente', how='left')
+        reporte_novedades_detallado = pd.merge(df_novedades, info_cliente, on='Cedula_Cliente', how='left')             
         
         # --- 4. Preparar el Reporte Base Enriquecido (con resúmenes) ---
         df_base_enriquecido = df_base.copy()

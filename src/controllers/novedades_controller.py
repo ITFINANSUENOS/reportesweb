@@ -7,6 +7,8 @@ from src.services.novedades.novedades_service import NovedadesService
 from src.services.novedades.analisis_service import AnalisisService
 from src.services.novedades.recaudo_service import RecaudoR91Service 
 from src.services.novedades.franjas_service import ReporteFranjasService
+from src.services.novedades.nomina_services import NominaService
+from src.services.novedades.pagos_service import PagosService
 from src.models.novedad_model import configuracion
 
 class NovedadesAnalisisController:
@@ -151,11 +153,27 @@ class NovedadesAnalisisController:
                     start_row = row_idx
                     current_zone_value = next_zone_value
 
-    def procesar_archivos(self, rutas_novedades, ruta_base, rutas_analisis, rutas_r91, ruta_usuarios):
+    def procesar_archivos(self, rutas_novedades, ruta_base, rutas_analisis, rutas_r91, ruta_usuarios,calcular_nomina, ruta_nomina):
         """
         Orquesta todo el proceso: carga el caché, aplica novedades, calcula el rodamiento
         y guarda un reporte multi-hoja.
         """
+        df_reporte_pagos = None
+        datos_nomina = None
+        if calcular_nomina:
+            if not ruta_nomina:
+                messagebox.showwarning("Archivo Faltante", "Seleccionaste 'Calcular Nómina' pero no has cargado el archivo.")
+                return # Detiene la ejecución si no hay archivo
+
+            # Instanciamos y llamamos al servicio de nómina
+            nomina_service = NominaService()
+            datos_nomina = nomina_service.procesar_archivo_nomina(ruta_nomina)
+            
+            # Si el servicio devuelve None, significa que hubo un error y ya se notificó
+            if datos_nomina is None:
+                return
+
+
         if not rutas_novedades or not rutas_analisis or not rutas_r91:
             messagebox.showwarning("Archivos Faltantes", "Debes seleccionar los archivos de Novedades y Análisis.")
             return
@@ -236,6 +254,31 @@ class NovedadesAnalisisController:
 
             # 5. Unir la información de recaudos al reporte final
             df_final = pd.merge(df_con_rodamiento, df_recaudos, on='Credito', how='left')
+
+            datos_nomina = None
+            if calcular_nomina:
+                if not ruta_nomina:
+                    messagebox.showwarning("Archivo Faltante", "Seleccionaste 'Calcular Nómina' pero no has cargado el archivo.")
+                    return
+                nomina_service = NominaService()
+                datos_nomina = nomina_service.procesar_archivo_nomina(ruta_nomina)
+                if datos_nomina is None:
+                    return
+
+            # --- INICIO DE LA MODIFICACIÓN: Bloque de depuración ---
+            print("\n" + "="*25 + " DEPURACIÓN DEL REPORTE DE PAGOS " + "="*25)
+            if df_reporte_pagos is not None and not df_reporte_pagos.empty:
+                print("✅ El DataFrame 'df_reporte_pagos' se generó correctamente.")
+                print("Contenido del reporte de pagos a generar:")
+                print(df_reporte_pagos.to_string()) # .to_string() para mostrar todas las filas y columnas
+            elif df_reporte_pagos is not None:
+                print("⚠️ El DataFrame 'df_reporte_pagos' fue creado pero está VACÍO.")
+                print("   Revisa la lógica en PagosService. Probablemente no encontró datos para agrupar.")
+            else:
+                print("❌ El DataFrame 'df_reporte_pagos' es None. No se llamó al servicio de pagos.")
+            print("="*80 + "\n")
+            # --- FIN DE LA MODIFICACIÓN ---    
+
             for col in ['Recaudo_Anticipado', 'Recaudo_Meta', 'Total_Recaudo']:
                 if col in df_final.columns:
                     df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
@@ -295,22 +338,28 @@ class NovedadesAnalisisController:
             franjas_service = ReporteFranjasService()
             df_reporte_franjas = franjas_service.generar_reporte(df_final)
 
+            # 2. Generar reporte de Pagos (usando la nueva lógica)
+            pagos_service = PagosService()
+            df_reporte_pagos = pagos_service.generar_reporte_pagos(df_final)
+
             # 6. Guardar el reporte multi-hoja
             ruta_salida = filedialog.asksaveasfilename(
-                defaultextension=".xlsx", 
-                initialfile="Reporte_Final_Analisis.xlsx"
+                defaultextension=".xlsx",
+                initialfile="Reporte_Final_Analisis.xlsx",
+                filetypes=[("Archivos de Excel", "*.xlsx"), ("Todos los archivos", "*.*")]
             )
             if not ruta_salida: return
 
             print("💾 Guardando datos en el archivo Excel...")
             with pd.ExcelWriter(ruta_salida, engine='openpyxl') as writer:
-                # Guardamos las hojas simples de forma normal
                 df_final.to_excel(writer, sheet_name='Analisis_de_Cartera', index=False)
                 df_novedades_detallado.to_excel(writer, sheet_name='Detalle_Novedades', index=False)
-                
-                # Usamos nuestra nueva función manual para la hoja compleja
                 self._escribir_y_formatear_franjas(writer, df_reporte_franjas, 'Reporte_Franjas')
-            
+                # --- AÑADIR LA NUEVA HOJA DE PAGOS AL EXCEL ---
+                # --- CAMBIO 2: Guardar la hoja de pagos usando el formateador ---
+                if df_reporte_pagos is not None and not df_reporte_pagos.empty:
+                    # Reutilizamos la función de formato porque la estructura es idéntica
+                    self._escribir_y_formatear_franjas(writer, df_reporte_pagos, 'Reporte_Pagos')
             print("✅ Reporte final con formato guardado exitosamente.")
             messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
 
