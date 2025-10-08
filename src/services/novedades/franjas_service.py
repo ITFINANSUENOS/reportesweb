@@ -13,7 +13,6 @@ class ReporteFranjasService:
         print("🧹 Limpiando, estandarizando y asegurando tipos de datos...")
         df_analisis_cartera = df_analisis_cartera.copy()
         
-        # --- MODIFICADO: Añadimos la nueva columna a la lista de numéricas ---
         columnas_numericas = ['Meta_$', 'Recaudo_Meta', 'Total_Recaudo', 'Meta_T.R_$', 'Recaudo_Anticipado', 'Total_Recaudo_Sin_Anti']
         for col in columnas_numericas:
             if col in df_analisis_cartera.columns:
@@ -49,7 +48,6 @@ class ReporteFranjasService:
             df_pivot.columns = [f'{val}_{franja}' for val, franja in df_pivot.columns]
             df_pivot = df_pivot.reset_index()
         except Exception as e:
-            # ... (manejo de error sin cambios)
             print(f"❌ Error al pivotar: {e}")
             df_pivot = pd.DataFrame(columns=['Zona', 'Regional_Cobro'])
             for franja in franjas_validas:
@@ -58,7 +56,6 @@ class ReporteFranjasService:
 
         # --- Paso 5: Crear la Estructura del DataFrame Final ---
         print("🏗️ Creando estructura del reporte final...")
-        # --- MODIFICADO: Añadimos la nueva columna al header ---
         header = [
             ('ZONA', ''), ('REGIONAL', ''),
             ('1 A 30', 'META_$'), ('1 A 30', 'Recaudo_Meta'), ('1 A 30', 'Cumplimiento_%'),
@@ -73,7 +70,7 @@ class ReporteFranjasService:
         if not df_pivot.empty and 'Zona' in df_pivot.columns:
             df_franjas[('ZONA', '')] = df_pivot['Zona']
             df_franjas[('REGIONAL', '')] = df_pivot['Regional_Cobro']
-        # ... (resto del llenado de franjas sin cambios)
+            
         franjas_map = {
             '1 A 30': '1 a 30', '31 A 90': '31 a 90',
             '91 A 180': '91 a 180', '181 A 360': '181 a 360'
@@ -82,36 +79,36 @@ class ReporteFranjasService:
             meta_col, recaudo_col = f'Meta_$_{franja_pivot}', f'Recaudo_Meta_{franja_pivot}'
             df_franjas[(franja_reporte, 'META_$')] = df_pivot.get(meta_col, 0)
             df_franjas[(franja_reporte, 'Recaudo_Meta')] = df_pivot.get(recaudo_col, 0)
+            
         df_franjas = df_franjas.fillna(0)
+        
         for franja in franjas_map.keys():
             meta = df_franjas[(franja, 'META_$')]
             recaudo = df_franjas[(franja, 'Recaudo_Meta')]
             porcentaje_decimal = np.where(meta != 0, recaudo / meta, 0)
-            df_franjas[(franja, 'Cumplimiento_%')] = [f"{round(x * 100)}%" for x in porcentaje_decimal]
+            # --- LÍNEA MODIFICADA ---
+            df_franjas[(franja, 'Cumplimiento_%')] = [f"{round(x * 100, 2)}%".replace('.', ',') for x in porcentaje_decimal]
 
-        # --- PASO 7: CALCULAR TOTALES POR ZONA (CORREGIDO Y AMPLIADO) ---
+        # --- PASO 7: CALCULAR TOTALES POR ZONA ---
         print("📊 Calculando y asignando totales por Zona...")
-        # --- MODIFICADO: Agregamos la nueva columna al cálculo ---
         df_totales_zona = df_filtrado.groupby('Zona').agg(
             Suma_Total_Recaudo=('Total_Recaudo', 'sum'),
-            Suma_Total_Recaudo_Sin_Anti=('Total_Recaudo_Sin_Anti', 'sum'), # <-- NUEVO
+            Suma_Total_Recaudo_Sin_Anti=('Total_Recaudo_Sin_Anti', 'sum'),
             Suma_Recaudo_Anticipado=('Recaudo_Anticipado', 'sum')
         ).reset_index()
 
         # --- PASO 8: ASIGNAR LOS TOTALES ---
         if not df_franjas.empty and not df_totales_zona.empty:
-            # Mapeos para cada columna de total
             total_recaudo_map = df_totales_zona.set_index('Zona')['Suma_Total_Recaudo'].to_dict()
-            total_sin_anti_map = df_totales_zona.set_index('Zona')['Suma_Total_Recaudo_Sin_Anti'].to_dict() # <-- NUEVO
+            total_sin_anti_map = df_totales_zona.set_index('Zona')['Suma_Total_Recaudo_Sin_Anti'].to_dict()
             recaudo_anticipo_map = df_totales_zona.set_index('Zona')['Suma_Recaudo_Anticipado'].to_dict()
             
-            # Asignar los valores correctos a las columnas del reporte
             df_franjas[('Total_Recaudo', '')] = df_franjas[('ZONA', '')].map(total_recaudo_map).fillna(0)
-            df_franjas[('Total_Recaudo_Sin_Anti', '')] = df_franjas[('ZONA', '')].map(total_sin_anti_map).fillna(0) # <-- NUEVO
+            df_franjas[('Total_Recaudo_Sin_Anti', '')] = df_franjas[('ZONA', '')].map(total_sin_anti_map).fillna(0)
             df_franjas[('Recaudo_Anticipo', '')] = df_franjas[('ZONA', '')].map(recaudo_anticipo_map).fillna(0)
         else:
             df_franjas[('Total_Recaudo', '')] = 0
-            df_franjas[('Total_Recaudo_Sin_Anti', '')] = 0 # <-- NUEVO
+            df_franjas[('Total_Recaudo_Sin_Anti', '')] = 0
             df_franjas[('Recaudo_Anticipo', '')] = 0
         
         df_franjas = df_franjas.fillna(0)
