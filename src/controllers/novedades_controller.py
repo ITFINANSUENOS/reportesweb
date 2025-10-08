@@ -340,7 +340,7 @@ class NovedadesAnalisisController:
 
             # 2. Generar reporte de Pagos (usando la nueva lógica)
             pagos_service = PagosService()
-            df_reporte_pagos = pagos_service.generar_reporte_pagos(df_final)
+            df_reporte_pagos = pagos_service.generar_reporte_pagos(df_final,datos_nomina)
 
             # 6. Guardar el reporte multi-hoja
             ruta_salida = filedialog.asksaveasfilename(
