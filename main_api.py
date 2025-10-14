@@ -10,8 +10,7 @@ app = FastAPI(
 # Incluye las rutas de Datacrédito en la aplicación principal
 app.include_router(datacredito_route.router, prefix="/api/v1")
 
-# (A futuro) Incluye las rutas de CIFIN
-# app.include_router(cifin_routes.router, prefix="/api/v1")
+
 
 @app.get("/", tags=["Root"])
 def read_root():
