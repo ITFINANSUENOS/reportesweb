@@ -1,19 +1,18 @@
 from tkinter import filedialog, messagebox
 import threading
-import pandas as pd
 from pathlib import Path
 
-# Importaciones de tu proyecto
+# Importaciones de servcios y vistas
 from src.views.base_view.base_view import BaseMensualView
-from src.services.base.report_service import ReportService
-from src.models.base_model import configuracion, ORDEN_COLUMNAS_FINAL
-from src.services.base.update_base_service import UpdateBaseService
-
+from src.services.base.processing_orchestrator_service import ProcessingOrchestratorService
+from src.services.base.file_handler_service import FileHandlerService
 class BaseMensualController:
-    def __init__(self,view=None):
+    def __init__(self, view=None):
         self.view = view
         self.rutas_archivos = {} 
         self.ruta_reporte_base = None
+        # Instanciamos el servicio de archivos para usarlo después
+        self.file_handler_service = FileHandlerService()
 
     def set_view(self, view):
         self.view = view
@@ -29,6 +28,7 @@ class BaseMensualController:
         """Abre un diálogo para seleccionar uno o varios archivos."""
         filetypes = [("Excel files", "*.xlsx *.XLSX *.xls *.XLS")]
         
+        # Esta lógica de UI se mantiene en el controlador, lo cual es correcto.
         if tipo_archivo in ["ANALISIS", "R91", "VENCIMIENTOS", "R03"]:
             rutas = filedialog.askopenfilenames(title=f"Seleccione archivos para {tipo_archivo}", filetypes=filetypes)
         else:
@@ -40,11 +40,11 @@ class BaseMensualController:
             display_text = Path(rutas[0]).name
             if len(rutas) > 1:
                 display_text = f"{len(rutas)} archivos seleccionados"
-
+            
             if self.view:
-               self.view.actualizar_ruta_label(tipo_archivo, display_text)
+                self.view.actualizar_ruta_label(tipo_archivo, display_text)
             else:
-               print("Error: La vista no ha sido asignada al controlador.") 
+                print("Error: La vista no ha sido asignada al controlador.") 
             
             print(f"Archivos para {tipo_archivo}: {self.rutas_archivos[tipo_archivo]}")
 
@@ -56,79 +56,44 @@ class BaseMensualController:
         if ruta:
             self.ruta_reporte_base = ruta
             if self.view:
-                # Usamos el estilo 'Success.TLabel' para consistencia visual
                 self.view.base_report_path_label.config(text=Path(ruta).name, style='Success.TLabel')
             print(f"Reporte base para actualización seleccionado: {self.ruta_reporte_base}")
             
     def procesar_archivos(self):
-        """Inicia el procesamiento de los archivos en un hilo separado para no congelar la UI."""
+        """Inicia el procesamiento en un hilo separado para no congelar la UI."""
         self.view.procesar_button.config(state="disabled")
         self.view.actualizar_estado("Iniciando proceso...", 0)
         
-        thread = threading.Thread(target=self._ejecutar_proceso)
+        # El hilo ahora llamará a un método mucho más limpio.
+        thread = threading.Thread(target=self._ejecutar_proceso_orquestado)
         thread.start()
 
-    def _ejecutar_proceso(self):
-        """Lógica de procesamiento que se ejecuta en segundo plano."""
+    def _ejecutar_proceso_orquestado(self):
+        """
+        Orquesta el proceso utilizando servicios, manteniendo al controlador
+        libre de lógica de negocio.
+        """
         try:
+            # 1. Recolectar datos de la UI
             modo_actualizacion = self.view.update_mode_var.get()
             start_date = self.view.start_date_entry.get() or None
             end_date = self.view.end_date_entry.get() or None
             
-            lista_final_rutas = []
-            for lista_rutas in self.rutas_archivos.values():
-                lista_final_rutas.extend(lista_rutas)
+            lista_final_rutas = [ruta for lista in self.rutas_archivos.values() for ruta in lista]
 
-            if not lista_final_rutas:
-                messagebox.showwarning("Sin Archivos", "No se ha seleccionado ningún archivo para procesar.")
-                return
-
-            reporte_negativos = pd.DataFrame()
-            reporte_correcciones = pd.DataFrame()
+            # 2. Instanciar y ejecutar el servicio orquestador
+            # Le pasamos el método de la vista como callback para que el servicio informe el progreso.
+            orchestrator = ProcessingOrchestratorService(progress_callback=self.view.actualizar_estado)
             
-            service_principal = ReportService(config=configuracion)
-            
-            if modo_actualizacion:
-                # --- MODO ACTUALIZACIÓN RÁPIDA (DESDE EXCEL) ---
-                self.view.actualizar_estado("Iniciando sincronización rápida...", 10)
-                
-                if not self.ruta_reporte_base:
-                    messagebox.showerror("Error", "Para el modo actualización, primero debe seleccionar el reporte de Excel anterior.")
-                    return
-                
-                print('Cargando base anterior desde excel...')
-                self.view.actualizar_estado(f"Cargando base anterior desde Excel...", 20)
-                try:
-                    df_base_anterior = pd.read_excel(self.ruta_reporte_base, dtype=str)
-                except Exception as e:
-                    messagebox.showerror("Error al leer Excel", f"No se pudo leer el archivo Excel base: {e}")
-                    return
-            
-                # 1. USAMOS DATALOADER para cargar y estandarizar los nuevos archivos.
-                self.view.actualizar_estado("Estandarizando archivos nuevos...", 30)
-                dataframes_nuevos_estandarizados = service_principal.data_loader.load_dataframes(lista_final_rutas)
-                
-                # 2. Creamos la instancia del UpdateService.
-                update_service = UpdateBaseService(report_service=service_principal,)
-                
-                self.view.actualizar_estado("Sincronizando cambios...", 60)
-                reporte_final, reporte_negativos, reporte_correcciones = update_service.sincronizar_reporte(
-                    df_base_anterior, 
-                    dataframes_nuevos_estandarizados 
-                )
+            result_dataframes = orchestrator.execute_processing(
+                file_paths=lista_final_rutas,
+                update_mode=modo_actualizacion,
+                base_report_path=self.ruta_reporte_base,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-            else:
-                self.view.actualizar_estado("Iniciando construcción completa...", 10)
-                reporte_final, reporte_negativos, reporte_correcciones = service_principal.generate_consolidated_report(
-                    file_paths=lista_final_rutas,
-                    orden_columnas=ORDEN_COLUMNAS_FINAL,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-
-            if reporte_final is None or reporte_final.empty:
-                raise Exception("El reporte final está vacío o no se generó. Verifique los archivos de entrada.")
-
+            # 3. Gestionar el guardado del archivo (interacción con el usuario)
             self.view.actualizar_estado("Esperando para guardar el archivo...", 90)
             nombre_archivo_salida = filedialog.asksaveasfilename(
                 title="Guardar reporte como...",
@@ -142,30 +107,17 @@ class BaseMensualController:
                 messagebox.showinfo("Cancelado", "La operación de guardado fue cancelada.")
                 return
 
-            print(f"💾 Guardando reporte en {nombre_archivo_salida}...")
-            with pd.ExcelWriter(nombre_archivo_salida, engine='openpyxl') as writer:
-                reporte_final.to_excel(writer, sheet_name='Reporte Consolidado', index=False)
-                
-                if reporte_negativos is not None and not reporte_negativos.empty:
-                    reporte_negativos.to_excel(writer, sheet_name='Creditos_Negativos', index=False)
-                    print("   - Hoja 'Creditos_Negativos' añadida.")
-
-                if reporte_correcciones is not None and not reporte_correcciones.empty:
-                    print("   - 🎨 Aplicando estilos a la hoja de correcciones...")
-                    def aplicar_estilos(val):
-                        if val == 'CORREGIR': return 'background-color: #FFCDD2'
-                        if val == 'BIEN': return 'background-color: #C8E6C9'
-                        return 'background-color: #FFFFFF'
-                    
-                    styled_df = reporte_correcciones.style.applymap(aplicar_estilos)
-                    styled_df.to_excel(writer, sheet_name='Registros_Para_Corregir', index=False)
-                    print("   - ✅ Hoja 'Registros_Para_Corregir' añadida con colores.")
+            # 4. Delegar el guardado al servicio de archivos
+            self.file_handler_service.save_report_to_excel(nombre_archivo_salida, result_dataframes)
             
             self.view.actualizar_estado("¡Éxito! Reporte guardado.", 100)
-            messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}") 
+            messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}")
 
-        except Exception as e:
+        except (ValueError, IOError, Exception) as e:
+            # Capturamos cualquier error de los servicios y lo mostramos al usuario.
             messagebox.showerror("Error en el Proceso", f"Ocurrió un error: {str(e)}")
             self.view.actualizar_estado(f"Error: {str(e)}", 0)
         finally:
-            self.view.procesar_button.config(state="normal")
+            # Aseguramos que el botón se reactive siempre.
+            if self.view and self.view.winfo_exists():
+                self.view.procesar_button.config(state="normal")
