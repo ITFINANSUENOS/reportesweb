@@ -5,6 +5,8 @@ from src.services.base.dataloader_service import DataLoaderService
 from src.services.base.creditdetails_service import CreditDetailsService
 from src.services.base.product_service import ProductsSalesService
 from src.services.base.dataprocessor_service import ReportProcessorService
+from src.services.base.metrics_calculation_service import MetricsCalculationService
+from src.services.base.categorization_service import CategorizationService
 
 class ReportService:
     """
@@ -17,6 +19,8 @@ class ReportService:
         self.credit_details = CreditDetailsService()
         self.products_sales = ProductsSalesService()
         self.report_processor = ReportProcessorService(config)
+        self.metrics_service = MetricsCalculationService()
+        self.categorization_service = CategorizationService()
 
     def generate_consolidated_report(self, file_paths, orden_columnas, start_date=None, end_date=None, dataframes_preloaded=None):
         """
@@ -55,14 +59,11 @@ class ReportService:
             ]
             
             # Columnas por las que se agrupará
-            columnas_agrupacion = ['Credito', 'Cedula_Cliente']
-            
+            columnas_agrupacion = ['Credito', 'Cedula_Cliente']            
             # Asegurarnos de que las columnas a sumar existan en el DataFrame
             columnas_a_sumar_existentes = [col for col in columnas_a_sumar if col in r91_df.columns]
-            
             # Crear el diccionario de agregación dinámicamente
             agg_dict = {col: 'sum' for col in columnas_a_sumar_existentes}
-            
             # Para el resto de las columnas, mantener el primer valor
             for col in r91_df.columns:
                 if col not in columnas_agrupacion and col not in columnas_a_sumar_existentes:
@@ -135,11 +136,9 @@ class ReportService:
                     # Convertir a string y eliminar decimales para la columna Codigo_Vendedor
                     info_df[merge_key] = pd.to_numeric(info_df[merge_key], errors='coerce').fillna(0).astype('int64').astype(str)
                     reporte_final[merge_key] = pd.to_numeric(reporte_final[merge_key], errors='coerce').fillna(0).astype('int64').astype(str)
-                    
                     # Asegurar el mismo formato en el reporte_final
                     reporte_final[merge_key] = reporte_final[merge_key].astype(str).str.replace(r'\.0$', '', regex=True)
                     reporte_final[merge_key] = reporte_final[merge_key].str.strip()
-                    
                     reporte_final = pd.merge(reporte_final, info_df.drop_duplicates(subset=merge_key), 
                                         on=merge_key, how='left')
         
@@ -152,9 +151,9 @@ class ReportService:
         reporte_final = self.products_sales.add_product_details(reporte_final, crtmp_df)
         reporte_final = self.credit_details.enrich_credit_details(reporte_final, sc04_df, fnz001_df)
         reporte_final = self.credit_details.clean_installment_data(reporte_final)
-        reporte_final = self.report_processor.map_call_center_data(reporte_final)
-        reporte_final, negativos_fnz003 = self.report_processor.calculate_balances(reporte_final, fnz003_df)
-        reporte_final = self.report_processor.calculate_goal_metrics(reporte_final, metas_franjas_df)
+        reporte_final = self.categorization_service.map_call_center_data(reporte_final)
+        reporte_final, negativos_fnz003 = self.metrics_service.calculate_balances(reporte_final, fnz003_df)
+        reporte_final = self.metrics_service.calculate_goal_metrics(reporte_final, metas_franjas_df)
         reporte_final = self.credit_details.adjust_arrears_status(reporte_final)
         reporte_final = self.report_processor.filter_by_date_range(reporte_final, start_date, end_date)
         reporte_final, df_a_corregir = self.report_processor.finalize_report(reporte_final, orden_columnas)
@@ -164,25 +163,19 @@ class ReportService:
 
         if lista_de_negativos:
             print("📊 Unificando reportes de créditos con valores negativos...")
-            
             # Unimos todas las listas de créditos negativos
             todos_los_negativos = pd.concat(lista_de_negativos, ignore_index=True)
-            
             # Preparamos la información de clientes del reporte final para el cruce
             info_clientes = reporte_final[['Credito', 'Cedula_Cliente', 'Nombre_Cliente']].drop_duplicates(subset=['Credito'])
-            
             reporte_negativos_final = pd.merge(
                 todos_los_negativos[['Credito', 'Observacion']].drop_duplicates(), 
                 info_clientes, 
                 on='Credito', 
                 how='left'
             )
-            
             # Seleccionamos y ordenamos las columnas finales para el reporte
             columnas_finales_negativos = ['Credito', 'Cedula_Cliente', 'Nombre_Cliente', 'Observacion']
             # Nos aseguramos que todas las columnas existan antes de seleccionarlas
             columnas_existentes = [col for col in columnas_finales_negativos if col in reporte_negativos_final.columns]
             reporte_negativos_final = reporte_negativos_final[columnas_existentes].drop_duplicates()
-
-        # Se devuelven ambos reportes para que el controlador los guarde
         return reporte_final, reporte_negativos_final, df_a_corregir
