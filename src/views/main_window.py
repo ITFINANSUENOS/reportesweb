@@ -23,7 +23,7 @@ class MainWindow:
         self.root = root
         self.config = AppConfig()
         
-        create_rounded_button_images(self.config)
+        self.button_images = create_rounded_button_images(self.config)
 
         # --- NUEVO: Guardamos los controllers en un diccionario para un acceso más limpio ---
         self.controllers = {
@@ -44,9 +44,6 @@ class MainWindow:
         # --- NUEVO: Métodos para organizar la creación de la UI ---
         self._setup_styles()
         self._create_main_layout()
-
-        # --- Asignar la vista principal a los controllers que la necesiten ---
-        # Esto permite que los controllers actualicen la barra de estado global.
         controller_anticipos.set_view(self)
         controller_convenios.set_view(self)
 
@@ -56,25 +53,15 @@ class MainWindow:
         """
         style = ttk.Style()
         style.theme_use('clam')
-
-        # --- Paleta de colores (sin cambios) ---
         bg_color = self.config.bg_color
-        # ... (el resto de tus variables de color)
-
-        # --- Estilos Generales para Widgets (sin cambios) ---
         style.configure('TFrame', background=bg_color)
-        # ... (el resto de tus estilos generales)
-
-        # --- Estilo para el Notebook (Pestañas) (sin cambios) ---
         style.configure('TNotebook', background=bg_color, borderwidth=0)
-        # ... (el resto de la configuración del notebook)
         
-        # --- Estilos Generales para Botones (AQUÍ ESTÁ LA CORRECCIÓN) ---
         
         # 1. Cargamos las imágenes (sin cambios)
-        self.button_normal_img = tk.PhotoImage(file="button_normal.png")
-        self.button_hover_img = tk.PhotoImage(file="button_hover.png")
-        self.button_pressed_img = tk.PhotoImage(file="button_pressed.png")
+        self.button_normal_img = self.button_images["normal"]
+        self.button_hover_img = self.button_images["hover"]
+        self.button_pressed_img = self.button_images["pressed"]
 
         # 2. Creamos el elemento de fondo con la imagen (sin cambios)
         style.element_create("Modern.Button.background", "image", self.button_normal_img,
@@ -82,9 +69,6 @@ class MainWindow:
             ('pressed', self.button_pressed_img),
             border=10, sticky="nsew")
 
-        # 3. Creamos el layout del nuevo estilo de botón (CORREGIDO)
-        #    Este layout le dice a ttk que dibuje nuestro fondo personalizado
-        #    y luego, encima, los elementos estándar de un botón (como su etiqueta de texto).
         style.layout("Modern.TButton", [
             ('Modern.Button.background', {'sticky': 'nsew'}),
             ('Button.padding', {'sticky': 'nsew', 'children': [
@@ -92,11 +76,6 @@ class MainWindow:
             ]})
         ])
         
-        # ELIMINADO: La línea style.element_create("Modern.Button.label", "text", ...)
-        # que causaba el error ha sido removida.
-
-        # 4. Configuramos el estilo final (CORREGIDO)
-        #    Ahora, las opciones de fuente y color de texto se añaden aquí directamente.
         style.configure("Modern.TButton", 
                         font=("Helvetica", 12, "bold"),
                         foreground=self.config.button_text_color,
@@ -123,10 +102,7 @@ class MainWindow:
         # --- Creación del Notebook que contendrá las pestañas ---
         notebook = ttk.Notebook(main_frame, style='TNotebook')
         notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # --- Creación e inserción de las Vistas en cada Pestaña ---
-        
-        # Pestaña 1: Convenios y Anticipos
+
         convenios_view = ConveniosAnticiposView(
             notebook, 
             self.controllers["convenios"], 
@@ -164,12 +140,6 @@ class MainWindow:
         footer_label = ttk.Label(status_frame, text=footer_text)
         footer_label.pack(side=tk.RIGHT)
     
-    # --- ELIMINADO: El método `_crear_menu_principal` ya no es necesario ---
-    # --- ELIMINADO: El diccionario `self.frames` y el método `mostrar_vista` ---
-    # La navegación principal ahora es manejada automáticamente por el ttk.Notebook.
-
-    # --- Métodos para actualizar la UI desde los controllers (se mantienen) ---
-    
     def update_status(self, message: str):
         """Actualiza el texto de estado en la barra inferior."""
         self.status_label.config(text=f"Estado: {message}")
@@ -180,11 +150,6 @@ class MainWindow:
         Actualiza una barra de progreso. Puedes implementarla en la barra de estado.
         Por ahora, solo imprime en consola para mantener la funcionalidad.
         """
-        # Ejemplo de implementación visual:
-        # if not hasattr(self, 'progress_bar'):
-        #     self.progress_bar = ttk.Progressbar(self.status_label.master, length=150)
-        #     self.progress_bar.pack(side=tk.LEFT, padx=10)
-        # self.progress_bar['value'] = progress
         print(f"Progreso: {progress}%")
         self.root.update_idletasks()
     
