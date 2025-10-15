@@ -59,7 +59,7 @@ class BaseCentralesView(ttk.Frame):
         ttk.Entry(dc_frame, textvariable=self.dc_correcciones_path, width=60, state="readonly").grid(row=3, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(dc_frame, text="Seleccionar...", command=self._select_dc_corrections).grid(row=3, column=1, sticky="ew")
         
-        ttk.Button(dc_frame, text="Generar Reporte Datacredito", command=self._process_datacredito, style='Modern.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10), ipady=5)
+        ttk.Button(dc_frame, text="▶ Generar Reporte Datacredito", command=self._process_datacredito, style='Modern.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10), ipady=5)
         dc_frame.grid_columnconfigure(0, weight=1)
         
         
@@ -79,7 +79,7 @@ class BaseCentralesView(ttk.Frame):
         ttk.Entry(cifin_frame, textvariable=self.cifin_correcciones_path, width=60, state="readonly").grid(row=3, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(cifin_frame, text="Seleccionar...", command=self._select_cifin_corrections).grid(row=3, column=1, sticky="ew")
         
-        ttk.Button(cifin_frame, text="Generar Reporte CIFIN", command=self._process_cifin, style='Modern.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10), ipady=5)
+        ttk.Button(cifin_frame, text="▶ Generar Reporte CIFIN", command=self._process_cifin, style='Modern.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10), ipady=5)
         cifin_frame.grid_columnconfigure(0, weight=1)
         
         

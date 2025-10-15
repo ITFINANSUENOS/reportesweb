@@ -66,7 +66,7 @@ class ConveniosAnticiposView(ttk.Frame):
 
         ttk.Button(
             convenios_form, 
-            text="Generar Reporte de Convenios",
+            text="▶ Generar Reporte de Convenios",
             command=self._generate_convenios_report, 
             style='Modern.TButton'
         ).grid(row=2, column=0, columnspan=2, pady=(20, 10), ipady=5)
@@ -92,7 +92,7 @@ class ConveniosAnticiposView(ttk.Frame):
 
         ttk.Button(
             anticipos_form, 
-            text="Generar Reporte de Anticipos",
+            text="▶ Generar Reporte de Anticipos",
             command=self._generate_anticipos_report, 
             style='Modern.TButton'
         ).grid(row=2, column=0, columnspan=2, pady=(20, 10), ipady=5)
