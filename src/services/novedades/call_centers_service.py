@@ -51,10 +51,11 @@ class CallCenterService:
         df_cl1_4 = df[df['Zona'].isin(['CL1', 'CL2', 'CL3', 'CL4']) & (df['Franja_Meta'] == 'AL DIA')]
         
         # Agrupamos para consolidar los datos
-        agg_cl1_4 = df_cl1_4.groupby(['Zona', 'Cobrador']).agg(
-            META = pd.NamedAgg(column='Meta_General', aggfunc='sum'),
-            Recaudo_Meta=pd.NamedAgg(column='Recaudo_Meta', aggfunc='sum')
-        ).reset_index()
+        agg_cl1_4 = df_cl1_4.groupby(['Zona', 'Cobrador']).agg(**{
+            # --- CORRECCIÓN AQUÍ ---
+            'META_$': pd.NamedAgg(column='Meta_General', aggfunc='sum'),
+            'Recaudo_Meta': pd.NamedAgg(column='Recaudo_Meta', aggfunc='sum')
+        }).reset_index()
 
         # Renombramos las columnas para estandarizar
         agg_cl1_4.rename(columns={'Zona': 'CALL_CENTER', 'Cobrador': 'NOMBRE'}, inplace=True)
@@ -65,10 +66,11 @@ class CallCenterService:
         df_cl5_9 = df[df['Call_Center_Apoyo'].isin(['CL5', 'CL6', 'CL7', 'CL8', 'CL9'])]
         
         # Agrupamos para consolidar los datos
-        agg_cl5_9 = df_cl5_9.groupby(['Call_Center_Apoyo', 'Nombre_Call_Center']).agg(
-            META=pd.NamedAgg(column='Meta_$', aggfunc='sum'),
-            Recaudo_Meta=pd.NamedAgg(column='Recaudo_Meta', aggfunc='sum')
-        ).reset_index()
+        agg_cl5_9 = df_cl5_9.groupby(['Call_Center_Apoyo', 'Nombre_Call_Center']).agg(**{
+            # --- CORRECCIÓN AQUÍ ---
+            'META_$': pd.NamedAgg(column='Meta_$', aggfunc='sum'),
+            'Recaudo_Meta': pd.NamedAgg(column='Recaudo_Meta', aggfunc='sum')
+        }).reset_index()
 
         # Renombramos las columnas para estandarizar
         agg_cl5_9.rename(columns={'Call_Center_Apoyo': 'CALL_CENTER', 'Nombre_Call_Center': 'NOMBRE'}, inplace=True)
@@ -85,7 +87,7 @@ class CallCenterService:
                 'CALL_CENTER', 'NOMBRE', 'META_$', 'Recaudo_Meta', 'Faltante', 'Cumplimiento_%'
             ])
 
-        # Calcular 'Faltante'
+        # Calcular 'Faltante' (Ahora funcionará)
         df_reporte['Faltante'] = df_reporte['META_$'] - df_reporte['Recaudo_Meta']
 
         # Calcular 'Cumplimiento_%' manejando división por cero
@@ -97,16 +99,21 @@ class CallCenterService:
         df_reporte['Cumplimiento_%'] = [f"{format(x * 100, '.2f')}%".replace('.', ',') for x in cumplimiento_decimal]
 
         
-        # --- Parte 4: Finalizar y Ordenar ---
-        print("✨ Formateando y ordenando el reporte final...")
+         # --- Parte 4: Aplicar Formato de Moneda ---
+        print("💰 Aplicando formato de moneda a las columnas financieras...")
         
-        # Seleccionar y ordenar las columnas finales
+        columnas_moneda = ['META_$', 'Recaudo_Meta', 'Faltante']
+        for col in columnas_moneda:
+            if col in df_reporte.columns:
+                df_reporte[col] = df_reporte[col].apply(lambda x: f"$ {int(round(x, 0)):,}".replace(',', '.'))
+    
+        # --- Parte 5: Finalizar y Ordenar ---
+        print("✨ Ordenando el reporte final...")
+        
         columnas_finales = [
             'CALL_CENTER', 'NOMBRE', 'META_$', 'Recaudo_Meta', 'Faltante', 'Cumplimiento_%'
         ]
         df_reporte = df_reporte[columnas_finales]
-
-        # Ordenar por el nombre del Call Center
         df_reporte = df_reporte.sort_values(by='CALL_CENTER').reset_index(drop=True)
 
         print("✅ Reporte de Call Centers generado exitosamente.")

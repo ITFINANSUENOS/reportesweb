@@ -9,6 +9,7 @@ from src.services.novedades.recaudo_service import RecaudoR91Service
 from src.services.novedades.franjas_service import ReporteFranjasService
 from src.services.novedades.nomina_services import NominaService
 from src.services.novedades.pagos_service import PagosService
+from src.services.novedades.call_centers_service import CallCenterService
 from src.models.novedad_model import configuracion
 
 class NovedadesAnalisisController:
@@ -338,9 +339,12 @@ class NovedadesAnalisisController:
             franjas_service = ReporteFranjasService()
             df_reporte_franjas = franjas_service.generar_reporte(df_final)
 
-            # 2. Generar reporte de Pagos (usando la nueva lógica)
             pagos_service = PagosService()
             df_reporte_pagos = pagos_service.generar_reporte_pagos(df_final,datos_nomina)
+
+            call_center_service = CallCenterService()
+            df_reporte_call_centers = call_center_service.generar_reporte_call_center(df_final)
+
 
             # 6. Guardar el reporte multi-hoja
             ruta_salida = filedialog.asksaveasfilename(
@@ -355,11 +359,13 @@ class NovedadesAnalisisController:
                 df_final.to_excel(writer, sheet_name='Analisis_de_Cartera', index=False)
                 df_novedades_detallado.to_excel(writer, sheet_name='Detalle_Novedades', index=False)
                 self._escribir_y_formatear_franjas(writer, df_reporte_franjas, 'Reporte_Franjas')
-                # --- AÑADIR LA NUEVA HOJA DE PAGOS AL EXCEL ---
-                # --- CAMBIO 2: Guardar la hoja de pagos usando el formateador ---
+
                 if df_reporte_pagos is not None and not df_reporte_pagos.empty:
-                    # Reutilizamos la función de formato porque la estructura es idéntica
                     self._escribir_y_formatear_franjas(writer, df_reporte_pagos, 'Reporte_Pagos')
+             
+                if df_reporte_call_centers is not None and not df_reporte_call_centers.empty:
+                    df_reporte_call_centers.to_excel(writer, sheet_name='Reporte_Call_Centers', index=False)
+
             print("✅ Reporte final con formato guardado exitosamente.")
             messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
 

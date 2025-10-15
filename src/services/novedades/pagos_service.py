@@ -184,6 +184,24 @@ class PagosService:
         df_reporte['sort_key_regional'] = pd.Categorical(df_reporte[('REGIONAL', '')], categories=custom_order, ordered=True)
         df_reporte = df_reporte.sort_values(by=['sort_key_regional', 'sort_key_gestor', ('ZONA', '')]).reset_index(drop=True)
         df_reporte.drop(columns=['sort_key_gestor', 'sort_key_regional'], inplace=True)
+
+        print("💰 Aplicando formato de moneda al reporte final...")
+        
+        columnas_moneda = [
+            ('1 A 30', 'META_$'), ('1 A 30', 'Recaudo_Meta'), ('1 A 30', 'Comision'),
+            ('31 A 90', 'META_$'), ('31 A 90', 'Recaudo_Meta'), ('31 A 90', 'Comision'),
+            ('91 A 180', 'META_$'), ('91 A 180', 'Recaudo_Meta'), ('91 A 180', 'Comision'),
+            ('181 A 360', 'META_$'), ('181 A 360', 'Recaudo_Meta'), ('181 A 360', 'Comision'),
+            ('TOTALES', 'Recaudo_Meta_TR'), ('TOTALES', 'META_TR$'), ('TOTALES', 'Comision_TR'),
+            ('PAGO FINAL', 'BASICO'), ('PAGO FINAL', 'COMISIONES'), ('PAGO FINAL', 'TOTAL_PAGAR')
+        ]
+
+        for col in columnas_moneda:
+            if col in df_reporte.columns:
+                # Se asegura que la columna sea numérica antes de darle formato
+                df_reporte[col] = pd.to_numeric(df_reporte[col], errors='coerce').fillna(0)
+                # Aplica el formato de moneda con '$' y separador de miles con '.'
+                df_reporte[col] = df_reporte[col].apply(lambda x: f"$ {int(round(x, 0)):,}".replace(',', '.'))
         
         print("✅ Reporte de pagos con cálculo final generado.")
         return df_reporte
