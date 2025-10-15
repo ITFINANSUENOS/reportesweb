@@ -76,3 +76,56 @@ class CategorizationService:
         
         print("✅ Mapeo completado.")
         return reporte_df
+    
+    def calculate_last_payment_range(self, reporte_df):
+        """
+        Calcula el rango de tiempo desde el último pago inicial hasta una fecha de referencia.
+        Crea la columna 'Rango_Ultimo_pago_Inicial'.
+        """
+        print("📅 Calculando el rango de la fecha de último pago inicial...")
+
+        # Verificamos que la columna necesaria exista
+        if 'Fecha_Ultimo_pago_Inicial' not in reporte_df.columns:
+            print("   - ⚠️ Columna 'Fecha_Ultimo_pago_Inicial' no encontrada. Se omite el cálculo del rango.")
+            return reporte_df
+        
+        # 1. Aseguramos que la columna sea del tipo datetime
+        reporte_df['Fecha_Ultimo_pago_Inicial'] = pd.to_datetime(reporte_df['Fecha_Ultimo_pago_Inicial'], errors='coerce')
+
+        # 2. Definimos la fecha de referencia (día 5 del mes actual)
+        hoy = pd.Timestamp.now()
+        fecha_referencia = hoy.replace(day=5)
+
+        # 3. Calculamos las fechas límite
+        fecha_6_meses = fecha_referencia - pd.DateOffset(months=6)
+        fecha_12_meses = fecha_referencia - pd.DateOffset(months=12)
+        fecha_24_meses = fecha_referencia - pd.DateOffset(months=24)
+        fecha_48_meses = fecha_referencia - pd.DateOffset(months=48)
+
+        # 4. Definimos las condiciones de clasificación
+        condiciones_pago = [
+            reporte_df['Fecha_Ultimo_pago_Inicial'] > fecha_6_meses,
+            reporte_df['Fecha_Ultimo_pago_Inicial'].between(fecha_12_meses, fecha_6_meses, inclusive='right'),
+            reporte_df['Fecha_Ultimo_pago_Inicial'].between(fecha_24_meses, fecha_12_meses, inclusive='right'),
+            reporte_df['Fecha_Ultimo_pago_Inicial'].between(fecha_48_meses, fecha_24_meses, inclusive='right'),
+            reporte_df['Fecha_Ultimo_pago_Inicial'] <= fecha_48_meses
+        ]
+        
+        # 5. Definimos los valores para cada rango
+        valores_pago = [
+            '6 MESES',
+            '6 A 12 MESES',
+            '1 a 2 AÑOS',
+            '2 A 4 AÑOS',
+            'MAS 4 AÑOS'
+        ]
+
+        # 6. Creamos la columna usando np.select
+        reporte_df['Rango_Ultimo_pago_Inicial'] = np.select(
+            condiciones_pago, 
+            valores_pago, 
+            default='SIN PAGO REGISTRADO'
+        )
+        
+        print("✅ Rango de último pago inicial calculado.")
+        return reporte_df
