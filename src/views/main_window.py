@@ -1,5 +1,3 @@
-# src/views/main_window.py
-
 import tkinter as tk
 from tkinter import ttk
 import pandas as pd
@@ -8,17 +6,13 @@ from src.views.config_view.style_assets import create_rounded_button_images
 
 # --- CAMBIO: Importamos solo las vistas que actuarán como PESTAÑAS PRINCIPALES ---
 from src.views.convenios_anticipos_view.convenios_anticipos_view import ConveniosAnticiposView
-from src.views.base_view.base_menu_view import BaseMensualMenuView
 from src.views.base_view.base_mensual_tab_view import BaseMensualTabView
-from src.views.centrales_view.centrales_menu_view import CentralesMenuView
-from src.views.centrales_view.centrales_tab_view import CentralesTabView    
-
-# Las vistas secundarias (como BaseMensualView, NovedadesView, etc.) ahora
-# serán gestionadas por sus vistas de menú correspondientes, no por MainWindow.
+from src.views.centrales_view.centrales_tab_view import CentralesTabView 
+from src.views.ecollect.ecollect_view import EcollectView         
 
 class MainWindow:
     def __init__(self, root, controller_convenios, controller_anticipos, controller_base_mensual,
-                 controller_datacredito, controller_cifin, controller_novedades_analisis):
+                 controller_datacredito, controller_cifin, controller_novedades_analisis,controller_ecollect):
         
         self.root = root
         self.config = AppConfig()
@@ -32,7 +26,8 @@ class MainWindow:
             "base_mensual": controller_base_mensual,
             "datacredito": controller_datacredito,
             "cifin": controller_cifin,
-            "novedades_analisis": controller_novedades_analisis
+            "novedades_analisis": controller_novedades_analisis,
+            "ecollect": controller_ecollect
         }
         
         # --- Configuración de la Ventana Principal ---
@@ -109,7 +104,7 @@ class MainWindow:
             self.controllers["anticipos"], 
             self
         )
-        notebook.add(convenios_view, text="  Convenios y Anticipos  ") # Espacios para más padding
+        notebook.add(convenios_view, text="  Convenios y Anticipos  ") 
 
         base_mensual_tab = BaseMensualTabView(
             notebook,
@@ -127,6 +122,14 @@ class MainWindow:
             self
         )
         notebook.add(centrales_tab, text="  Centrales de Riesgo  ")
+          
+        # Pestaña 4: Ecollect  
+        ecollect_tab = EcollectView(
+            notebook,
+            self.controllers["ecollect"],
+            self
+        )
+        notebook.add(ecollect_tab, text="  Ecollect  ")
 
 
         # --- Barra de Estado y Pie de Página (siempre visible) ---

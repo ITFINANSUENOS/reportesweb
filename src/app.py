@@ -12,6 +12,7 @@ from src.controllers.datacredito_controller import DataCreditoController
 from src.controllers.cifin_contoller import CifinController
 from src.views.main_window import MainWindow
 from src.controllers.novedades_controller import NovedadesAnalisisController
+from src.controllers.ecollect_controller import EcollectController
 
 def main():
     try:
@@ -22,6 +23,7 @@ def main():
         controller_datacredito = DataCreditoController()
         controller_cifin = CifinController()
         controller_novedades_analisis = NovedadesAnalisisController()
+        controller_ecollect = EcollectController()
 
         main_view = MainWindow(
             root, 
@@ -30,7 +32,8 @@ def main():
             controller_base_mensual,
             controller_datacredito,
             controller_cifin,
-            controller_novedades_analisis  
+            controller_novedades_analisis,
+            controller_ecollect  
         )
 
         controller_anticipos.set_view(main_view)

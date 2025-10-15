@@ -64,7 +64,7 @@ class CentralesArpesodView(ttk.Frame):
         ttk.Entry(dc_frame, textvariable=self.dc_correcciones_path, width=60, state="readonly").grid(row=3, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(dc_frame, text="Seleccionar...", command=self.seleccionar_dc_correcciones).grid(row=3, column=1, sticky="ew")
         
-        ttk.Button(dc_frame, text="Generar Reporte Datacredito", command=self.procesar_datacredito, style='Accent.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10))
+        ttk.Button(dc_frame, text="▶ Generar Reporte Datacredito", command=self.procesar_datacredito, style='Accent.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10))
         dc_frame.grid_columnconfigure(0, weight=1)
 
         # --- SECCIÓN CIFIN ---
@@ -79,7 +79,7 @@ class CentralesArpesodView(ttk.Frame):
         ttk.Entry(cifin_frame, textvariable=self.cifin_correcciones_path, width=60, state="readonly").grid(row=3, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(cifin_frame, text="Seleccionar...", command=self.seleccionar_cifin_correcciones).grid(row=3, column=1, sticky="ew")
         
-        ttk.Button(cifin_frame, text="Generar Reporte CIFIN", command=self.procesar_cifin, style='Accent.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10))
+        ttk.Button(cifin_frame, text="▶ Generar Reporte CIFIN", command=self.procesar_cifin, style='Accent.TButton').grid(row=4, column=0, columnspan=2, pady=(20, 10))
         cifin_frame.grid_columnconfigure(0, weight=1)
         
     # --- Métodos de la clase (sin cambios) ---
