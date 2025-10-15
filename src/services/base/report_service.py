@@ -7,6 +7,7 @@ from src.services.base.product_service import ProductsSalesService
 from src.services.base.dataprocessor_service import ReportProcessorService
 from src.services.base.metrics_calculation_service import MetricsCalculationService
 from src.services.base.categorization_service import CategorizationService
+from src.services.base.data_cleaning_service import DataCleaningService
 
 class ReportService:
     """
@@ -21,12 +22,12 @@ class ReportService:
         self.report_processor = ReportProcessorService(config)
         self.metrics_service = MetricsCalculationService()
         self.categorization_service = CategorizationService()
+        self.cleaning_service = DataCleaningService()
 
     def generate_consolidated_report(self, file_paths, orden_columnas, start_date=None, end_date=None, dataframes_preloaded=None):
         """
         Orquesta todo el proceso de ETL con la arquitectura correcta y de mejor rendimiento.
         """
-        
         if dataframes_preloaded:
             print("\n⚙️  Usando dataframes precargados desde el modo de actualización...")
             dataframes_por_tipo = dataframes_preloaded
@@ -57,7 +58,6 @@ class ReportService:
                 'Meta_Intereses', 'Meta_DC_Al_Dia', 'Meta_DC_Atraso',
                 'Meta_Saldo', 'Meta_Atraso'
             ]
-            
             # Columnas por las que se agrupará
             columnas_agrupacion = ['Credito', 'Cedula_Cliente']            
             # Asegurarnos de que las columnas a sumar existan en el DataFrame
@@ -68,17 +68,12 @@ class ReportService:
             for col in r91_df.columns:
                 if col not in columnas_agrupacion and col not in columnas_a_sumar_existentes:
                     agg_dict[col] = 'first'
-                    
             # Aplicar el groupby y la agregación
             r91_df = r91_df.groupby(columnas_agrupacion, as_index=False).agg(agg_dict)
-            
             print(f"✅ R91 consolidado. Total de registros únicos: {len(r91_df)}")
-        
         if r91_df.empty: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
         reporte_final = r91_df.copy()
         print(f"📄 Reporte base creado con {len(reporte_final)} registros de R91 (sin eliminar duplicados).")
-
         # 3. Procesar vencimientos
         processed_vencimientos, negativos_vencimientos = self.credit_details.process_vencimientos_data(vencimientos_df)
         
@@ -86,18 +81,14 @@ class ReportService:
         print("\n🔍 Uniendo resúmenes de información al reporte base...")
         if not processed_vencimientos.empty:
             reporte_final = pd.merge(reporte_final, processed_vencimientos, on='Credito', how='left')
-        
         if not analisis_df.empty:
              reporte_final = pd.merge(reporte_final, analisis_df.drop_duplicates('Credito'), on='Credito', how='left', suffixes=('', '_Analisis'))
-        
         if not r03_df.empty:
             reporte_final = pd.merge(reporte_final, r03_df.drop_duplicates('Credito'), on='Credito', how='left', suffixes=('', '_R03'))
-
         if not matriz_cartera_df.empty:
             reporte_final['Zona'] = reporte_final['Zona'].astype(str).str.strip()
             matriz_cartera_df['Zona'] = matriz_cartera_df['Zona'].astype(str).str.strip()
             reporte_final = pd.merge(reporte_final, matriz_cartera_df.drop_duplicates('Zona'), on='Zona', how='left')
-        
         if asesores_sheets:
             # Primero obtenemos todos los códigos de vendedor activos
             codigos_activos = []
@@ -106,11 +97,9 @@ class ReportService:
                     # Convertimos a string, eliminamos espacios y decimales (.0)
                     codigos = item["data"]['Codigo_Vendedor'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
                     codigos_activos.extend(codigos.dropna().unique())
-            
             # Convertimos a set para eliminar duplicados
             codigos_activos = set(codigos_activos)
             print(f"🔍 Total de vendedores activos encontrados: {len(codigos_activos)}")
-            
             # 2. Preparamos la columna Codigo_Vendedor en el reporte para comparar
             reporte_final['Codigo_Vendedor_clean'] = (
                 reporte_final['Codigo_Vendedor']
@@ -118,14 +107,12 @@ class ReportService:
                 .str.strip()
                 .str.replace(r'\.0$', '', regex=True)
             )
-            
             # 3. Creamos la columna Vendedor_Activo
             reporte_final['Vendedor_Activo'] = np.where(
                 reporte_final['Codigo_Vendedor_clean'].isin(codigos_activos),
                 'ACTIVO',
                 'INACTIVO'
             )
-            
             # 4. Eliminamos la columna temporal
             reporte_final.drop('Codigo_Vendedor_clean', axis=1, inplace=True)
     
@@ -141,8 +128,6 @@ class ReportService:
                     reporte_final[merge_key] = reporte_final[merge_key].str.strip()
                     reporte_final = pd.merge(reporte_final, info_df.drop_duplicates(subset=merge_key), 
                                         on=merge_key, how='left')
-        
-
         # 5. Aplicar transformaciones
         print("\n🚀 Iniciando transformaciones finales...")
         reporte_final['Empresa'] = np.where(reporte_final['Tipo_Credito'] == 'DF', 'FINANSUEÑOS', 'ARPESOD')
@@ -157,6 +142,7 @@ class ReportService:
         reporte_final = self.credit_details.adjust_arrears_status(reporte_final)
         reporte_final = self.report_processor.filter_by_date_range(reporte_final, start_date, end_date)
         reporte_final, df_a_corregir = self.report_processor.finalize_report(reporte_final, orden_columnas)
+        reporte_final = self.cleaning_service.run_cleaning_pipeline(reporte_final)
         
         reporte_negativos_final = pd.DataFrame() 
         lista_de_negativos = [df for df in [negativos_vencimientos, negativos_fnz003] if not df.empty]

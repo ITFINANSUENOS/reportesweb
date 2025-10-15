@@ -58,10 +58,6 @@ class NovedadesService:
 
         # 1. Definimos los códigos que NO queremos agrupar.
         codigos_especiales = ['C02', 'C04', 'C03', 'C10']
-
-        # 2. Usamos .loc para encontrar todas las filas cuyo 'Codigo_Novedad' NO ESTÉ en la lista
-        #    y cambiamos el valor de su columna 'Tipo_Novedad' a 'OTRAS GESTIONES'.
-        #    El símbolo '~' significa 'NO'.
         reporte_novedades_detallado.loc[
             ~reporte_novedades_detallado['Codigo_Novedad'].isin(codigos_especiales),
             'Tipo_Novedad'

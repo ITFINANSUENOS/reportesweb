@@ -76,7 +76,7 @@ class ReportProcessorService:
         print("📅 Formateando fechas a solo día/mes/año...")
         columnas_de_fecha = [
             'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso', 'Fecha_Facturada', 
-            'Fecha_Desembolso', 'Fecha_Ultima_Novedad'
+            'Fecha_Desembolso', 'Fecha_Ultima_Novedad', 'Fecha_Ultimo_Pago_Inicial'
         ]
         for col in columnas_de_fecha:
             if col in df.columns:
@@ -129,12 +129,9 @@ class ReportProcessorService:
             def fill_with_mode(series):
                 mode_val = series.mode()
                 return series.fillna(mode_val.iloc[0]) if not mode_val.empty else series
-            
             df['Lider_Zona'] = df.groupby('Regional_Venta')['Lider_Zona'].transform(fill_with_mode)
-            
             if 'Movil_Lider' in df.columns:
                 df['Movil_Lider'] = df['Lider_Zona'].map(mapa_moviles)
-            
             df['Lider_Zona'].fillna('NO ASIGNADO', inplace=True)
             if 'Movil_Lider' in df.columns:
                 df['Movil_Lider'].fillna('NO ASIGNADO', inplace=True)

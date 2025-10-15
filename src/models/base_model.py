@@ -13,7 +13,7 @@ configuracion = {
                         "tipo":"Tipo_Credito", 
                         "numero":"Numero_Credito",
                         "saldofac":"Saldo_Factura" ,
-                        "ultpago":"Fecha_Ultimo_Pago",
+                        "ultpago":"Fecha_Ultimo_Pago_Inicial",
                         "fechadoc":"Fecha_Desembolso"
                         }
     },
@@ -214,7 +214,8 @@ ORDEN_COLUMNAS_FINAL = [
     'Valor_Cuota_Vigente',
     'Fecha_Cuota_Atraso',
     'Primera_Cuota_Mora',
-    'Fecha_Ultimo_Pago',
+    'Fecha_Ultimo_Pago_Inicial',
+    'Rango_Ultimo_pago_Inicial',
     'Valor_Cuota_Atraso',      
     'Valor_Vencido'
 ]
