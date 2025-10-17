@@ -17,6 +17,7 @@ class NovedadesView(ttk.Frame):
         self.rutas_r91 = []
         self.ruta_usuarios = ""
         self.ruta_reporte_base = ""
+        self.ruta_nomina = ""
 
         self.label_novedades_path = tk.StringVar(value="No seleccionado")
         self.label_analisis_path = tk.StringVar(value="No seleccionado")

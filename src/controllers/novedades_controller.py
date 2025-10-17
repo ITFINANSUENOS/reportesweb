@@ -15,7 +15,6 @@ from src.models.novedad_model import configuracion
 class NovedadesAnalisisController:
     def __init__(self):
         self.view = None
-        # La ruta al caché se define aquí para que el controlador la conozca
         self.cache_path = Path(__file__).resolve().parent.parent.parent / "cache" / "reporte_base_mensual.feather"
 
     def set_view(self, view):
@@ -154,57 +153,58 @@ class NovedadesAnalisisController:
                     start_row = row_idx
                     current_zone_value = next_zone_value
 
-    def procesar_archivos(self, rutas_novedades, ruta_base, rutas_analisis, rutas_r91, ruta_usuarios,calcular_nomina, ruta_nomina):
+    def procesar_archivos(self, rutas_novedades, ruta_base, rutas_analisis, rutas_r91, ruta_usuarios, calcular_nomina, ruta_nomina):
         """
         Orquesta todo el proceso: carga el caché, aplica novedades, calcula el rodamiento
         y guarda un reporte multi-hoja.
         """
-        df_reporte_pagos = None
+        # --- PASO 1: Procesar la nómina (si se solicita) ---
+        # Se procesa al inicio para tener los datos listos.
+        # Si calcular_nomina es False, datos_nomina simplemente será None.
         datos_nomina = None
         if calcular_nomina:
             if not ruta_nomina:
                 messagebox.showwarning("Archivo Faltante", "Seleccionaste 'Calcular Nómina' pero no has cargado el archivo.")
-                return # Detiene la ejecución si no hay archivo
+                return  # Detiene la ejecución si no hay archivo
 
-            # Instanciamos y llamamos al servicio de nómina
+            print("📊 Procesando archivo de nómina...")
             nomina_service = NominaService()
             datos_nomina = nomina_service.procesar_archivo_nomina(ruta_nomina)
             
-            # Si el servicio devuelve None, significa que hubo un error y ya se notificó
+            # Si el servicio devuelve None, hubo un error y ya se notificó al usuario.
             if datos_nomina is None:
                 return
 
-
+        # --- PASO 2: Validar que los archivos principales estén cargados ---
         if not rutas_novedades or not rutas_analisis or not rutas_r91:
-            messagebox.showwarning("Archivos Faltantes", "Debes seleccionar los archivos de Novedades y Análisis.")
+            messagebox.showwarning("Archivos Faltantes", "Debes seleccionar los archivos de Novedades, Análisis y R91.")
             return
             
         try:
-            # --- CAMBIO: Cargar la base desde el archivo Excel seleccionado ---
+            # --- PASO 3: Cargar y procesar los archivos base ---
             print(f"🔄 Cargando reporte base desde: {ruta_base}")
-            # Usamos dtype=str para evitar problemas de formato de Excel con las cédulas
             df_base = self._cargar_reporte_base(ruta_base, configuracion)
             
-            # Si la carga falla por alguna razón, el método nuevo podría retornar None
             if df_base is None or df_base.empty:
                 messagebox.showerror("Error", "No se pudo cargar el reporte base correctamente.")
                 return
 
-            # 1. Cargar y unir todos los archivos de entrada
+            # Cargar y unir todos los demás archivos de entrada
             df_novedades_unido = self._cargar_y_unir_archivos(rutas_novedades, "NOVEDADES")
             df_analisis_unido = self._cargar_y_unir_archivos(rutas_analisis, "ANALISIS")
             df_r91_unido = self._cargar_y_unir_archivos(rutas_r91, "R91")
-            df_usuarios_unido = self._cargar_y_unir_archivos(ruta_usuarios, "USUARIOS")            
-            # --- INICIO DE LA SOLUCIÓN: Limpieza de Llaves ---
+            df_usuarios_unido = self._cargar_y_unir_archivos(ruta_usuarios, "USUARIOS")
+            
+            # --- PASO 4: Limpieza y cruce de datos ---
             print("🧹 Estandarizando y limpiando llaves de unión en todos los archivos...")
 
-            # Limpiar Cedula_Cliente en df_base y df_novedades
+            # Limpiar Cedula_Cliente
             if 'Cedula_Cliente' in df_base.columns:
                 df_base['Cedula_Cliente'] = df_base['Cedula_Cliente'].astype(str).str.strip()
             if 'Cedula_Cliente' in df_novedades_unido.columns:
                 df_novedades_unido['Cedula_Cliente'] = df_novedades_unido['Cedula_Cliente'].astype(str).str.strip()
             
-            # Crear y limpiar la llave 'Credito' en los archivos que la usan
+            # Crear y limpiar la llave 'Credito'
             if not df_analisis_unido.empty:
                 df_analisis_unido['Credito'] = df_analisis_unido['Tipo_Credito'].astype(str) + '-' + df_analisis_unido['Numero_Credito'].astype(str)
                 df_analisis_unido['Credito'] = df_analisis_unido['Credito'].str.strip()
@@ -213,24 +213,19 @@ class NovedadesAnalisisController:
                 df_r91_unido['Credito'] = df_r91_unido['Tipo_Credito'].astype(str) + '-' + df_r91_unido['Numero_Credito'].astype(str)
                 df_r91_unido['Credito'] = df_r91_unido['Credito'].str.strip()
             
-            # Limpiar la llave 'Usuario_Novedad' (esto ya lo tenías, pero es parte de la misma lógica)
+            # Limpiar la llave 'Usuario_Novedad'
             if 'Usuario_Novedad' in df_novedades_unido.columns:
                 df_novedades_unido['Usuario_Novedad'] = df_novedades_unido['Usuario_Novedad'].astype(str).str.strip().str.lower()
             if not df_usuarios_unido.empty:
                 df_usuarios_unido['Usuario_Novedad'] = df_usuarios_unido['Usuario_Novedad'].astype(str).str.strip().str.lower()
-            # --- FIN DE LA SOLUCIÓN ---
             
-            # 2. Aplicar Novedades (Ahora usará las cédulas limpias)
+            # --- PASO 5: Ejecutar los servicios de procesamiento ---
+            
+            # Aplicar Novedades
             novedades_service = NovedadesService(configuracion)
             df_base_enriquecido, df_novedades_detallado = novedades_service.aplicar_novedades(df_base, df_novedades_unido)
             
-            print("🔧 Asegurando compatibilidad de tipos para la unión de usuarios...") 
-            if not df_novedades_detallado.empty:
-                df_novedades_detallado['Usuario_Novedad'] = df_novedades_detallado['Usuario_Novedad'].astype(str).str.strip().str.lower()
-            
-            if not df_usuarios_unido.empty:
-                df_usuarios_unido['Usuario_Novedad'] = df_usuarios_unido['Usuario_Novedad'].astype(str).str.strip().str.lower()
-            
+            # Unir con información de usuarios
             df_novedades_detallado = pd.merge(
                 df_novedades_detallado, 
                 df_usuarios_unido, 
@@ -240,71 +235,42 @@ class NovedadesAnalisisController:
             
             columnas_a_mayusculas = ['Usuario_Novedad', 'Nombre_Usuario', 'Cargo_Usuario']
             for col in columnas_a_mayusculas:
-                # Verificamos si la columna existe en el DataFrame para evitar errores
                 if col in df_novedades_detallado.columns:
-                    # Usamos .astype(str) por si hay algún valor no textual (como NaN) y luego .str.upper()
                     df_novedades_detallado[col] = df_novedades_detallado[col].astype(str).str.upper()
-                    
-            # 3. Calcular Rodamiento
+            
+            # Calcular Rodamiento
             analisis_service = AnalisisService(configuracion)
             df_con_rodamiento = analisis_service.calcular_rodamiento(df_base_enriquecido, df_analisis_unido)
 
-            # 4. Calcular Recaudos
+            # Calcular Recaudos
             recaudo_service = RecaudoR91Service()
             df_recaudos = recaudo_service.procesar_recaudos(df_r91_unido)
 
-            # 5. Unir la información de recaudos al reporte final
+            # Unir la información de recaudos al reporte final
             df_final = pd.merge(df_con_rodamiento, df_recaudos, on='Credito', how='left')
 
-            datos_nomina = None
-            if calcular_nomina:
-                if not ruta_nomina:
-                    messagebox.showwarning("Archivo Faltante", "Seleccionaste 'Calcular Nómina' pero no has cargado el archivo.")
-                    return
-                nomina_service = NominaService()
-                datos_nomina = nomina_service.procesar_archivo_nomina(ruta_nomina)
-                if datos_nomina is None:
-                    return
-
-            # --- INICIO DE LA MODIFICACIÓN: Bloque de depuración ---
-            print("\n" + "="*25 + " DEPURACIÓN DEL REPORTE DE PAGOS " + "="*25)
-            if df_reporte_pagos is not None and not df_reporte_pagos.empty:
-                print("✅ El DataFrame 'df_reporte_pagos' se generó correctamente.")
-                print("Contenido del reporte de pagos a generar:")
-                print(df_reporte_pagos.to_string()) # .to_string() para mostrar todas las filas y columnas
-            elif df_reporte_pagos is not None:
-                print("⚠️ El DataFrame 'df_reporte_pagos' fue creado pero está VACÍO.")
-                print("   Revisa la lógica en PagosService. Probablemente no encontró datos para agrupar.")
-            else:
-                print("❌ El DataFrame 'df_reporte_pagos' es None. No se llamó al servicio de pagos.")
-            print("="*80 + "\n")
-            # --- FIN DE LA MODIFICACIÓN ---    
-
+            # --- PASO 6: Formateo final del DataFrame ---
+            
             for col in ['Recaudo_Anticipado', 'Recaudo_Meta', 'Total_Recaudo']:
                 if col in df_final.columns:
                     df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
             
-            # 1. Formatear las columnas de FECHAS PURAS para quitar la hora.
-            columnas_fecha_puras_sin_hora = ['Fecha_Desembolso', 'Fecha_Facturada','Fecha_Ultimo_pago']
+            # Formatear columnas de fecha para quitar la hora
+            columnas_fecha_puras_sin_hora = ['Fecha_Desembolso', 'Fecha_Facturada', 'Fecha_Ultimo_pago']
             for col in columnas_fecha_puras_sin_hora:
                 if col in df_final.columns:
-                    # La parte .dt.date elimina la hora
                     df_final[col] = pd.to_datetime(df_final[col], errors='coerce').dt.date
 
-            # 2. Formatear las columnas de FECHAS MIXTAS (FECHA y TEXTO) para quitar la hora.
             columnas_fecha_mixtas = ['Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso']
             for col in columnas_fecha_mixtas:
                 if col in df_final.columns:
-                    # La parte .date() elimina la hora solo de los objetos de fecha
                     df_final[col] = df_final[col].apply(
                         lambda x: x.date() if isinstance(x, (pd.Timestamp, datetime.datetime)) else x
                     )
+
+            # --- PASO 7: Generar los reportes finales con los servicios ---
             
-             # PASO DE VERIFICACIÓN (OPCIONAL): Puedes descomentar esto para depurar
-            print("Tipos de datos en 'Fecha_Cuota_Vigente' antes de guardar:")
-            print(df_final['Fecha_Cuota_Vigente'].apply(type).value_counts())
-            # --- FIN DEL BLOQUE CORREGIDO ---
-            
+            # Ordenar columnas para los reportes
             orden_columnas_analisis = [
                 'Empresa', 'Credito', 'Fecha_Desembolso', 'Factura_Venta', 'Fecha_Facturada',
                 'Nombre_Producto', 'Cantidad_Producto', 'Obsequio', 'Cantidad_Obsequio',
@@ -326,7 +292,6 @@ class NovedadesAnalisisController:
                 'Franja_Meta_Final','Franja_Cartera_Final', 'Rodamiento','Rodamiento_Cartera' ,
                 'Recaudo_Anticipado', 'Recaudo_Meta','Total_Recaudo','Total_Recaudo_Sin_Anti'
             ]
-
             orden_columnas_detalle = [
                 'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad',
                 'Nombre_Usuario', 'Cargo_Usuario', 'Celular_Corporativo','Codigo_Novedad', 'Tipo_Novedad',
@@ -336,17 +301,19 @@ class NovedadesAnalisisController:
             df_final = df_final[[col for col in orden_columnas_analisis if col in df_final.columns]]
             df_novedades_detallado = df_novedades_detallado[[col for col in orden_columnas_detalle if col in df_novedades_detallado.columns]]
             
+            # Generar reporte de Franjas
             franjas_service = ReporteFranjasService()
             df_reporte_franjas = franjas_service.generar_reporte(df_final)
 
+            # Generar reporte de Pagos (aquí se usa 'datos_nomina', que será None si no se calculó)
             pagos_service = PagosService()
-            df_reporte_pagos = pagos_service.generar_reporte_pagos(df_final,datos_nomina)
+            df_reporte_pagos = pagos_service.generar_reporte_pagos(df_final, datos_nomina)
 
+            # Generar reporte de Call Centers
             call_center_service = CallCenterService()
             df_reporte_call_centers = call_center_service.generar_reporte_call_center(df_final)
 
-
-            # 6. Guardar el reporte multi-hoja
+            # --- PASO 8: Guardar el archivo Excel de salida ---
             ruta_salida = filedialog.asksaveasfilename(
                 defaultextension=".xlsx",
                 initialfile="Reporte_Final_Analisis.xlsx",
@@ -359,10 +326,10 @@ class NovedadesAnalisisController:
                 df_final.to_excel(writer, sheet_name='Analisis_de_Cartera', index=False)
                 df_novedades_detallado.to_excel(writer, sheet_name='Detalle_Novedades', index=False)
                 self._escribir_y_formatear_franjas(writer, df_reporte_franjas, 'Reporte_Franjas')
-
+            
                 if df_reporte_pagos is not None and not df_reporte_pagos.empty:
                     self._escribir_y_formatear_franjas(writer, df_reporte_pagos, 'Reporte_Pagos')
-             
+            
                 if df_reporte_call_centers is not None and not df_reporte_call_centers.empty:
                     df_reporte_call_centers.to_excel(writer, sheet_name='Reporte_Call_Centers', index=False)
 

@@ -1,4 +1,3 @@
-# src/views/base_view/base_mensual_tab_view.py
 import tkinter as tk
 from tkinter import ttk, filedialog
 from pathlib import Path
@@ -130,6 +129,7 @@ class NovedadesView(ttk.Frame):
         self.controller.set_view(self)
         
         self.rutas_novedades, self.rutas_analisis, self.rutas_r91, self.ruta_usuarios, self.ruta_reporte_base = [], [], [], [], ""
+        self.ruta_nomina = ""
         self.label_novedades_path = tk.StringVar(value="No seleccionado")
         self.label_analisis_path = tk.StringVar(value="No seleccionado")
         self.label_r91_path = tk.StringVar(value="No seleccionado")
