@@ -74,3 +74,52 @@ class PlanoService:
         except Exception as e:
             print(f"Error al generar o guardar el archivo plano: {e}")
             return False
+        
+    def _validar_y_formatear_correo(self, correo: any) -> str:
+        """
+        Valida si el valor es un correo electrónico simple (contiene '@').
+        Devuelve el correo si es válido, o una cadena vacía si no lo es o es NaN.
+        """
+        if pd.isnull(correo):
+            return ""
+        
+        correo_str = str(correo).strip()
+        # Validación simple: debe contener '@' y un '.' después del '@'
+        if '@' in correo_str and '.' in correo_str.split('@')[-1]:
+            return correo_str
+        
+        return ""
+
+    def generar_plano_usuarios(self, df: pd.DataFrame, ruta_guardado: str) -> bool:
+        """
+        Genera un archivo plano (CSV) para la actualización de datos de usuarios
+        con un formato específico.
+        """
+        if df.empty:
+            print("El DataFrame de usuarios está vacío, no se generará el archivo.")
+            return False
+
+        try:
+            lineas_a_escribir = []
+            for _, row in df.iterrows():
+                # Extraer y limpiar datos de las columnas requeridas
+                cedula = row.get('Cedula_Cliente', '')
+                nombre = row.get('Nombre_Cliente', '')
+                correo = self._validar_y_formatear_correo(row.get('Correo'))
+
+                linea = (
+                    f"{cedula},01,{correo},,{nombre},,{correo},,,,,,,,"
+                )
+                lineas_a_escribir.append(linea)
+
+            # Escribir todas las líneas al archivo de una vez
+            with open(ruta_guardado, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(lineas_a_escribir))
+            
+            return True
+        except KeyError as e:
+            print(f"Error de clave: La columna {e} no fue encontrada en el DataFrame de usuarios.")
+            return False
+        except Exception as e:
+            print(f"Error al generar o guardar el plano de usuarios: {e}")
+            return False    

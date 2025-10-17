@@ -22,7 +22,7 @@ class EcollectService:
             df = pd.read_excel(
                 file_path,
                 usecols=self.config.get("usecols"),
-                dtype={'MCNVINCULA': str, 'MCNNUMCRU1': str} # Asegurar que los IDs se lean como texto
+                dtype={'MCNVINCULA': str, 'MCNNUMCRU1': str}
             )
             df.rename(columns=self.config.get("rename_map", {}), inplace=True)
             return df
