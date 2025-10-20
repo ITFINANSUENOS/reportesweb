@@ -129,13 +129,15 @@ class NovedadesView(ttk.Frame):
         self.controller.set_view(self)
         
         self.rutas_novedades, self.rutas_analisis, self.rutas_r91, self.ruta_usuarios, self.ruta_reporte_base = [], [], [], [], ""
+        self.rutas_call_center = []
         self.ruta_nomina = ""
         self.label_novedades_path = tk.StringVar(value="No seleccionado")
         self.label_analisis_path = tk.StringVar(value="No seleccionado")
         self.label_r91_path = tk.StringVar(value="No seleccionado")
         self.label_usuarios_path = tk.StringVar(value="No seleccionado")
         self.label_base_path = tk.StringVar(value="No seleccionado")
-        self.label_nomina_path = tk.StringVar(value="No ha seleccionado un archivo")
+        self.label_call_center_path = tk.StringVar(value="No seleccionado")
+        self.label_nomina_path = tk.StringVar(value="No seleccionado")
 
         self.configure(style='TFrame')
         
@@ -168,6 +170,7 @@ class NovedadesView(ttk.Frame):
             "3. Cargar Archivo(s) de Análisis (.xlsx):": (self.label_analisis_path, self.seleccionar_analisis),
             "4. Cargar Archivo(s) de Recaudos (R91):": (self.label_r91_path, self.seleccionar_r91),
             "5. Cargar Archivo de Usuarios:": (self.label_usuarios_path, self.seleccionar_usuarios),
+            "6. Cargar Archivo(s) de Call Center:": (self.label_call_center_path, self.seleccionar_call_center)
         }
 
         self.current_row = 0
@@ -193,7 +196,6 @@ class NovedadesView(ttk.Frame):
         self.nomina_frame_row = self.current_row + 1
         
         self.nomina_frame = ttk.LabelFrame(content_frame, text=" Cargar Archivo de Nómina ", padding="10")
-        # No lo posicionamos aquí con .grid() todavía, _toggle_nomina_visibility() lo hará.
         
         ttk.Entry(self.nomina_frame, textvariable=self.label_nomina_path, state="readonly").pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 10))
         ttk.Button(self.nomina_frame, text="Seleccionar...", command=self.seleccionar_nomina).pack(side=tk.LEFT)
@@ -262,9 +264,14 @@ class NovedadesView(ttk.Frame):
         if filepaths: self.ruta_usuarios = list(filepaths); self.label_usuarios_path.set(f"{len(self.ruta_usuarios)} archivo(s) seleccionado(s)")
 
     def seleccionar_analisis(self):
-        # --- CORREGIDO Y ESTANDARIZADO ---
         filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Análisis", filetypes=self._get_excel_file_types())
         if filepaths: self.rutas_analisis = list(filepaths); self.label_analisis_path.set(f"{len(self.rutas_analisis)} archivo(s) seleccionado(s)")
+
+    def seleccionar_call_center(self):
+        filepaths = filedialog.askopenfilenames(title="Seleccionar Archivo(s) de Call Center", filetypes=self._get_excel_file_types())
+        if filepaths:
+            self.rutas_call_center = list(filepaths)
+            self.label_call_center_path.set(f"{len(self.rutas_call_center)} archivo(s) seleccionado(s)")
 
     def procesar(self):
         # Ahora pasamos el estado del checkbox y la ruta del archivo de nómina al controlador
@@ -272,6 +279,7 @@ class NovedadesView(ttk.Frame):
             ruta_base=self.ruta_reporte_base, rutas_novedades=self.rutas_novedades,
             rutas_analisis=self.rutas_analisis, rutas_r91=self.rutas_r91,
             ruta_usuarios=self.ruta_usuarios,
+            rutas_call_center=self.rutas_call_center,
             calcular_nomina=self.calcular_nomina_var.get(),
             ruta_nomina=self.ruta_nomina
         )

@@ -44,6 +44,31 @@ configuracion = {
                        "NUMERO CORPORATIVO": "Celular_Corporativo"
                         }
     },
+    "CALL_CENTER": {
+        "sheets": [{ 
+              "sheet_name": "Llamadas_Call", 
+              "usecols":["Fecha","Fuente", "Destino", "Estado", "Duración", "Recording","UniqueID"], 
+              "rename_map": { 
+                              "Fecha":"Fecha_Llamada",
+                              "Destino": "Destino_Llamada", 
+                              "Estado": "Estado_Llamada", 
+                              "Duración": "Duracion_Llamada",
+                              "Fuente":"Extension_Llamada",
+                              "Recording":"Grabacion_Llamada",
+                              "UniqueID":"Codigo_Llamada"}, 
+              },
+            { 
+              "sheet_name": "Flujos",
+              "usecols": ["CC", "Encargado","Extension Llamada", "Flujo Truora"], 
+              "rename_map": { 
+                              "CC": "Call_Center",
+                              "Encargado": "Nombre_Call",
+                              "Extension Llamada": "Extension_Llamada",
+                              "Flujo Truora":"Flujo_Truora"},
+              }
+        ]
+    },
+    
     #Tipos de datos para reporte base
     "BASE_MENSUAL": {
         "dtype_map": {

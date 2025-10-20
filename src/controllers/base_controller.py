@@ -3,7 +3,7 @@ import threading
 from pathlib import Path
 
 # Importaciones de servcios y vistas
-from src.views.base_view.base_view import BaseMensualView
+from src.views.base_view.base_mensual_tab_view import BaseMensualView
 from src.services.base.processing_orchestrator_service import ProcessingOrchestratorService
 from src.services.base.file_handler_service import FileHandlerService
 class BaseMensualController:

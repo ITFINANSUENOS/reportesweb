@@ -18,5 +18,4 @@ configuracion = {
                       "NUMERO_DOC":"Numero_Credito", 
                       "IDENTIFICA":"Cedula_Cliente" }
     },
-
 }

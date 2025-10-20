@@ -55,12 +55,7 @@ class AnalisisService:
             valores_pago, 
             default='SIN PAGO REGISTRADO'
         )
-        # --- Depuración (puedes eliminar esto si ya no lo necesitas) ---
-        print("\n--- Depurando Tipos de Datos ---")
-        # ... (código de depuración) ...
-        print("--------------------------------------\n")
-        
-        # --- Cálculo de Franjas (sin cambios) ---
+    
         condiciones = [
             df_actualizado['Dias_Atraso_Final'] == 0,
             df_actualizado['Dias_Atraso_Final'].between(1, 30),
