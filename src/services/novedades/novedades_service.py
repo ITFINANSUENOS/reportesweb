@@ -68,7 +68,7 @@ class NovedadesService:
             reporte_novedades_detallado['Tipo_Novedad'] != 'COMPROMISO DE PAGO', 
             'Fecha_Compromiso'
         ] = 'SIN COMPROMISO'
-        
+    
         # Reordenar columnas para la hoja de novedades
         columnas_novedades = [
                                 'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad', 'Codigo_Novedad',

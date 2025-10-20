@@ -153,7 +153,8 @@ class NovedadesAnalisisController:
                     start_row = row_idx
                     current_zone_value = next_zone_value
 
-    def procesar_archivos(self, rutas_novedades, ruta_base, rutas_analisis, rutas_r91, ruta_usuarios, calcular_nomina, ruta_nomina):
+    def procesar_archivos(self, rutas_novedades, ruta_base, rutas_analisis, rutas_r91, ruta_usuarios,
+                          rutas_call_center, calcular_nomina, ruta_nomina):
         """
         Orquesta todo el proceso: carga el caché, aplica novedades, calcula el rodamiento
         y guarda un reporte multi-hoja.
@@ -312,6 +313,9 @@ class NovedadesAnalisisController:
             # Generar reporte de Call Centers
             call_center_service = CallCenterService()
             df_reporte_call_centers = call_center_service.generar_reporte_call_center(df_final)
+            
+            # Generar reporte de Llamadas Call Center
+            df_reporte_llamadas = call_center_service.generar_reporte_llamadas(rutas_call_center, configuracion)
 
             # --- PASO 8: Guardar el archivo Excel de salida ---
             ruta_salida = filedialog.asksaveasfilename(
@@ -332,6 +336,9 @@ class NovedadesAnalisisController:
             
                 if df_reporte_call_centers is not None and not df_reporte_call_centers.empty:
                     df_reporte_call_centers.to_excel(writer, sheet_name='Reporte_Call_Centers', index=False)
+                    
+                if df_reporte_llamadas is not None and not df_reporte_llamadas.empty:
+                    df_reporte_llamadas.to_excel(writer, sheet_name='Reporte_Llamadas', index=False)    
 
             print("✅ Reporte final con formato guardado exitosamente.")
             messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")

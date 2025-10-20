@@ -3,8 +3,6 @@ from tkinter import ttk
 import pandas as pd
 from src.views.config_view.config_view import AppConfig
 from src.views.config_view.style_assets import create_rounded_button_images
-
-# --- CAMBIO: Importamos solo las vistas que actuarán como PESTAÑAS PRINCIPALES ---
 from src.views.convenios_anticipos_view.convenios_anticipos_view import ConveniosAnticiposView
 from src.views.base_view.base_mensual_tab_view import BaseMensualTabView
 from src.views.centrales_view.centrales_tab_view import CentralesTabView 
@@ -19,7 +17,7 @@ class MainWindow:
         
         self.button_images = create_rounded_button_images(self.config)
 
-        # --- NUEVO: Guardamos los controllers en un diccionario para un acceso más limpio ---
+        # --- Guardamos los controllers en un diccionario para un acceso más limpio ---
         self.controllers = {
             "convenios": controller_convenios,
             "anticipos": controller_anticipos,
@@ -53,12 +51,10 @@ class MainWindow:
         style.configure('TNotebook', background=bg_color, borderwidth=0)
         
         
-        # 1. Cargamos las imágenes (sin cambios)
         self.button_normal_img = self.button_images["normal"]
         self.button_hover_img = self.button_images["hover"]
         self.button_pressed_img = self.button_images["pressed"]
 
-        # 2. Creamos el elemento de fondo con la imagen (sin cambios)
         style.element_create("Modern.Button.background", "image", self.button_normal_img,
             ('active', self.button_hover_img),
             ('pressed', self.button_pressed_img),
@@ -90,7 +86,6 @@ class MainWindow:
         main_frame = ttk.Frame(self.root, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Título de la aplicación
         title_label = ttk.Label(main_frame, text=self.config.title, style='Title.TLabel')
         title_label.pack(pady=(0, 20), anchor="center")
 

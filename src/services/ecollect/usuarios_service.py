@@ -79,7 +79,6 @@ class UsuariosService:
         """
         Carga los archivos de vencimientos y consulta, y los une para agregar el correo.
         """
-        # --- 1. Cargar y consolidar los archivos de VENCIMIENTOS ---
         vencimientos_dfs = []
         for path in vencimientos_paths:
             df_temp = self._load_and_prepare_file(path, "VENCIMIENTOS")
@@ -96,9 +95,6 @@ class UsuariosService:
         
         df_final = pd.merge(df_vencimientos, df_consulta_limpio, on=["Cedula_Cliente", "Credito"], how="left")
         df_final.drop_duplicates(subset=['Credito'], keep='first', inplace=True)
-
-        # --- 3. APLICAR LA LIMPIEZA A LA COLUMNA DE CORREOS ---
-        # Si el correo es válido, se conserva; de lo contrario, se reemplaza por un string vacío.
         df_final['Correo'] = df_final['Correo'].apply(
             lambda email: email if self._es_correo_valido_estricto(email) else ''
         )
