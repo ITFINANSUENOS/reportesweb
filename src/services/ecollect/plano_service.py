@@ -108,7 +108,7 @@ class PlanoService:
                 correo = self._validar_y_formatear_correo(row.get('Correo'))
 
                 linea = (
-                    f"{cedula},01,{correo},,{nombre},,{correo},,,,,,,,"
+                    f"{cedula},01,{correo},,{nombre},,{correo},,,,,,,"
                 )
                 lineas_a_escribir.append(linea)
 

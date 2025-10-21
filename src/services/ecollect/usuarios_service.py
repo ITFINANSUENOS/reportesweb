@@ -77,7 +77,8 @@ class UsuariosService:
 
     def crear_dataframe_usuarios(self, vencimientos_paths: List[str], consulta_path: str) -> Optional[pd.DataFrame]:
         """
-        Carga los archivos de vencimientos y consulta, y los une para agregar el correo.
+        Carga los archivos de vencimientos y consulta, los une para agregar el correo
+        y asegura un único registro por cliente.
         """
         vencimientos_dfs = []
         for path in vencimientos_paths:
@@ -85,18 +86,30 @@ class UsuariosService:
             if df_temp is not None: vencimientos_dfs.append(df_temp)
         if not vencimientos_dfs: return None
         df_vencimientos = pd.concat(vencimientos_dfs, ignore_index=True)
-        
+
         df_consulta = self._load_and_prepare_file(consulta_path, "CRTMPCONSULTA1")
         if df_consulta is None: return None
-        
+
+        # Se crean las llaves 'Credito' para el merge
         df_vencimientos["Credito"] = df_vencimientos["Tipo_Credito"].astype(str) + "-" + df_vencimientos["Numero_Credito"].astype(str)
         df_consulta["Credito"] = df_consulta["Tipo_Credito"].astype(str) + "-" + df_consulta["Numero_Credito"].astype(str)
         df_consulta_limpio = df_consulta[["Cedula_Cliente", "Credito", "Correo"]].drop_duplicates()
-        
+
+        # Merge para enriquecer los datos de vencimientos con el correo
         df_final = pd.merge(df_vencimientos, df_consulta_limpio, on=["Cedula_Cliente", "Credito"], how="left")
-        df_final.drop_duplicates(subset=['Credito'], keep='first', inplace=True)
+
+        # Se validan y limpian los correos
         df_final['Correo'] = df_final['Correo'].apply(
             lambda email: email if self._es_correo_valido_estricto(email) else ''
         )
+        df_final['tiene_correo'] = df_final['Correo'].apply(lambda x: 1 if x != '' else 0)
+        # 2. Ordenar: Se ordena por cliente y luego por la columna 'tiene_correo' de forma descendente.
+        #    Esto asegura que para cada cliente, la fila con un correo válido (si existe) quede primera.
+        df_final.sort_values(by=['Cedula_Cliente', 'tiene_correo'], ascending=[True, False], inplace=True)
 
+        # 3. Eliminar duplicados de CLIENTES
+        df_final.drop_duplicates(subset=['Cedula_Cliente'], keep='first', inplace=True)
+
+        # 4. Limpieza: Eliminamos la columna de ayuda que ya no necesitamos.
+        df_final.drop(columns=['tiene_correo'], inplace=True)
         return df_final
