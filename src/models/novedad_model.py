@@ -65,6 +65,15 @@ configuracion = {
                               "Encargado": "Nombre_Call",
                               "Extension Llamada": "Extension_Llamada",
                               "Flujo Truora":"Flujo_Truora"},
+              },
+              { 
+              "sheet_name": "Mensajeria_Call",
+              "usecols": ["CC", "Encargado","Extension Llamada", "Flujo Truora"], 
+              "rename_map": { 
+                              "CC": "Call_Center",
+                              "Encargado": "Nombre_Call",
+                              "Extension Llamada": "Extension_Llamada",
+                              "Flujo Truora":"Flujo_Truora"},
               }
         ]
     },
