@@ -2,6 +2,7 @@ import pandas as pd
 from Levenshtein import distance
 import re
 from typing import Dict, Optional, List
+import unicodedata
 
 class UsuariosService:
     """
@@ -36,7 +37,7 @@ class UsuariosService:
             usuario, _ = correo.split('@', 1)
             usuario = usuario.lower()
         except ValueError:
-            return False # No tiene un solo @
+            return False
 
         if usuario.isdigit():
             return False

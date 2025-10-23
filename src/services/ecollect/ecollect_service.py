@@ -80,8 +80,7 @@ class EcollectService:
                 Pago_Total=("Valor_Cuota", "sum"),
                 Total_Intereses=("Intereses", "sum")
             ).reset_index()
-
-            # --- 5. Crear los dos registros ('Pago_Total' e 'Intereses') ---
+            
             pago_total_df = agg_data.copy()
             pago_total_df["Codigo"] = 0
             pago_total_df["Valor"] = pago_total_df["Pago_Total"]
@@ -91,9 +90,7 @@ class EcollectService:
                 intereses_df["Codigo"] = 40
                 intereses_df["Valor"] = intereses_df["Total_Intereses"]
 
-            # --- 6. Combinar y limpiar ---
             final_df = pd.concat([pago_total_df, intereses_df], ignore_index=True)
-            
             columnas_finales = [
                 "Cedula_Cliente", "Credito", "Primera_Cuota_Atraso", "Fecha_Atraso",
                 "Ultima_Cuota_Atraso", "Codigo", "Valor"
