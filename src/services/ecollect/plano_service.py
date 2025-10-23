@@ -1,7 +1,7 @@
 # src/services/plano/plano_service.py
-
 import pandas as pd
 from typing import List
+import re
 
 class PlanoService:
     """
@@ -24,6 +24,7 @@ class PlanoService:
         """
         Crea la descripción de las cuotas basado en si la primera y última son iguales.
         Ej: "Cuota No. 5" o "Cuota No. 5 a Cuota No. 14"
+        Ej: "Pago de Cuota No. 5" o "Pago de Cuota No. 5 a Cuota No. 14"
         """
         primera = row['Primera_Cuota_Atraso']
         ultima = row['Ultima_Cuota_Atraso']
@@ -31,7 +32,9 @@ class PlanoService:
         if primera == ultima:
             return f"{prefijo} No. {primera}"
         else:
-            return f"{prefijo} No. {primera} a {prefijo} No. {ultima}"
+            descriptor_base = prefijo.split(" ")[-1]
+            return f"{prefijo} No. {primera} a {descriptor_base} No. {ultima}"
+            # --- FIN DE LA CORRECCIÓN ---
 
     def _generar_lineas_datos(self, df: pd.DataFrame) -> List[str]:
         """Genera todas las líneas de datos (registros) del archivo plano."""
@@ -90,6 +93,44 @@ class PlanoService:
         
         return ""
 
+    def _limpiar_nombre_cliente(self, nombre: str) -> str:
+        """
+        Limpia el nombre del cliente para la central:
+        - Quita tildes (Á -> A)
+        - Convierte Ñ -> N
+        - Convierte todo a MAYÚSCULAS
+        - Elimina caracteres especiales (puntos, comas, etc.)
+        - Conserva solo letras (A-Z), números (0-9) y espacios.
+        """
+        if not isinstance(nombre, str) or pd.isnull(nombre):
+            return ""
+        
+        nombre_limpio = str(nombre)
+        
+        # 1. Reemplazar tildes y caracteres especiales comunes
+        reemplazos = {
+            'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+            'Ñ': 'N', 'ñ': 'n',
+            'Ü': 'U', 'ü': 'u',
+            '.': '', ',': '', '-': '', '/': '',
+            '(': '', ')': '', '#': '', "'": '',
+            '`': '', '´': '' 
+        }
+        for k, v in reemplazos.items():
+            nombre_limpio = nombre_limpio.replace(k, v)
+            
+        # 2. Convertir a mayúsculas
+        nombre_limpio = nombre_limpio.upper()
+        
+        # 3. Eliminar cualquier caracter que no sea A-Z, 0-9, o espacio
+        nombre_limpio = re.sub(r'[^A-Z0-9 ]', '', nombre_limpio)
+        
+        # 4. Colapsar múltiples espacios a uno solo y limpiar extremos
+        nombre_limpio = re.sub(r'\s+', ' ', nombre_limpio).strip()
+        
+        return nombre_limpio
+
     def generar_plano_usuarios(self, df: pd.DataFrame, ruta_guardado: str) -> bool:
         """
         Genera un archivo plano (CSV) para la actualización de datos de usuarios
@@ -107,8 +148,14 @@ class PlanoService:
                 nombre = row.get('Nombre_Cliente', '')
                 correo = self._validar_y_formatear_correo(row.get('Correo'))
 
+                # --- ¡NUEVO! ---
+                # Aplicamos la limpieza al nombre antes de usarlo
+                nombre_limpio = self._limpiar_nombre_cliente(nombre)
+                # --- Fin de la adición ---
+
                 linea = (
-                    f"{cedula},01,{correo},,{nombre},,{correo},,,,,,,"
+                    # Usamos la variable 'nombre_limpio' en lugar de 'nombre'
+                    f"{cedula},01,{correo},,{nombre_limpio},,{correo},,,,,,,"
                 )
                 lineas_a_escribir.append(linea)
 
@@ -122,4 +169,4 @@ class PlanoService:
             return False
         except Exception as e:
             print(f"Error al generar o guardar el plano de usuarios: {e}")
-            return False    
+            return False

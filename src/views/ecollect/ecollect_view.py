@@ -10,19 +10,20 @@ class EcollectView(ttk.Frame):
         self.main_window = main_window
         self.controller.set_view(self)
         
-        # Usamos StringVars para vincular a los widgets Entry, como en tus otras vistas
+        # --- ¡CAMBIO 1: Añadir la nueva key para colaboradores! ---
         self.file_paths = {
             "PROCESO_VENCIMIENTOS": tk.StringVar(value="No se han seleccionado archivos."),
-            "PROCESO_CONSULTA": tk.StringVar(value="No se ha seleccionado un archivo.")
+            "PROCESO_CONSULTA": tk.StringVar(value="No se ha seleccionado un archivo."),
+            "PROCESO_COLABORADORES": tk.StringVar(value="No se ha seleccionado un archivo.") # <-- AÑADIDO
         }
 
         self._create_widgets()
 
     def _create_widgets(self):
         """Crea la estructura principal de la vista con un área de scroll y layout centrado."""
-        self.configure(style='TFrame') # Usamos el estilo base
+        self.configure(style='TFrame') 
 
-        # --- Frame principal con scroll (similar a tus otras vistas) ---
+        # --- Frame principal con scroll ---
         canvas = tk.Canvas(self, bg="#F0F0F0", highlightthickness=0)
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
@@ -43,25 +44,30 @@ class EcollectView(ttk.Frame):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # --- Layout Centrado usando grid (¡CAMBIO CLAVE!) ---
+        # --- Layout Centrado ---
         scrollable_frame.grid_columnconfigure(0, weight=10)
-        scrollable_frame.grid_columnconfigure(1, weight=80) # Columna principal para el contenido
+        scrollable_frame.grid_columnconfigure(1, weight=80) 
         scrollable_frame.grid_columnconfigure(2, weight=10)
 
         main_container = ttk.Frame(scrollable_frame)
         main_container.grid(row=0, column=1, sticky="nsew", pady=(20, 0))
 
-        # --- Tarjeta Única: Proceso completo ---
+        # --- Tarjeta 1: Proceso Clientes ---
         self._create_proceso_unificado_card(main_container)
 
+        # --- ¡CAMBIO 2: Añadir la segunda tarjeta (recuadro) para Colaboradores! ---
+        self._create_proceso_colaboradores_card(main_container)
+        # --- FIN CAMBIO 2 ---
+
     def _create_proceso_unificado_card(self, parent):
-        """Crea la tarjeta principal para el proceso de E-Collect."""
-        card_frame = ttk.LabelFrame(parent, text=" Proceso: Generación de Planos E-Collect ", padding=20)
-        card_frame.pack(fill='x', expand=True, pady=(0, 20))
+        """Crea la tarjeta principal para el proceso de E-Collect (CLIENTES)."""
+        card_frame = ttk.LabelFrame(parent, text=" Proceso 1: Generación de Planos Clientes ", padding=20)
+        # Usamos pack con fill='x' para que ocupe el ancho y pady para separarse
+        card_frame.pack(fill='x', expand=True, pady=(0, 20), padx=10) 
 
         form_frame = ttk.Frame(card_frame)
         form_frame.pack(fill='x', expand=True)
-        form_frame.grid_columnconfigure(0, weight=1) # Columna para Entry se expande
+        form_frame.grid_columnconfigure(0, weight=1) 
 
         # --- Paso 1: Campo para VENCIMIENTOS ---
         self._crear_campo_archivo(
@@ -75,27 +81,57 @@ class EcollectView(ttk.Frame):
         # --- Paso 2: Campo para CONSULTA ---
         self._crear_campo_archivo(
             parent=form_frame,
-            row_start=2, # Dejamos una fila de espacio
+            row_start=2,
             key="PROCESO_CONSULTA",
             desc="2. Seleccionar Archivo de Ventas (.xlsx):",
             multiple=False
         )
 
-        # --- Botón de Acción con Estilo Centralizado (¡CAMBIO CLAVE!) ---
+        # --- Botón de Acción ---
         procesar_button = ttk.Button(
             form_frame,
-            text="▶ Iniciar Proceso y Generar Planos",
-            command=self.controller.iniciar_proceso_completo,
-            style='Modern.TButton' # Aplicamos el estilo de tus otros botones
+            text="▶ Iniciar Proceso Clientes", # Texto actualizado
+            command=self.controller.iniciar_proceso_completo, # Llama al método original
+            style='Modern.TButton' 
         )
         procesar_button.grid(row=4, column=0, columnspan=2, pady=(20, 10), ipady=5)
         
+    # --- ¡CAMBIO 3: Método NUEVO para el recuadro de Colaboradores! ---
+    def _create_proceso_colaboradores_card(self, parent):
+        """Crea la tarjeta (recuadro) para el proceso de Colaboradores."""
+        card_frame = ttk.LabelFrame(parent, text=" Proceso 2: Generación de Planos Colaboradores ", padding=20)
+        # Usamos pack para que se ponga debajo de la tarjeta anterior
+        card_frame.pack(fill='x', expand=True, pady=(0, 20), padx=10)
+
+        form_frame = ttk.Frame(card_frame)
+        form_frame.pack(fill='x', expand=True)
+        form_frame.grid_columnconfigure(0, weight=1)
+
+        # --- Campo Único: Colaboradores ---
+        self._crear_campo_archivo(
+            parent=form_frame,
+            row_start=0,
+            key="PROCESO_COLABORADORES",
+            desc="1. Seleccionar Archivo de Colaboradores (.xlsx):",
+            multiple=False # Es un solo archivo
+        )
+
+        # --- Botón de Acción para Colaboradores ---
+        procesar_button = ttk.Button(
+            form_frame,
+            text="▶ Iniciar Proceso Colaboradores",
+            # ¡Llama a un NUEVO método en el controlador!
+            command=self.controller.iniciar_proceso_colaboradores, 
+            style='Modern.TButton'
+        )
+        procesar_button.grid(row=2, column=0, columnspan=2, pady=(20, 10), ipady=5)
+    # --- FIN CAMBIO 3 ---
+
     def _crear_campo_archivo(self, parent, row_start: int, key: str, desc: str, multiple: bool):
-        """Función auxiliar para crear una fila de selección de archivo usando grid."""
+        """Función auxiliar (Sin cambios)."""
         desc_label = ttk.Label(parent, text=desc)
         desc_label.grid(row=row_start, column=0, columnspan=2, sticky="w", pady=(10, 5))
         
-        # --- Usamos un Entry en vez de un Label (¡CAMBIO CLAVE!) ---
         ruta_entry = ttk.Entry(parent, textvariable=self.file_paths[key], state="readonly")
         ruta_entry.grid(row=row_start + 1, column=0, sticky="ew", padx=(0, 10))
         
@@ -104,7 +140,7 @@ class EcollectView(ttk.Frame):
         boton.grid(row=row_start + 1, column=1, sticky="ew")
 
     def actualizar_ruta_label(self, key: str, display_text: str):
-        """Actualiza el texto del Entry para un archivo seleccionado."""
+        """Actualiza el texto del Entry (Sin cambios)."""
         if key in self.file_paths:
             self.file_paths[key].set(display_text)
             self.update_idletasks()
