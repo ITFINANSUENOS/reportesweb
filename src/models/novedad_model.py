@@ -1,7 +1,7 @@
 configuracion = {
     "NOVEDADES":{
         "usecols":["VNTCEDULA","NOTA","VNTNEWFEC","VNTNEWUSER","VNTTIPO",
-                   "VTTNOMBRE","VALOR","ALARMA"],
+                   "VTTNOMBRE","VALOR","ALARMA", "TELF","MOVIL"],
         "rename_map":{
                       "VNTCEDULA":"Cedula_Cliente",
                       "VNTTIPO":"Codigo_Novedad",
@@ -10,7 +10,9 @@ configuracion = {
                       "VNTNEWFEC":"Fecha_Novedad",
                       "VNTNEWUSER":"Usuario_Novedad",
                       "NOTA":"Novedad",
-                      "VALOR":"Valor"
+                      "VALOR":"Valor",
+                      "TELF":"Telefono_Cliente",
+                      "MOVIL":"Ceular_Cliente"
                       }
     },
     "ANALISIS":{
@@ -66,16 +68,23 @@ configuracion = {
                               "Extension Llamada": "Extension_Llamada",
                               "Flujo Truora":"Flujo_Truora"},
               },
-              { 
+            { 
               "sheet_name": "Mensajeria_Call",
-              "usecols": ["CC", "Encargado","Extension Llamada", "Flujo Truora"], 
+              "usecols": ["Country Code", "Phone Number","Message Status", "Outbound Response Status", "Outbound Response",
+                          "Flow ID","Outbound Name","Status","Agent Conversation First Response Message","FECHA LLAMADA"], 
               "rename_map": { 
-                              "CC": "Call_Center",
-                              "Encargado": "Nombre_Call",
-                              "Extension Llamada": "Extension_Llamada",
-                              "Flujo Truora":"Flujo_Truora"},
+                              "Country Code": "Codigo_Pais",
+                              "Phone Number": "Numero_Telefono",
+                              "Message Status": "Estado_Mensaje",
+                              "Outbound Response Status":"Estado_Respuesta_Saliente",
+                              "Status":"Estado",
+                              "Outbound Response":"Respuesta_Saliente",
+                              "Outbound Name":"Nombre_Saliente",
+                              "Agent Conversation First Response Message":"Primer_Mensaje_Agente",
+                              "FECHA LLAMADA":"Fecha_Llamada",
+                              "Flow ID":"Flujo_Truora",}
               }
-        ]
+        ]   
     },
     
     #Tipos de datos para reporte base

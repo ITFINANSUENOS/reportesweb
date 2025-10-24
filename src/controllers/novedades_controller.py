@@ -159,9 +159,6 @@ class NovedadesAnalisisController:
         Orquesta todo el proceso: carga el caché, aplica novedades, calcula el rodamiento
         y guarda un reporte multi-hoja.
         """
-        # --- PASO 1: Procesar la nómina (si se solicita) ---
-        # Se procesa al inicio para tener los datos listos.
-        # Si calcular_nomina es False, datos_nomina simplemente será None.
         datos_nomina = None
         if calcular_nomina:
             if not ruta_nomina:
@@ -294,8 +291,8 @@ class NovedadesAnalisisController:
                 'Recaudo_Anticipado', 'Recaudo_Meta','Total_Recaudo','Total_Recaudo_Sin_Anti'
             ]
             orden_columnas_detalle = [
-                'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad',
-                'Nombre_Usuario', 'Cargo_Usuario', 'Celular_Corporativo','Codigo_Novedad', 'Tipo_Novedad',
+                'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad','Nombre_Usuario',
+                'Telefono_Cliente','Ceular_Cliente','Cargo_Usuario', 'Celular_Corporativo','Codigo_Novedad', 'Tipo_Novedad',
                 'Novedad', 'Fecha_Compromiso', 'Valor'
             ]
 
@@ -316,6 +313,8 @@ class NovedadesAnalisisController:
             
             # Generar reporte de Llamadas Call Center
             df_reporte_llamadas = call_center_service.generar_reporte_llamadas(rutas_call_center, configuracion)
+
+            df_reporte_mensajes = call_center_service.generar_reporte_mensajes(rutas_call_center, configuracion)
 
             # --- PASO 8: Guardar el archivo Excel de salida ---
             ruta_salida = filedialog.asksaveasfilename(
@@ -339,6 +338,9 @@ class NovedadesAnalisisController:
                     
                 if df_reporte_llamadas is not None and not df_reporte_llamadas.empty:
                     df_reporte_llamadas.to_excel(writer, sheet_name='Reporte_Llamadas', index=False)    
+
+                if df_reporte_mensajes is not None and not df_reporte_mensajes.empty:
+                    df_reporte_mensajes.to_excel(writer, sheet_name='Reporte_Mensajes', index=False)    
 
             print("✅ Reporte final con formato guardado exitosamente.")
             messagebox.showinfo("Éxito", f"Reporte unificado guardado exitosamente en:\n{ruta_salida}")
