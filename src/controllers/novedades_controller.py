@@ -292,7 +292,7 @@ class NovedadesAnalisisController:
             ]
             orden_columnas_detalle = [
                 'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad','Nombre_Usuario',
-                'Telefono_Cliente','Ceular_Cliente','Cargo_Usuario', 'Celular_Corporativo','Codigo_Novedad', 'Tipo_Novedad',
+                'Telefono_Cliente','Celular_Cliente','Cargo_Usuario', 'Celular_Corporativo','Codigo_Novedad', 'Tipo_Novedad',
                 'Novedad', 'Fecha_Compromiso', 'Valor'
             ]
 

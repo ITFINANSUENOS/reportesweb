@@ -12,7 +12,7 @@ configuracion = {
                       "NOTA":"Novedad",
                       "VALOR":"Valor",
                       "TELF":"Telefono_Cliente",
-                      "MOVIL":"Ceular_Cliente"
+                      "MOVIL":"Celular_Cliente"
                       }
     },
     "ANALISIS":{
