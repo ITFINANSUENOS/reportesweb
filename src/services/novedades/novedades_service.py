@@ -71,7 +71,7 @@ class NovedadesService:
     
         # Reordenar columnas para la hoja de novedades
         columnas_novedades = [
-                                'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad', 'Codigo_Novedad',
+                                'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad','Telefono_Cliente','Celular_Cliente', 'Codigo_Novedad',
                                 'Tipo_Novedad', 'Novedad','Valor','Fecha_Compromiso']
         columnas_existentes = [col for col in columnas_novedades if col in reporte_novedades_detallado.columns]
         reporte_novedades_detallado = reporte_novedades_detallado.reindex(columns=columnas_existentes)
