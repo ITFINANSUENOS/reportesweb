@@ -319,7 +319,7 @@ class NovedadesAnalisisController:
             # --- PASO 8: Guardar el archivo Excel de salida ---
             ruta_salida = filedialog.asksaveasfilename(
                 defaultextension=".xlsx",
-                initialfile="Reporte_Final_Analisis.xlsx",
+                initialfile="Reporte_General.xlsx",
                 filetypes=[("Archivos de Excel", "*.xlsx"), ("Todos los archivos", "*.*")]
             )
             if not ruta_salida: return
