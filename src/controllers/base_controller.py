@@ -99,7 +99,7 @@ class BaseMensualController:
                 title="Guardar reporte como...",
                 defaultextension=".xlsx",
                 filetypes=[("Archivos de Excel", "*.xlsx"), ("Todos los archivos", "*.*")],
-                initialfile="Reporte_Consolidado_Final.xlsx"
+                initialfile="Reporte_Base.xlsx"
             )
 
             if not nombre_archivo_salida:
