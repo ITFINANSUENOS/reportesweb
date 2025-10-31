@@ -71,7 +71,8 @@ configuracion = {
             { 
               "sheet_name": "Mensajeria_Call",
               "usecols": ["Country Code", "Phone Number","Message Status", "Outbound Response Status", "Outbound Response",
-                          "Flow ID","Outbound Name","Status","Agent Conversation First Response Message","FECHA LLAMADA"], 
+                          "ID del flujo","Outbound Name","Status","Primer Mensaje de Agente de Conversacion","Fecha de creacion"
+                          "Labels de Conversacion",], 
               "rename_map": { 
                               "Country Code": "Codigo_Pais",
                               "Phone Number": "Numero_Telefono",
@@ -80,13 +81,13 @@ configuracion = {
                               "Status":"Estado",
                               "Outbound Response":"Respuesta_Saliente",
                               "Outbound Name":"Nombre_Saliente",
-                              "Agent Conversation First Response Message":"Primer_Mensaje_Agente",
-                              "FECHA LLAMADA":"Fecha_Llamada",
-                              "Flow ID":"Flujo_Truora",}
+                              "Primer Mensaje de Agente de Conversacion":"Primer_Mensaje_Agente",
+                              "Fecha de creacion":"Fecha_Llamada",
+                              "ID del flujo":"Flujo_Truora",
+                              "Labels de Conversacion":"Etiquetas_Conversacion"}
               }
         ]   
     },
-    
     #Tipos de datos para reporte base
     "BASE_MENSUAL": {
         "dtype_map": {
