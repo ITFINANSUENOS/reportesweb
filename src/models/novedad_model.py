@@ -70,17 +70,17 @@ configuracion = {
               },
             { 
               "sheet_name": "Mensajeria_Call",
-              "usecols": ["Country Code", "Phone Number","Message Status", "Outbound Response Status", "Outbound Response",
-                          "ID del flujo","Outbound Name","Status","Primer Mensaje de Agente de Conversacion","Fecha de creacion"
+              "usecols": ["Pais", "Numero de telefono", "Estado de respuesta del outbound","Estado", "Mensaje de inicio",
+                          "ID del flujo","Nombre del outbound","Estado del outbound","Primer Mensaje de Agente de Conversacion","Fecha de creacion",
                           "Labels de Conversacion",], 
               "rename_map": { 
-                              "Country Code": "Codigo_Pais",
-                              "Phone Number": "Numero_Telefono",
-                              "Message Status": "Estado_Mensaje",
-                              "Outbound Response Status":"Estado_Respuesta_Saliente",
-                              "Status":"Estado",
-                              "Outbound Response":"Respuesta_Saliente",
-                              "Outbound Name":"Nombre_Saliente",
+                              "Pais": "Codigo_Pais",
+                              "Numero de telefono": "Numero_Telefono",
+                              "Estado de respuesta del outbound":"Estado_Respuesta_Saliente",
+                              "Estado":"Estado",
+                              "Estado del outbound":"Estado_Mensaje",
+                              "Mensaje de inicio":"Respuesta_Saliente",
+                              "Nombre del outbound":"Nombre_Saliente",
                               "Primer Mensaje de Agente de Conversacion":"Primer_Mensaje_Agente",
                               "Fecha de creacion":"Fecha_Llamada",
                               "ID del flujo":"Flujo_Truora",
@@ -110,7 +110,6 @@ configuracion = {
             'Total_Cuotas': 'Int64',
             'Cuotas_Pagadas':'Int64',                    
             'Dias_Atraso':'Int64',
-
         }
     }
 }
