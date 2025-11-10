@@ -1,0 +1,19 @@
+# --- Pega esto en .dockerignore ---
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Entorno virtual
+.venv/
+venv/
+ENV/
+entorno/
+
+# Archivos de configuración y Git
+.git/
+.gitignore
+.vscode/
+README.md
