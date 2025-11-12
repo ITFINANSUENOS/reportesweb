@@ -1,31 +1,34 @@
 from tkinter import filedialog, messagebox
 import threading
-import pandas as pd
 from pathlib import Path
 
-# Importaciones de tu proyecto
-from src.views.base_view.base_view import BaseMensualView
-from src.services.base.report_service import ReportService
-from src.models.base_model import configuracion, ORDEN_COLUMNAS_FINAL
-
+# Importaciones de servcios y vistas
+from src.views.base_view.base_mensual_tab_view import BaseMensualView
+from src.services.base.processing_orchestrator_service import ProcessingOrchestratorService
+from src.services.base.file_handler_service import FileHandlerService
 class BaseMensualController:
-    def __init__(self,view=None):
+    def __init__(self, view=None):
         self.view = view
-        self.rutas_archivos = {} # Diccionario para almacenar las rutas
-
-    def abrir_vista(self, parent):
-        """Crea y muestra la ventana para cargar la base mensual."""
-        if self.view is None or not self.view.winfo_exists():
-            self.view = BaseMensualView(parent, self)
-        self.view.deiconify() # Muestra la ventana si estaba oculta
+        self.rutas_archivos = {} 
+        self.ruta_reporte_base = None
+        # Instanciamos el servicio de archivos para usarlo después
+        self.file_handler_service = FileHandlerService()
 
     def set_view(self, view):
         self.view = view
+        
+    def abrir_vista(self, parent):
+        """Crea y muestra la ventana para cargar la base mensual."""
+        if self.view is None or not self.view.winfo_exists():
+            main_controller = getattr(self.view, 'main_window_controller', None)
+            self.view = BaseMensualView(parent, self, main_controller)
+        self.view.deiconify() 
 
     def seleccionar_archivo(self, tipo_archivo):
         """Abre un diálogo para seleccionar uno o varios archivos."""
         filetypes = [("Excel files", "*.xlsx *.XLSX *.xls *.XLS")]
         
+        # Esta lógica de UI se mantiene en el controlador, lo cual es correcto.
         if tipo_archivo in ["ANALISIS", "R91", "VENCIMIENTOS", "R03"]:
             rutas = filedialog.askopenfilenames(title=f"Seleccione archivos para {tipo_archivo}", filetypes=filetypes)
         else:
@@ -37,62 +40,66 @@ class BaseMensualController:
             display_text = Path(rutas[0]).name
             if len(rutas) > 1:
                 display_text = f"{len(rutas)} archivos seleccionados"
-
-            if self.view:
-               self.view.actualizar_ruta_label(tipo_archivo, display_text)
-            else:
-               print("Error: La vista no ha sido asignada al controlador.")    
             
-            self.view.actualizar_ruta_label(tipo_archivo, display_text)
+            if self.view:
+                self.view.actualizar_ruta_label(tipo_archivo, display_text)
+            else:
+                print("Error: La vista no ha sido asignada al controlador.") 
+            
             print(f"Archivos para {tipo_archivo}: {self.rutas_archivos[tipo_archivo]}")
 
+    def seleccionar_reporte_base(self):
+        """Abre un diálogo para seleccionar el archivo Excel del reporte anterior."""
+        filetypes = [("Excel files", "*.xlsx *.xls")]
+        ruta = filedialog.askopenfilename(title="Seleccione el Reporte de Excel Anterior", filetypes=filetypes)
+        
+        if ruta:
+            self.ruta_reporte_base = ruta
+            if self.view:
+                self.view.base_report_path_label.config(text=Path(ruta).name, style='Success.TLabel')
+            print(f"Reporte base para actualización seleccionado: {self.ruta_reporte_base}")
+            
     def procesar_archivos(self):
-        """Inicia el procesamiento de los archivos en un hilo separado para no congelar la UI."""
+        """Inicia el procesamiento en un hilo separado para no congelar la UI."""
         self.view.procesar_button.config(state="disabled")
         self.view.actualizar_estado("Iniciando proceso...", 0)
         
-        thread = threading.Thread(target=self._ejecutar_proceso)
+        # El hilo ahora llamará a un método mucho más limpio.
+        thread = threading.Thread(target=self._ejecutar_proceso_orquestado)
         thread.start()
 
-    def _ejecutar_proceso(self):
-        """Lógica de procesamiento que se ejecuta en segundo plano."""
+    def _ejecutar_proceso_orquestado(self):
+        """
+        Orquesta el proceso utilizando servicios, manteniendo al controlador
+        libre de lógica de negocio.
+        """
         try:
-            # --- INICIO: LEER FECHAS DEL FILTRO ---
+            # 1. Recolectar datos de la UI
+            modo_actualizacion = self.view.update_mode_var.get()
             start_date = self.view.start_date_entry.get() or None
             end_date = self.view.end_date_entry.get() or None
-            # --- FIN: LEER FECHAS DEL FILTRO ---
-
-            lista_final_rutas = []
-            for lista_rutas in self.rutas_archivos.values():
-                lista_final_rutas.extend(lista_rutas)
-
-            if not lista_final_rutas:
-                messagebox.showwarning("Sin Archivos", "No se ha seleccionado ningún archivo para procesar.")
-                return
-
-            self.view.actualizar_estado("Instanciando servicio...", 10)
-            service = ReportService(config=configuracion)
-
-            self.view.actualizar_estado("Generando reporte consolidado...", 30)
             
-            # --- MODIFICADO: Pasar las fechas al servicio ---
-            reporte_final, reporte_negativos = service.generate_consolidated_report(
+            lista_final_rutas = [ruta for lista in self.rutas_archivos.values() for ruta in lista]
+
+            # 2. Instanciar y ejecutar el servicio orquestador
+            # Le pasamos el método de la vista como callback para que el servicio informe el progreso.
+            orchestrator = ProcessingOrchestratorService(progress_callback=self.view.actualizar_estado)
+            
+            result_dataframes = orchestrator.execute_processing(
                 file_paths=lista_final_rutas,
-                orden_columnas=ORDEN_COLUMNAS_FINAL,
+                update_mode=modo_actualizacion,
+                base_report_path=self.ruta_reporte_base,
                 start_date=start_date,
                 end_date=end_date
             )
 
-            if reporte_final is None or reporte_final.empty:
-                raise Exception("El reporte final está vacío o no se generó. Verifique los archivos de entrada y el rango de fechas.")
-
+            # 3. Gestionar el guardado del archivo (interacción con el usuario)
             self.view.actualizar_estado("Esperando para guardar el archivo...", 90)
-
             nombre_archivo_salida = filedialog.asksaveasfilename(
                 title="Guardar reporte como...",
                 defaultextension=".xlsx",
                 filetypes=[("Archivos de Excel", "*.xlsx"), ("Todos los archivos", "*.*")],
-                initialfile="Reporte_Consolidado_Final.xlsx"
+                initialfile="Reporte_Base.xlsx"
             )
 
             if not nombre_archivo_salida:
@@ -100,42 +107,17 @@ class BaseMensualController:
                 messagebox.showinfo("Cancelado", "La operación de guardado fue cancelada.")
                 return
 
-             # --- MODIFICADO: Lógica de guardado para múltiples hojas ---
-            print(f"💾 Guardando reporte en {nombre_archivo_salida}...")
-            with pd.ExcelWriter(nombre_archivo_salida, engine='openpyxl') as writer:
-                # Hoja 1: El reporte principal
-                reporte_final.to_excel(writer, sheet_name='Reporte Consolidado', index=False)
-                
-                # Hoja 2: El reporte de negativos (solo si tiene datos)
-                if reporte_negativos is not None and not reporte_negativos.empty:
-                    reporte_negativos.to_excel(writer, sheet_name='Creditos_Negativos', index=False)
-                    print("   - Hoja 'Creditos_Negativos' añadida.")
-            # --- FIN DE LA MODIFICACIÓN ---
-
-            try:
-                cache_dir = Path(__file__).resolve().parent.parent.parent / "cache"
-                cache_dir.mkdir(exist_ok=True)
-                cache_filepath = cache_dir / "reporte_base_mensual.feather"
-                
-                print(f"⚡ Guardando caché de datos para análisis rápido en: {cache_filepath}")
-                # Guarda el DataFrame en formato Feather (muy rápido para leer)
-                for col in reporte_final.columns:
-                    reporte_final[col] = reporte_final[col].astype(str)
-          
-                reporte_final.to_feather(cache_filepath)
-                
-            except Exception as e:
-                # Si algo falla al guardar el caché, informa al usuario pero no detengas el programa
-                print(f"⚠️ No se pudo guardar el caché de datos: {e}")
-                messagebox.showwarning("Advertencia de Caché", 
-                                    "No se pudo guardar el archivo de caché interno para análisis futuros."
-                                    "\nEl reporte de Excel se guardó correctamente.")
-
+            # 4. Delegar el guardado al servicio de archivos
+            self.file_handler_service.save_report_to_excel(nombre_archivo_salida, result_dataframes)
+            
             self.view.actualizar_estado("¡Éxito! Reporte guardado.", 100)
-            messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}")  
+            messagebox.showinfo("Proceso Completado", f"El reporte ha sido guardado exitosamente en:\n{nombre_archivo_salida}")
 
-        except Exception as e:
+        except (ValueError, IOError, Exception) as e:
+            # Capturamos cualquier error de los servicios y lo mostramos al usuario.
             messagebox.showerror("Error en el Proceso", f"Ocurrió un error: {str(e)}")
             self.view.actualizar_estado(f"Error: {str(e)}", 0)
         finally:
-            self.view.procesar_button.config(state="normal")
+            # Aseguramos que el botón se reactive siempre.
+            if self.view and self.view.winfo_exists():
+                self.view.procesar_button.config(state="normal")

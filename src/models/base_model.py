@@ -2,8 +2,8 @@
 configuracion = {
     "ANALISIS": {
         "engine": "xlrd",
-        "usecols": ["direccion", "barrio", "nomciudad",
-                     "diasatras", "cuotaspag","cedula","saldofac","tipo","numero","fechafac"],
+        "usecols": ["direccion", "barrio", "nomciudad","ultpago",
+                     "diasatras", "cuotaspag","cedula","saldofac","tipo","numero","fechadoc"],
         "rename_map": { "direccion": "Direccion",
                         "barrio": "Barrio",
                         "nomciudad": "Nombre_Ciudad",
@@ -13,12 +13,13 @@ configuracion = {
                         "tipo":"Tipo_Credito", 
                         "numero":"Numero_Credito",
                         "saldofac":"Saldo_Factura" ,
-                        "fechafac":"Fecha_Desembolso"
+                        "ultpago":"Fecha_Ultimo_Pago_Inicial",
+                        "fechadoc":"Fecha_Desembolso"
                         }
     },
     "R91": {
         "usecols": ["VINNOMBRE", "MCDZONA", "MCDVINCULA", "MCDNUMCRU1", "VENNOMBRE",
-                    "MCDTIPCRU1","VENCODIGO", "MCDCCOSTO", "MCDCOBRA",
+                    "MCDTIPCRU1","VENCODIGO", "MCDCCOSTO", "MCDCOBRA","META_SALDO",
                     "META_INTER", "META_DC_AL", "META_DC_AT", "META_ATRAS"],
         "rename_map": { 
                        "MCDTIPCRU1": "Tipo_Credito", 
@@ -32,7 +33,8 @@ configuracion = {
                        "MCDCCOSTO" : "Codigo_Centro_Costos", 
                        "META_INTER" : "Meta_Intereses", 
                        "META_DC_AL" : "Meta_DC_Al_Dia", 
-                       "META_DC_AT" : "Meta_DC_Atraso", 
+                       "META_DC_AT" : "Meta_DC_Atraso",
+                       "META_SALDO" : "Meta_Saldo", 
                        "META_ATRAS" : "Meta_Atraso" }
     },
     "VENCIMIENTOS": {
@@ -46,7 +48,8 @@ configuracion = {
                        "VENCE": "Fecha_Cuota_Vigente" }
     },
     "R03":{
-        "usecols": ["CODEUDOR1","NOMBRE1","VINTELEFON","CIUNOMBRE1","CODEUDOR2","NOMBRE2","VINTELEFO2","CIUNOMBRE2","CEDULA"],
+        "usecols": ["CODEUDOR1","NOMBRE1","VINTELEFON","CIUNOMBRE1","CODEUDOR2","NOMBRE2",
+                    "VINTELEFO2","CIUNOMBRE2","CEDULA","TIPO","NUMERO"],
         "rename_map": { 
                        "CODEUDOR1": "Codeudor1", 
                        "NOMBRE1": "Nombre_Codeudor1", 
@@ -56,7 +59,9 @@ configuracion = {
                        "NOMBRE2": "Nombre_Codeudor2", 
                        "VINTELEFO2": "Telefono_Codeudor2", 
                        "CIUNOMBRE2": "Ciudad_Codeudor2", 
-                       "CEDULA": "Cedula_Cliente" }
+                       "CEDULA": "Cedula_Cliente",
+                       "TIPO":"Tipo_Credito",
+                       "NUMERO":"Numero_Credito"}
     },
     "SC04":{
         "usecols":["FACTURA","SLCVALOR","SLCNCUOTAS","SLCPAGOINI"],
@@ -191,12 +196,14 @@ ORDEN_COLUMNAS_FINAL = [
     'Total_Cuotas',
     'Valor_Cuota',
     'Dias_Atraso',
-    'Franja_Mora',
+    'Franja_Meta',
+    'Franja_Cartera',
     'Saldo_Capital',
     'Saldo_Interes_Corriente',
     'Saldo_Avales',
     'Meta_Intereses',
     'Meta_General',
+    'Meta_Saldo',
     'Meta_%',
     'Meta_$',
     'Meta_T.R_%',
@@ -207,6 +214,8 @@ ORDEN_COLUMNAS_FINAL = [
     'Valor_Cuota_Vigente',
     'Fecha_Cuota_Atraso',
     'Primera_Cuota_Mora',
+    'Fecha_Ultimo_Pago_Inicial',
+    'Rango_Ultimo_pago_Inicial',
     'Valor_Cuota_Atraso',      
     'Valor_Vencido'
 ]

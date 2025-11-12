@@ -1,4 +1,3 @@
-# En: src/services/recaudo_r91_service.py
 import pandas as pd
 
 class RecaudoR91Service:
@@ -22,9 +21,15 @@ class RecaudoR91Service:
         # 4. Calcular 'Total_Recaudo'
         df_r91['Total_Recaudo'] = df_r91['Recaudo_Meta'] + df_r91['Recaudo_Anticipado']
         
+        #  Calcular 'Total_Recaudo_Sin_Anti'
+        df_r91['Total_Recaudo_Sin_Anti'] = df_r91['Total_Recaudo'] - df_r91['Recaudo_Anticipado']
+        
         # 5. Seleccionar y devolver las columnas finales
-        columnas_finales = ['Credito', 'Recaudo_Anticipado', 'Recaudo_Meta', 'Total_Recaudo']
+        # --- MODIFICADO: Añadimos la nueva columna a la lista final ---
+        columnas_finales = ['Credito', 'Recaudo_Anticipado', 'Recaudo_Meta', 'Total_Recaudo', 'Total_Recaudo_Sin_Anti']
         df_resultado = df_r91[columnas_finales]
+        
+        df_resultado = df_resultado.drop_duplicates(subset=['Credito'], keep='last')
         
         print("✅ Cálculo de recaudos completado.")
         return df_resultado

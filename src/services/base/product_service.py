@@ -15,10 +15,11 @@ class ProductsSalesService:
             print("⚠️ Archivo CRTMP no encontrado o vacío. No se pueden asignar facturas.")
             reporte_df['Factura_Venta'] = 'NO DISPONIBLE'
             return reporte_df
-
+        
         reporte_df['Factura_Venta'] = np.nan
+        reporte_df['Factura_Venta'] = reporte_df['Factura_Venta'].astype('object') # Convertir a tipo objeto para aceptar strings
 
-        # --- Lógica para FINANSUEÑOS (sin cambios) ---
+        # --- Lógica para FINANSUEÑOS ---
         filtro_fns = reporte_df['Empresa'] == 'FINANSUEÑOS'
         if filtro_fns.any():
             print("   - Procesando facturas de FINANSUEÑOS...")
@@ -33,9 +34,10 @@ class ProductsSalesService:
                 coincidencias.sort_values(by=['Credito_credito', 'dias_diferencia'], inplace=True)
                 mapa_final = coincidencias.drop_duplicates(subset='Credito_credito', keep='first')
                 mapa_facturas = pd.Series(mapa_final['Credito_factura'].values, index=mapa_final['Credito_credito']).to_dict()
-                reporte_df.loc[filtro_fns, 'Factura_Venta'] = reporte_df.loc[filtro_fns, 'Credito'].map(mapa_facturas)
+                facturas_asignadas = reporte_df.loc[filtro_fns, 'Credito'].map(mapa_facturas).astype(str)
+                reporte_df.loc[filtro_fns, 'Factura_Venta'] = facturas_asignadas
 
-        # --- Lógica para ARPESOD (CORREGIDA) ---
+        # --- Lógica para ARPESOD ---
         print("   - Procesando facturas de ARPESOD...")
         prefijos = ['RTC', 'PR', 'NC', 'NT', 'NF']
         filtro_arp_especial = (reporte_df['Empresa'] == 'ARPESOD') & (reporte_df['Credito'].str.startswith(tuple(prefijos), na=False))
@@ -53,12 +55,13 @@ class ProductsSalesService:
             merged_arp = pd.merge(reporte_busqueda, crtmp_busqueda, left_on=['Cedula_Cliente', 'Numero_Busqueda'], right_on=['Cedula_Cliente', 'Numero_Credito'], how='left')
             merged_arp['Factura_Encontrada'] = np.where(merged_arp['Numero_Credito'].notna(), merged_arp['Tipo_Credito'] + '-' + merged_arp['Numero_Credito'], np.nan)
             mapa_facturas_arp = pd.Series(merged_arp['Factura_Encontrada'].values, index=merged_arp['Credito']).to_dict()
-            reporte_df.loc[filtro_arp_especial, 'Factura_Venta'] = reporte_df.loc[filtro_arp_especial, 'Credito'].map(mapa_facturas_arp)
+            facturas_arp_asignadas = reporte_df.loc[filtro_arp_especial, 'Credito'].map(mapa_facturas_arp).astype(str)
+            reporte_df.loc[filtro_arp_especial, 'Factura_Venta'] = facturas_arp_asignadas
             reporte_df.drop(columns=['Numero_Busqueda'], inplace=True, errors='ignore')
 
         # Paso 2: Procesar los créditos normales. Un crédito normal es de ARPESOD y NO es especial.
         filtro_arp_normal = (reporte_df['Empresa'] == 'ARPESOD') & (~filtro_arp_especial)
-        reporte_df.loc[filtro_arp_normal, 'Factura_Venta'] = reporte_df['Credito']
+        reporte_df.loc[filtro_arp_normal, 'Factura_Venta'] = reporte_df['Credito'].astype(str)
         
         # Paso 3: Llenar vacíos restantes. Esto ahora solo afectará a los especiales que no encontraron factura.
         reporte_df['Factura_Venta'] = reporte_df['Factura_Venta'].fillna('NO ASIGNADA')
@@ -70,55 +73,53 @@ class ProductsSalesService:
         """
         Usa la columna 'Factura_Venta' para añadir detalles de fecha, correo,
         productos y obsequios.
+        Esta función ahora maneja tanto la creación inicial como la actualización.
         """
         print("🎁 Agregando detalles completos de la factura...")
 
         if crtmp_df.empty:
-            # Asignar valores por defecto a todas las columnas de detalle
-            reporte_df['Fecha_Facturada'] = 'NO DISPONIBLE'
-            reporte_df['Correo'] = 'NO DISPONIBLE'
-            reporte_df['Nombre_Producto'] = 'NO DISPONIBLE'
-            reporte_df['Cantidad_Producto'] = 0
-            reporte_df['Obsequio'] = 'NO DISPONIBLE'
-            reporte_df['Cantidad_Obsequio'] = 0
+            # Asignar valores por defecto si no hay datos de detalle
+            cols_defecto = {
+                'Fecha_Facturada': 'NO DISPONIBLE', 'Correo': 'NO DISPONIBLE',
+                'Nombre_Producto': 'NO DISPONIBLE', 'Cantidad_Producto': 0,
+                'Obsequio': 'NO DISPONIBLE', 'Cantidad_Obsequio': 0
+            }
+            for col, value in cols_defecto.items():
+                if col not in reporte_df.columns:
+                    reporte_df[col] = value
             return reporte_df
 
         crtmp_detalles = crtmp_df.copy()
         crtmp_detalles['Factura_Venta'] = crtmp_detalles['Tipo_Credito'].astype(str) + '-' + crtmp_detalles['Numero_Credito'].astype(str)
-        
+        crtmp_detalles['Nombre_Producto'] = crtmp_detalles['Nombre_Producto'].fillna('PRODUCTO NO REGISTRADO')
+        crtmp_detalles['Cantidad_Item'] = crtmp_detalles['Cantidad_Item'].fillna(1)
         crtmp_detalles['Total_Venta'] = pd.to_numeric(crtmp_detalles['Total_Venta'], errors='coerce').fillna(0)
-        crtmp_detalles['Cantidad_Item'] = pd.to_numeric(crtmp_detalles['Cantidad_Item'], errors='coerce').fillna(1)
         es_obsequio = (crtmp_detalles['Total_Venta'] >= 1000) & (crtmp_detalles['Total_Venta'] <= 6000)
         crtmp_detalles['Tipo_Item'] = np.where(es_obsequio, 'Obsequio', 'Producto')
         crtmp_detalles['Item_Texto'] = crtmp_detalles['Nombre_Producto'].astype(str) + ' (' + crtmp_detalles['Cantidad_Item'].astype(int).astype(str) + ')'
 
-        # Agrupamos para obtener productos, obsequios, fecha y correo en un solo paso.
         productos = crtmp_detalles[crtmp_detalles['Tipo_Item'] == 'Producto'].groupby('Factura_Venta').agg(
-            Nombre_Producto=('Item_Texto', ', '.join),
-            Cantidad_Producto=('Cantidad_Item', 'sum')
-        )
+            Nombre_Producto=('Item_Texto', ', '.join), Cantidad_Producto=('Cantidad_Item', 'sum'))
         obsequios = crtmp_detalles[crtmp_detalles['Tipo_Item'] == 'Obsequio'].groupby('Factura_Venta').agg(
-            Obsequio=('Item_Texto', ', '.join),
-            Cantidad_Obsequio=('Cantidad_Item', 'sum')
-        )
-        # Buscamos la fecha y el correo (solo necesitamos el primero que aparezca por factura)
+            Obsequio=('Item_Texto', ', '.join), Cantidad_Obsequio=('Cantidad_Item', 'sum'))
         detalles_adicionales = crtmp_detalles.groupby('Factura_Venta').agg(
-            Fecha_Facturada=('Fecha_Facturada', 'first'),
-            Correo=('Correo', 'first')
-        )
+            Fecha_Facturada=('Fecha_Facturada', 'first'), Correo=('Correo', 'first'))
 
-        # Unimos toda la información de detalles
         info_facturas = detalles_adicionales.join(productos, how='outer').join(obsequios, how='outer')
 
-        # Cruzamos esta información con el reporte principal
+        conflicting_cols = [col for col in info_facturas.columns if col in reporte_df.columns]
+        if conflicting_cols:
+            print(f"[LOG] Modo Actualización detectado. Eliminando columnas viejas: {conflicting_cols}")
+            reporte_df = reporte_df.drop(columns=conflicting_cols)
         reporte_df = pd.merge(reporte_df, info_facturas, on='Factura_Venta', how='left')
         
-        # Limpieza final de las nuevas columnas
+        print("[LOG] Realizando limpieza final de columnas de producto...")
         reporte_df['Nombre_Producto'] = reporte_df['Nombre_Producto'].fillna('NO REGISTRA')
         reporte_df['Obsequio'] = reporte_df['Obsequio'].fillna('SIN OBSEQUIOS')
         reporte_df['Cantidad_Producto'] = reporte_df['Cantidad_Producto'].fillna(0).astype(int)
         reporte_df['Cantidad_Obsequio'] = reporte_df['Cantidad_Obsequio'].fillna(0).astype(int)
         reporte_df['Correo'] = reporte_df['Correo'].fillna('NO REGISTRA')
+        reporte_df['Fecha_Facturada'] = reporte_df['Fecha_Facturada'].fillna('NO DISPONIBLE')
 
         print("✅ Detalles completos de la factura agregados.")
         return reporte_df

@@ -9,20 +9,15 @@ class AnticiposController:
     def set_view(self, view):
         self.view = view    
     
-    def start_report_generation(self):
-        """Inicia el flujo completo a petición de la vista."""
-        file_path = filedialog.askopenfilename(
-            title='Selecciona el archivo de Anticipos',
-            filetypes=[('Archivos Excel', '*.xlsx')]
-        )
-        if not file_path:
-            self.view.update_display("Operación cancelada.", 0)
-            return
-
+    def start_report_generation(self,file_path):
         try:
             # Define una función para que el servicio actualice la UI
             def status_update_callback(message, progress):
-                self.view.update_display(message, progress)
+                # La vista principal no tiene 'update_display', verificamos si existe.
+                if hasattr(self.view, 'update_display'):
+                    self.view.update_display(message, progress)
+                elif hasattr(self.view, 'update_status'):
+                    self.view.update_status(f"{message} ({progress}%)")
 
             # 1. Llama al servicio para que haga el trabajo pesado
             final_sheets = self.service.generate_report_data(file_path, status_update_callback)
