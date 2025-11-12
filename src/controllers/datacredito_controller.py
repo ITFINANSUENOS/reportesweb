@@ -3,43 +3,15 @@ from tkinter import filedialog, messagebox
 from src.views.datacredito_view import DataCreditoView
 from src.models.datacredito_model import DataCreditoModel
 
-# class DataCreditoController:
-#     def __init__(self):
-#         self.model = DataCreditoModel()
-#         # El controlador ya no gestiona una vista de Tkinter
-
-#     def process_files(self, plano_path, correcciones_path, output_path):
-#         """
-#         Orquesta todo el proceso de transformación de datos.
-#         Este es el método que la API llamará.
-#         """
-#         try:
-#             print("Controlador: Iniciando proceso...")
-            
-#             # 1. Cargar datos
-#             self.model.load_plano_file(plano_path)
-#             print("Controlador: Archivo plano cargado.")
-            
-#             # 2. Procesar datos (el modelo llama al servicio)
-#             self.model.process_data(correcciones_path)
-#             print("Controlador: Datos procesados.")
-            
-#             # 3. Guardar datos
-#             self.model.save_processed_file(output_path)
-#             print("Controlador: Archivo final guardado.")
-            
-#             # Devuelve True si todo fue exitoso
-#             return True
-
-#         except Exception as e:
-#             print(f"ERROR en DataCreditoController: {e}")
-#             # Lanza la excepción para que la API pueda capturarla y reportar el error
-#             raise e
-
 class DataCreditoController:
     def __init__(self):
         self.datacredito_view = None
+        self.empresa_actual = None
         self.model = DataCreditoModel()
+    
+    def set_empresa_actual(self, empresa_actual):
+        """Establece el tipo de empresa para usar el servicio correcto"""
+        self.empresa_actual = empresa_actual.lower()
     
     def set_view(self, view):
         """
@@ -56,7 +28,14 @@ class DataCreditoController:
         else:
             self.datacredito_view.top.lift()
 
-    def run_processing_datacredito(self, view, plano_path, correcciones_path):
+    def run_processing_datacredito(self, view, plano_path, correcciones_path):   
+            """Pide el archivo de salida e inicia el procesamiento en un hilo."""
+            if not self.empresa_actual:
+                messagebox.showerror("Error", "No se ha especificado el tipo de empresa")
+                view.update_status("Error: Tipo de empresa no especificado")
+                return
+        
+        
             """Pide el archivo de salida e inicia el procesamiento en un hilo."""
             output_path = filedialog.asksaveasfilename(
                 title="Guardar archivo procesado como...",
@@ -69,7 +48,6 @@ class DataCreditoController:
 
             thread = threading.Thread(
                 target=self._run_processing_thread,
-                # 3. Le pasamos la 'view' correcta al hilo
                 args=(view, plano_path, correcciones_path, output_path)
             )
             thread.start()
@@ -85,7 +63,7 @@ class DataCreditoController:
             view.update_status("Archivo plano cargado, transformando...")
             
             # 2. Procesar datos (Modelo llama al Servicio)
-            self.model.process_data(correcciones_path)
+            self.model.process_data(correcciones_path, self.empresa_actual)
             view.update_status("Datos procesados, guardando archivo...")
             
             # 3. Guardar datos (Modelo)
@@ -101,4 +79,4 @@ class DataCreditoController:
             messagebox.showerror("Error", error_message)
         finally:
             # Usa 'view.top.after' para limpiar el estado
-            view.top.after(5000, lambda: view.update_status("Listo para comenzar."))
+            view.after(5000, lambda: view.update_status("Listo para comenzar."))

@@ -46,7 +46,7 @@ class CreditDetailsService:
             reporte_df.loc[mask_arp, 'Valor_Cuota'] = reporte_df.loc[mask_arp, 'Factura_Venta'].map(mapa_valor_arp)
             reporte_df.loc[mask_arp, 'Valor_Desembolso'] = reporte_df.loc[mask_arp, 'Factura_Venta'].map(mapa_desembolso_arp)
         
-        # --- Preparar datos de FINANSUEÑOS (Desembolsos) ---
+        # --- Preparar datos de FINANSUEÑOS ---
         if not fnz001_df.empty:
             fnz001_df.drop_duplicates(subset='Credito', keep='last', inplace=True)
 
@@ -67,17 +67,13 @@ class CreditDetailsService:
         y una lista de los créditos que presentan cuotas negativas.
         """
         print("⚙️  Procesando datos de VENCIMIENTOS de forma aislada...")
-
         if vencimientos_df.empty:
             return pd.DataFrame(), pd.DataFrame() # Devuelve dos dataframes vacíos
-
         df = vencimientos_df.copy()
         df['Fecha_Cuota_Vigente'] = pd.to_datetime(df['Fecha_Cuota_Vigente'], errors='coerce')
         df['Valor_Cuota_Vigente'] = pd.to_numeric(df['Valor_Cuota_Vigente'], errors='coerce')
         df.dropna(subset=['Credito', 'Fecha_Cuota_Vigente'], inplace=True)
-
         today = pd.Timestamp.now().normalize()
-        
         resumen_creditos = pd.DataFrame(df['Credito'].unique(), columns=['Credito']).set_index('Credito')
         
         # --- Añadir la columna 'Celular' al resumen ---
@@ -124,6 +120,26 @@ class CreditDetailsService:
             resumen_creditos['Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Cuota_Vigente'])
             resumen_creditos['Valor_Cuota_Vigente'] = resumen_creditos.index.map(mapa_vigentes['Valor_Cuota_Vigente'])
 
+
+        print("🔍 Identificando créditos con estado anticipado...")
+        start_of_month = today.normalize().replace(day=1) 
+        df_pasadas = df[df['Fecha_Cuota_Vigente'] < start_of_month]
+        creditos_con_cuotas_pasadas = set(df_pasadas['Credito'].unique())
+        df_futuras = df[df['Fecha_Cuota_Vigente'] > today + pd.offsets.MonthEnd(0)]
+        creditos_con_cuotas_futuras = set(df_futuras['Credito'].unique())
+        creditos_con_cuotas_este_mes = set(df_vigentes['Credito'].unique())
+        creditos_anticipados = creditos_con_cuotas_futuras - creditos_con_cuotas_este_mes - creditos_con_cuotas_pasadas
+        
+        if creditos_anticipados:
+            print(f"   - ✅ Se identificaron {len(creditos_anticipados)} créditos que serán marcados como 'ANTICIPADO'.")
+            columnas_a_marcar = [
+                'Fecha_Cuota_Atraso', 'Primera_Cuota_Mora', 'Valor_Cuota_Atraso',
+                'Fecha_Cuota_Vigente', 'Cuota_Vigente', 'Valor_Cuota_Vigente'
+            ]
+            mask_anticipados = resumen_creditos.index.isin(creditos_anticipados)
+            for col in columnas_a_marcar:
+                if col in resumen_creditos.columns:
+                    resumen_creditos.loc[mask_anticipados, col] = 'ANTICIPADO'
         print("✅ Resumen de vencimientos creado.")
         return resumen_creditos.reset_index(), creditos_con_negativos
 
