@@ -81,9 +81,13 @@ class DataCreditoModel:
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             
             try:
+                # --- ¡¡¡AQUÍ ESTÁ LA CORRECCIÓN!!! ---
+                # Hemos eliminado 'skipfooter=1'
                 iterador_de_chunks = pd.read_fwf(
                     plano_path, colspecs=self.colspecs, names=self.names, encoding='cp1252',
-                    skiprows=1, skipfooter=1, engine='python',
+                    skiprows=1,
+                    # skipfooter=1, <-- ¡ESTE ES EL BUG! Lo quitamos.
+                    engine='python',
                     chunksize=chunk_size
                 )
             except Exception as e:
