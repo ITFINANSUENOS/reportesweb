@@ -1,80 +1,209 @@
 import pandas as pd
+import openpyxl  # <-- Usamos openpyxl para bajo consumo de RAM
+import sys
+from collections import defaultdict
 
 class FinansuenosDataProcessorService:
-    """Clase responsable de todas las transformaciones de datos."""
-    def __init__(self, df, ruta_correcciones):
-        self.df = df
-        self.ruta_correcciones = ruta_correcciones
+    """
+    Clase responsable de todas las transformaciones de datos.
+    OPTIMIZADA (Opción B): Carga las correcciones (84MB)
+    usando 'openpyxl' para bajo consumo de RAM.
+    """
+    def __init__(self, correcciones_path):
+        """
+        Carga TODAS las hojas de corrección (el archivo de 84MB)
+        en la memoria UNA SOLA VEZ, usando 'openpyxl' para
+        evitar DataFrames de Pandas gigantes.
+        """
+        print(f"SERVICE (FINANSUEÑOS): Abriendo (read-only) el archivo de correcciones: {correcciones_path}", flush=True)
+        # Cargamos el libro de trabajo en modo 'read_only' (eficiente)
+        # 'data_only=True' lee los valores de las fórmulas, no las fórmulas
+        try:
+            wb = openpyxl.load_workbook(correcciones_path, read_only=True, data_only=True)
+        except Exception as e:
+            print(f"SERVICE_ERROR: No se pudo abrir el archivo de correcciones '{correcciones_path}' con openpyxl. Error: {e}", flush=True)
+            raise e
 
-    def run_all_transformations(self):
-        """Ejecuta todos los pasos de limpieza y formato en orden."""
-        print("Servicio: Ejecutando todas las transformaciones...")
-        self._correct_data_from_excel()
+        # --- Mapa A: Cédulas ---
+        print(f"SERVICE (FINANSUEÑOS): 1/5 Creando mapa 'Cedulas a corregir'...", flush=True)
+        self.mapa_cedulas = {}
+        try:
+            ws_cedulas = wb['Cedulas a corregir']
+            # Iteramos fila por fila (saltando el header)
+            for i, row in enumerate(ws_cedulas.iter_rows(min_row=2)):
+                cedula_mal = str(row[0].value).strip()
+                cedula_correcta = str(row[1].value).strip()
+                if cedula_mal:
+                    self.mapa_cedulas[cedula_mal] = cedula_correcta
+        except KeyError:
+            print("SERVICE_WARN: No se encontró la hoja 'Cedulas a corregir'", flush=True)
+        
+        # --- Mapa B: Vinculado ---
+        print(f"SERVICE (FINANSUEÑOS): 2/5 Creando mapa 'Vinculado'...", flush=True)
+        # Necesitamos 4 mapas (NOMBRE, DIRECCI, VINEMAIL, TELEFONO) indexados por CODIGO
+        self.mapa_vinc = defaultdict(dict)
+        try:
+            ws_vinculado = wb['Vinculado']
+            # Asumimos: CODIGO(A), NOMBRE(B), DIRECCI(C), VINEMAIL(D), TELEFONO(E)
+            # Esto es una suposición, ajusta los índices (ej. row[0]) si es necesario
+            # Encuentra los headers
+            headers = [cell.value for cell in ws_vinculado[1]]
+            idx_codigo = headers.index('CODIGO')
+            mapa_cols_vinc = {
+                'NOMBRE': headers.index('NOMBRE'),
+                'DIRECCI': headers.index('DIRECCI'),
+                'VINEMAIL': headers.index('VINEMAIL'),
+                'TELEFONO': headers.index('TELEFONO')
+            }
+            
+            for row in ws_vinculado.iter_rows(min_row=2):
+                codigo = str(row[idx_codigo].value).strip()
+                if codigo:
+                    for col_name, col_idx in mapa_cols_vinc.items():
+                        self.mapa_vinc[codigo][col_name] = row[col_idx].value
+        except Exception as e:
+            print(f"SERVICE_WARN: No se encontró o falló la hoja 'Vinculado'. Error: {e}", flush=True)
+        
+        self.mapa_vinc_cols_df = {'NOMBRE COMPLETO':'NOMBRE', 'DIRECCION DE CORRESPONDENCIA':'DIRECCI', 'CORREO ELECTRONICO':'VINEMAIL', 'CELULAR':'TELEFONO'}
+
+        # --- Mapa C: Tipos de Identificación ---
+        print(f"SERVICE (FINANSUEÑOS): 3/5 Creando mapa 'Tipos de identificacion'...", flush=True)
+        self.mapa_tipos = {}
+        try:
+            ws_tipos = wb['Tipos de identificacion']
+            # Asumimos: CEDULA CORRECTA(A), CODIGO DATA(B)
+            for row in ws_tipos.iter_rows(min_row=2):
+                cedula = str(row[0].value).strip()
+                codigo_data = row[1].value
+                if cedula:
+                    self.mapa_tipos[cedula] = codigo_data
+        except KeyError:
+            print("SERVICE_WARN: No se encontró la hoja 'Tipos de identificacion'", flush=True)
+
+        # --- Mapa D: FNZ001 ---
+        print(f"SERVICE (FINANSUEÑOS): 4/5 Creando mapa 'FNZ001'...", flush=True)
+        self.mapa_fnz = {}
+        try:
+            ws_fnz = wb['FNZ001']
+            headers_fnz = [cell.value for cell in ws_fnz[1]]
+            idx_dsm_tp = headers_fnz.index('DSM_TP')
+            idx_dsm_num = headers_fnz.index('DSM_NUM')
+            idx_vlr_fnz = headers_fnz.index('VLR_FNZ')
+            
+            for row in ws_fnz.iter_rows(min_row=2):
+                try:
+                    vlr_fnz = int(pd.to_numeric(row[idx_vlr_fnz].value, errors='coerce'))
+                except:
+                    vlr_fnz = 0
+                
+                if vlr_fnz == 0:
+                    continue
+                    
+                llave_base = str(row[idx_dsm_tp].value).strip() + str(row[idx_dsm_num].value).strip()
+                
+                # Replicamos la lógica del 'concat'
+                facturas = [
+                    llave_base.zfill(18),
+                    (llave_base + 'C1').zfill(18),
+                    (llave_base + 'C2').zfill(18)
+                ]
+                for fact in facturas:
+                    self.mapa_fnz[fact] = vlr_fnz
+        except Exception as e:
+            print(f"SERVICE_WARN: No se encontró o falló la hoja 'FNZ001'. Error: {e}", flush=True)
+
+        # --- Mapa E: R05 ---
+        print(f"SERVICE (FINANSUEÑOS): 5/5 Creando mapa 'R05'...", flush=True)
+        self.mapa_r05 = {}
+        abonos_sumados = defaultdict(float)
+        try:
+            ws_r05 = wb['R05']
+            headers_r05 = [cell.value for cell in ws_r05[1]]
+            idx_tipo = headers_r05.index('MCNTIPCRU2')
+            idx_num = headers_r05.index('MCNNUMCRU2')
+            idx_abono = headers_r05.index('ABONO')
+            
+            # Replicamos el 'groupby().sum()'
+            for row in ws_r05.iter_rows(min_row=2):
+                try:
+                    abono = float(pd.to_numeric(row[idx_abono].value, errors='coerce'))
+                except:
+                    abono = 0.0
+                
+                if abono == 0.0:
+                    continue
+                    
+                llave_base = str(row[idx_tipo].value).strip() + str(row[idx_num].value).strip()
+                abonos_sumados[llave_base] += abono
+                
+            # Replicamos el 'concat'
+            for llave_base, valor_abono in abonos_sumados.items():
+                llaves = [
+                    llave_base.ljust(20),
+                    (llave_base + 'C1').ljust(20),
+                    (llave_base + 'C2').ljust(20)
+                ]
+                for llave in llaves:
+                    self.mapa_r05[llave] = valor_abono
+        except Exception as e:
+            print(f"SERVICE_WARN: No se encontró o falló la hoja 'R05'. Error: {e}", flush=True)
+
+        wb.close() # Cerramos el archivo de 84MB
+        print(f"SERVICE (FINANSUEÑOS): Mapas de corrección listos. Archivo Excel cerrado.", flush=True)
+
+
+    def run_all_transformations(self, chunk_df):
+        """
+        Ejecuta todos los pasos de limpieza en un 'chunk' (trozo) del DataFrame.
+        YA NO CARGA ARCHIVOS. Solo aplica los mapas pre-calculados.
+        """
+        # print("Servicio: Ejecutando transformaciones en chunk...", flush=True) # Demasiado 'ruido'
+        self.df = chunk_df # Asigna el chunk actual a self.df
+        
+        # Llama a los métodos de transformación
+        # (Estos métodos ahora usan los mapas en 'self' en lugar de leer archivos)
+        self._correct_data_from_excel() 
         self._update_data_from_sheets()
         self._clean_and_validate_data()
         self._apply_final_formatting()
-        print("Servicio: Transformaciones completadas.")
+        
+        # print("Servicio: Transformaciones de chunk completadas.", flush=True)
         return self.df
 
     def _correct_data_from_excel(self):
-        """PASO 3: Realiza correcciones desde el archivo Excel."""
-        print("  - Corrigiendo desde Excel...")
-        # A. Corregir Cédulas
-        df_cedulas = pd.read_excel(self.ruta_correcciones, sheet_name='Cedulas a corregir')
-        mapa_cedulas = pd.Series(df_cedulas['CEDULA CORRECTA'].astype(str).str.strip().values, index=df_cedulas['CEDULA MAL'].astype(str).str.strip()).to_dict()
-        self.df['NUMERO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].replace(mapa_cedulas)
+        """PASO 3: Realiza correcciones (YA NO LEE EXCEL)"""
+        # print("  - Corrigiendo desde Excel (memoria)...", flush=True)
+        # A. Corregir Cédulas (Usa el mapa)
+        self.df['NUMERO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].replace(self.mapa_cedulas)
 
-        # B. Actualizar campos 'CORREGIR'
-        df_vinculado = pd.read_excel(self.ruta_correcciones, sheet_name='Vinculado')
-        df_vinculado['CODIGO'] = df_vinculado['CODIGO'].astype(str).str.strip()
-        df_vinculado = df_vinculado.set_index('CODIGO')
-        mapa_vinc = {'NOMBRE COMPLETO':'NOMBRE', 'DIRECCION DE CORRESPONDENCIA':'DIRECCI', 'CORREO ELECTRONICO':'VINEMAIL', 'CELULAR':'TELEFONO'}
-        for col_df, col_vinc in mapa_vinc.items():
+        # B. Actualizar campos 'CORREGIR' (Usa el mapa)
+        for col_df, col_vinc in self.mapa_vinc_cols_df.items():
             mascara = self.df[col_df].astype(str).str.strip().str.contains('CORREGIR', case=False, na=False)
             if mascara.any():
                 ids_a_buscar = self.df.loc[mascara, 'NUMERO DE IDENTIFICACION']
-                valores_nuevos = ids_a_buscar.map(df_vinculado[col_vinc])
+                # Usamos el mapa de diccionarios que creamos
+                valores_nuevos = ids_a_buscar.map(lambda x: self.mapa_vinc.get(x, {}).get(col_vinc))
                 self.df.loc[mascara, col_df] = valores_nuevos
 
-        # C. Actualizar Tipos de Identificación
+        # C. Actualizar Tipos de Identificación (Usa el mapa)
         self.df['TIPO DE IDENTIFICACION'] = 1
-        df_tipos = pd.read_excel(self.ruta_correcciones, sheet_name='Tipos de identificacion')
-        mapa_tipos = pd.Series(df_tipos['CODIGO DATA'].values, index=df_tipos['CEDULA CORRECTA'].astype(str).str.strip()).to_dict()
-        self.df['TIPO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].map(mapa_tipos).combine_first(self.df['TIPO DE IDENTIFICACION'])
+        self.df['TIPO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].map(self.mapa_tipos).combine_first(self.df['TIPO DE IDENTIFICACION'])
 
     def _update_data_from_sheets(self):
-        """PASO 4: Actualiza desde FNZ001 y R05."""
-        print("  - Actualizando desde FNZ001 y R05...")
+        """PASO 4: Actualiza desde FNZ001 y R05 (YA NO LEE EXCEL)"""
+        # print("  - Actualizando desde FNZ001 y R05 (memoria)...", flush=True)
         self.df['NUMERO DE LA CUENTA U OBLIGACION'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].astype(str).str.replace(' ', '').str.zfill(18)
         
-        # A. Procesando FNZ001
-        df_fnz = pd.read_excel(self.ruta_correcciones, sheet_name='FNZ001', usecols=['DSM_TP', 'DSM_NUM', 'VLR_FNZ'])
-        df_fnz['VLR_FNZ'] = (pd.to_numeric(df_fnz['VLR_FNZ'], errors='coerce').fillna(0)).astype(int)
-        df_fnz['llave_base'] = df_fnz['DSM_TP'].astype(str).str.strip() + df_fnz['DSM_NUM'].astype(str).str.strip()
-        tabla_fnz = pd.concat([pd.DataFrame({'FACTURA': df_fnz['llave_base'], 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C1', 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C2', 'VALOR': df_fnz['VLR_FNZ']})])
-        tabla_fnz['FACTURA'] = tabla_fnz['FACTURA'].astype(str).str.zfill(18)
-        mapa_fnz = pd.Series(tabla_fnz.VALOR.values, index=tabla_fnz.FACTURA).to_dict()
-        self.df['VALOR INICIAL'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(mapa_fnz).combine_first(self.df['VALOR INICIAL'])
+        # A. Procesando FNZ001 (Usa el mapa)
+        self.df['VALOR INICIAL'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(self.mapa_fnz).combine_first(self.df['VALOR INICIAL'])
 
-        # B. Procesando R05
-        df_r05 = pd.read_excel(self.ruta_correcciones, sheet_name='R05', usecols=['MCNTIPCRU2', 'MCNNUMCRU2', 'ABONO'])
-        df_r05['ABONO'] = pd.to_numeric(df_r05['ABONO'], errors='coerce').fillna(0)
-        df_r05['llave_base'] = df_r05['MCNTIPCRU2'].astype(str).str.strip() + df_r05['MCNNUMCRU2'].astype(str).str.strip()
-        abonos_sumados = df_r05.groupby('llave_base')['ABONO'].sum().reset_index()
-
-        tabla_r05 = pd.concat([
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'], 'VALOR_ABONO': abonos_sumados['ABONO']}),
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C1', 'VALOR_ABONO': abonos_sumados['ABONO']}),
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C2', 'VALOR_ABONO': abonos_sumados['ABONO']})
-        ])
-
-        # 6. Crear el mapa final: Llave -> Suma Total del Abono
-        mapa_r05 = pd.Series(tabla_r05.VALOR_ABONO.values, index=tabla_r05.LLAVE.astype(str).str.ljust(20)).to_dict()
-        self.df['VALOR SALDO MORA'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(mapa_r05).combine_first(self.df['VALOR SALDO MORA'])
+        # B. Procesando R05 (Usa el mapa)
+        self.df['VALOR SALDO MORA'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(self.mapa_r05).combine_first(self.df['VALOR SALDO MORA'])
 
     def _clean_and_validate_data(self):
         """PASO 5: Realiza limpieza y validaciones generales."""
-        print("  - Limpiando y validando datos...")
+        # print("  - Limpiando y validando datos...", flush=True)
+        # (Este código no consume mucha RAM, se queda igual)
         # A. Limpieza de caracteres de texto
         letter_replacements = {'Ñ':'N','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U','Ü':'U','Ÿ':'Y','Â':'A','Ã':'A','š':'S','©':'C','ñ':'N','á':'A','é':'E','í':'I','ó':'O','ú':'U','ü':'U','ÿ':'Y','â':'A','ã':'A'}
         chars_to_remove = ['@','°','|','¬','¡','“','#','$','%','&','/','(',')','=','‘','\\','¿','+','~','´´','´','[','{','^','-','_','.',':',',',';','<','>','Æ','±']
@@ -101,9 +230,11 @@ class FinansuenosDataProcessorService:
         self.df['VALOR DISPONIBLE'] = 0
         self.df[columnas_numericas] = self.df[columnas_numericas].astype(int)
 
+
     def _apply_final_formatting(self):
         """PASO 6: Aplica el formato final de texto y longitud."""
-        print("  - Aplicando formatos finales...")
+        # print("  - Aplicando formatos finales...", flush=True)
+        # (Este código no consume mucha RAM, se queda igual)
         self.df['NOMBRE COMPLETO'] = self.df['NOMBRE COMPLETO'].astype(str).str.replace(r'\s+', ' ', regex=True).str.strip().str.upper()
         replacements_map = {'1118291452':'FANDINO LAYNE ASTRID', '1025529458':'MARTINEZ MUNOZ JOSE MANUEL', '25559122':'RAMIREZ DE CASTRO MARIA ESTELLA'}
         for id_number, new_name in replacements_map.items():

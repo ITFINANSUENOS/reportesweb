@@ -3,31 +3,41 @@ import os
 import shutil
 import uuid
 from fastapi import APIRouter, BackgroundTasks, HTTPException
-# ¡AQUÍ ESTÁ LA CLAVE! Importamos tu servicio (tu lógica de negocio)
+# ¡Importamos tu servicio de Datacredito!
 from src.api.datacredito_service import DataCreditoApiService 
 
 # --- Configuración (¡Ajusta esto!) ---
 router = APIRouter()
-s3_client = boto3.client('s3', region_name='us-east-2')
-BUCKET_NAME = 'electrocreditos-reportes-privados'
+s3_client = boto3.client('s3', region_name='us-east-2') # Asegúrate de que la región sea la de tu bucket
+BUCKET_NAME = 'electrocreditos-reportes-privados' # El nombre de tu bucket S3
 # -------------------------------------
 
-
-# Esta es la Tarea Pesada que se ejecuta en segundo plano
+# ----------------------------------------------------
+# ESTA ES LA TAREA PESADA (en segundo plano)
+# ----------------------------------------------------
 def procesar_archivos_en_segundo_plano(
     plano_key: str, 
     correcciones_key: str, 
     empresa: str,
     output_key: str
 ):
+    """
+    Esta función se ejecuta en segundo plano. NO sufre de timeouts de API.
+    1. Descarga los archivos de S3.
+    2. Llama a tu servicio de procesamiento (que ahora es optimizado).
+    3. Sube el resultado a S3.
+    4. Limpia los archivos temporales.
+    """
+    # Creamos una instancia de tu servicio de lógica de negocio
     service_api = DataCreditoApiService()
+    
+    # /tmp/ es el único directorio escribible en App Runner
     temp_dir = f"/tmp/{uuid.uuid4().hex}" 
     os.makedirs(temp_dir, exist_ok=True)
     
-    # -----------------------------------------------------------
-    # ¡AQUÍ ESTÁ LA CORRECCIÓN!
-    # Usamos os.path.basename() para obtener SOLO el nombre del archivo.
-    # -----------------------------------------------------------
+    # --- ¡CAMBIO IMPORTANTE! ---
+    # Usamos os.path.basename para extraer solo el nombre del archivo
+    # Esto arregla el error "[Errno 2] No such file or directory"
     plano_path = os.path.join(temp_dir, os.path.basename(plano_key))
     corrections_path = os.path.join(temp_dir, os.path.basename(correcciones_key))
     output_path = os.path.join(temp_dir, output_key)
@@ -41,6 +51,7 @@ def procesar_archivos_en_segundo_plano(
 
         # 2. Llamar a tu lógica de servicio (tu código)
         print(f"BG_TASK: Iniciando procesamiento para la empresa {empresa}...", flush=True)
+        # Esta función ahora usa el modelo optimizado (chunks)
         service_api.process_files_for_api(
             plano_path=plano_path,
             correcciones_path=corrections_path,
@@ -50,8 +61,10 @@ def procesar_archivos_en_segundo_plano(
         print("BG_TASK: Procesamiento completado.", flush=True)
 
         # 3. Subir el resultado a S3
+        # El archivo de resultado se crea en 'output_path' por tu servicio
+        print(f"BG_TASK: Subiendo resultado a S3 en 'resultados/{output_key}'...", flush=True)
         s3_client.upload_file(output_path, BUCKET_NAME, f"resultados/{output_key}")
-        print(f"BG_TASK: Resultado subido a S3 en 'resultados/{output_key}'.", flush=True)
+        print(f"BG_TASK: Resultado subido.", flush=True)
 
     except Exception as e:
         print(f"BG_TASK_ERROR: Falló el procesamiento. Error: {e}", flush=True)
@@ -66,32 +79,41 @@ def procesar_archivos_en_segundo_plano(
 # --- ENDPOINT 1: Generar URLs de Subida ---
 @router.post("/generar_urls_subida", tags=["Procesamiento"])
 def generar_urls_subida(data: dict):
+    """
+    PASO 1: Pide permiso para subir.
+    Recibe los nombres de los archivos y devuelve URLs pre-firmadas.
+    """
     plano_filename = data.get("plano_filename")
     correcciones_filename = data.get("correcciones_filename")
     
     if not plano_filename or not correcciones_filename:
         raise HTTPException(status_code=400, detail="Se requieren ambos nombres de archivo")
 
+    # Genera nombres de archivo únicos para S3 (evita colisiones)
+    # Los pone en la carpeta 'uploads/'
     plano_key = f"uploads/{uuid.uuid4().hex}-{plano_filename}"
     correcciones_key = f"uploads/{uuid.uuid4().hex}-{correcciones_filename}"
 
     try:
+        # Genera las URLs pre-firmadas (permiten 'PUT')
         url_plano = s3_client.generate_presigned_url(
             'put_object',
             Params={'Bucket': BUCKET_NAME, 'Key': plano_key},
-            ExpiresIn=3600
+            ExpiresIn=3600  # 1 hora
         )
         url_correcciones = s3_client.generate_presigned_url(
             'put_object',
             Params={'Bucket': BUCKET_NAME, 'Key': correcciones_key},
-            ExpiresIn=3600
+            ExpiresIn=3600  # 1 hora
         )
         
+        print("INFO: URLs de subida generadas.", flush=True)
         return {
             "plano": {"upload_url": url_plano, "key": plano_key},
             "correcciones": {"upload_url": url_correcciones, "key": correcciones_key}
         }
     except Exception as e:
+        print(f"ERROR: No se pudo generar la URL. Error: {e}", flush=True)
         raise HTTPException(status_code=500, detail=f"Error al generar URLs de S3: {e}")
 
 
@@ -99,8 +121,13 @@ def generar_urls_subida(data: dict):
 @router.post("/iniciar_procesamiento_datacredito", tags=["Procesamiento"])
 def iniciar_procesamiento_datacredito(
     data: dict, 
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks # FastAPI inyecta esto
 ):
+    """
+    PASO 3: Inicia el procesamiento.
+    Recibe las 'keys' de S3 y la 'empresa', responde INMEDIATAMENTE 
+    y deja el trabajo pesado en segundo plano.
+    """
     plano_key = data.get("plano_key")
     correcciones_key = data.get("correcciones_key")
     empresa = data.get("empresa")
@@ -108,18 +135,21 @@ def iniciar_procesamiento_datacredito(
     if not all([plano_key, correcciones_key, empresa]):
         raise HTTPException(status_code=400, detail="Se requieren plano_key, correcciones_key y empresa")
 
-    # Extrae el nombre de archivo original para la salida
-    output_filename = f"Resultado_{empresa}_{plano_key.split('-')[-1]}"
+    # Genera el nombre del archivo de salida
+    output_filename = f"Resultado_{empresa}_{os.path.basename(plano_key).split('-', 1)[-1]}"
 
-    print(f"INFO: Trabajo para {plano_key} encolado. Respondiendo 202.", flush=True)
+    # ¡LA SOLUCIÓN AL 502!
+    # 1. Añade el trabajo pesado a la cola de fondo
     background_tasks.add_task(
         procesar_archivos_en_segundo_plano, 
         plano_key, 
         correcciones_key, 
         empresa, 
-        output_filename
+        output_filename # El nombre del archivo de resultado
     )
     
+    # 2. Responde INMEDIATAMENTE
+    print(f"INFO: Trabajo para {plano_key} encolado. Respondiendo 202.", flush=True)
     return {
         "status": "accepted",
         "message": "El procesamiento ha comenzado en segundo plano.",
