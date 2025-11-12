@@ -1,5 +1,4 @@
-# src/api/datacredito_service.py
-
+# Importa tu modelo (la lógica de pandas)
 from src.models.datacredito_model import DataCreditoModel
 
 class DataCreditoApiService:
@@ -23,13 +22,17 @@ class DataCreditoApiService:
 
         try:
             # 1. Cargar datos
+            print("SERVICE_API: Cargando plano...")
             self.model.load_plano_file(plano_path)
             
             # 2. Procesar datos
+            print("SERVICE_API: Procesando datos...")
             self.model.process_data(correcciones_path, empresa.lower())
             
             # 3. Guardar datos
+            print("SERVICE_API: Guardando archivo procesado...")
             self.model.save_processed_file(output_path)
+            print("SERVICE_API: Guardado completado.")
             
         except Exception as e:
             # Si algo sale mal en el modelo, se relanza la excepción
