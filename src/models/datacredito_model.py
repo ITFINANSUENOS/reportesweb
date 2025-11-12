@@ -1,14 +1,12 @@
 import pandas as pd
 import os
 import sys # Para usar flush=True en los print
+from openpyxl import Workbook # Para crear el archivo Excel vacío
 
-# ¡¡¡IMPORTANTE!!!
-# Asumimos que estos servicios (que no tengo) son el cuello de botella.
-# Específicamente, el que carga el Excel de 84MB.
-# Este código optimiza la lectura del TXT (13MB), pero el 'processor'
-# sigue cargando los 84MB de golpe.
+# Importamos el NUEVO servicio optimizado
 from src.services.datacredito.dataprocessor_service import FinansuenosDataProcessorService
-from src.services.centrales.arpesod.datacredito_service import ArpesodDataProcessorService
+# (Asegúrate de que la ruta a Arpesod sea correcta si la usas)
+# from src.services.centrales.arpesod.datacredito_service import ArpesodDataProcessorService
 
 class DataCreditoModel:
     """
@@ -48,54 +46,52 @@ class DataCreditoModel:
         """
         print(f"MODEL: Iniciando procesamiento optimizado para {empresa_actual}", flush=True)
 
-        # 1. Cargar el archivo de correcciones (84MB)
-        # ¡¡¡ESTE SIGUE SIENDO EL RIESGO!!!
-        # Tu FinansuenosDataProcessorService probablemente carga el Excel de 84MB
-        # en su constructor. Esto es lo que consume los 6GB de RAM.
-        # ¡DEBES OPTIMIZAR ESE SERVICIO TAMBIÉN!
-        print(f"MODEL: Cargando 'processor' (esto puede cargar 84MB de Excel)...", flush=True)
+        # 1. Cargar el 'processor' (que carga los mapas de 84MB en RAM)
+        print(f"MODEL: Cargando 'processor' (esto leerá 84MB de Excel con openpyxl)...", flush=True)
         if empresa_actual == "arpesod":
-            processor = ArpesodDataProcessorService(None, correcciones_path)
+            # processor = ArpesodDataProcessorService(correcciones_path)
+            raise ValueError("El processor de Arpesod aún no está implementado con optimización")
         elif empresa_actual == "finansueños":
-            processor = FinansuenosDataProcessorService(None, correcciones_path)
+            # --- ¡ARREGLO DEL TypeError! ---
+            # Llamamos al __init__ con los 2 argumentos correctos (self, correcciones_path)
+            processor = FinansuenosDataProcessorService(correcciones_path)
         else:
             raise ValueError(f"Tipo de empresa no válido: {empresa_actual}")
         
-        print(f"MODEL: 'processor' cargado. {empresa_actual} (84MB) está en memoria.", flush=True)
+        print(f"MODEL: 'processor' cargado. Mapas de corrección (84MB) están en memoria.", flush=True)
 
         # 2. Procesar el archivo plano (13MB) en trozos (chunks)
         print(f"MODEL: Iniciando procesamiento en chunks para {plano_path}...", flush=True)
         
-        chunk_size = 50000  # Procesa 50,000 filas a la vez (puedes ajustar esto)
+        chunk_size = 50000  # Procesa 50,000 filas a la vez
         
         # Creamos un 'ExcelWriter' para guardar los chunks procesados uno por uno
-        # Esto evita tener el resultado final en memoria
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             
-            # Usamos un iterador de chunks para leer el TXT (plano)
-            iterador_de_chunks = pd.read_fwf(
-                plano_path, colspecs=self.colspecs, names=self.names, encoding='cp1252',
-                skiprows=1, skipfooter=1, engine='python',
-                chunksize=chunk_size  # ¡LA MAGIA ESTÁ AQUÍ!
-            )
+            try:
+                # Usamos un iterador de chunks para leer el TXT (plano)
+                iterador_de_chunks = pd.read_fwf(
+                    plano_path, colspecs=self.colspecs, names=self.names, encoding='cp1252',
+                    skiprows=1, skipfooter=1, engine='python',
+                    chunksize=chunk_size  # ¡LA MAGIA ESTÁ AQUÍ!
+                )
+            except pd.errors.EmptyDataError:
+                print(f"MODEL_WARN: El archivo plano {plano_path} está vacío o no tiene datos.", flush=True)
+                # Creamos un archivo Excel vacío con headers
+                Workbook().save(output_path)
+                print(f"MODEL: Archivo de resultado vacío guardado en {output_path}.", flush=True)
+                return # Terminamos la función
             
             header = True # Para guardar el header solo en el primer chunk
             
             for i, chunk_df in enumerate(iterador_de_chunks):
-                print(f"MODEL: Procesando chunk #{i}...", flush=True)
+                print(f"MODEL: Procesando chunk #{i} (filas: {len(chunk_df)})...", flush=True)
                 chunk_df['NUMERO DE IDENTIFICACION'] = chunk_df['NUMERO DE IDENTIFICACION'].astype(str).str.strip()
                 
-                # ¡DEBES MODIFICAR TU 'processor'!
-                # Tu 'processor.run_all_transformations()' debe ser modificado
-                # para que acepte un 'chunk_df' como argumento,
-                # en lugar de usar 'self.df'.
-                
-                # ---- INICIO DE CÓDIGO ASUMIDO ----
-                # Asumo que tu 'processor' tiene 'self.df'
-                # Lo asignamos, procesamos y luego lo borramos.
-                processor.df = chunk_df 
-                chunk_procesado = processor.run_all_transformations() 
-                # ---- FIN DE CÓDIGO ASUMIDO ----
+                # --- ¡ARREGLO DEL TypeError! ---
+                # Ahora llamamos a 'run_all_transformations'
+                # pasándole el chunk como argumento.
+                chunk_procesado = processor.run_all_transformations(chunk_df)
                 
                 # Guarda el chunk procesado en la misma hoja de Excel
                 chunk_procesado.to_excel(writer, sheet_name='Reporte', index=False, header=header)
