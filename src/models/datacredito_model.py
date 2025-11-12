@@ -1,18 +1,20 @@
 import pandas as pd
 import os
 import sys # Para usar flush=True en los print
-from openpyxl import Workbook # Para crear el archivo Excel vacío
+import sqlite3
 
-# Importamos el NUEVO servicio optimizado
+# --- ¡CAMBIO IMPORTANTE! ---
+# Asumimos que la ruta a 'dataprocessor_service' es esta
+# (El nombre del archivo que me diste en el chat)
 from src.services.datacredito.dataprocessor_service import FinansuenosDataProcessorService
-# (Asegúrate de que la ruta a Arpesod sea correcta si la usas)
+# (Asumo que también tienes uno de Arpesod, si no, puedes borrar esta línea)
 # from src.services.centrales.arpesod.datacredito_service import ArpesodDataProcessorService
 
 class DataCreditoModel:
     """
     Gestiona los datos y la lógica de negocio para Datacredito.
-    OPTIMIZADO: Procesa los archivos en trozos (chunks) para 
-    funcionar en entornos con poca RAM (como 2GB).
+    OPTIMIZADO (Opción C - SQLite): Procesa los archivos en trozos (chunks) 
+    y usa una BD SQLite para las correcciones.
     """
     
     def __init__(self):
@@ -38,65 +40,84 @@ class DataCreditoModel:
             "FECHA ESTADO ORIGEN", "ESTADO DE LA CUENTA", "FECHA ESTADO DE LA CUENTA",
             "ADJETIVO", "FECHA DE ADJETIVO", "CLAUSULA DE PERMANENCIA", "FECHA CLAUSULA DE PERMANENCIA"
         ]
+        # ¡¡¡IMPORTANTE!!!
+        # El Dockerfile copia la BD a /app/corrections.db
+        # Esta ruta es dentro del contenedor Docker
+        self.db_path = "/app/corrections.db" 
 
     def process_files_in_chunks(self, plano_path: str, correcciones_path: str, empresa_actual: str, output_path: str):
         """
         Esta es la NUEVA función principal optimizada.
-        Procesa el archivo plano en trozos (chunks) para no agotar la RAM.
+        Procesa el archivo plano en trozos (chunks) y consulta SQLite.
         """
         print(f"MODEL: Iniciando procesamiento optimizado para {empresa_actual}", flush=True)
 
-        # 1. Cargar el 'processor' (que carga los mapas de 84MB en RAM)
-        print(f"MODEL: Cargando 'processor' (esto leerá 84MB de Excel con openpyxl)...", flush=True)
+        # 1. Cargar el "processor" que consulta la BD SQLite
+        # Ya no le pasamos 'correcciones_path', le pasamos la RUTA A LA BD
+        print(f"MODEL: Cargando 'processor' (conectando a SQLite en {self.db_path})...", flush=True)
+        
+        if not os.path.exists(self.db_path):
+            print(f"MODEL_ERROR: ¡No se encontró el archivo de base de datos 'corrections.db' en /app/!", flush=True)
+            print("MODEL_ERROR: Asegúrate de haber ejecutado 'build_database.py' y que 'Dockerfile' lo esté copiando.", flush=True)
+            raise FileNotFoundError(self.db_path)
+            
         if empresa_actual == "arpesod":
-            # processor = ArpesodDataProcessorService(correcciones_path)
-            raise ValueError("El processor de Arpesod aún no está implementado con optimización")
+            # (Asumimos que ArpesodDataProcessorService también usa SQLite ahora)
+            # processor = ArpesodDataProcessorService(self.db_path)
+            # Por ahora, lanzamos un error si no es finansueños
+            raise ValueError(f"El procesador Arpesod (SQLite) no está implementado.")
         elif empresa_actual == "finansueños":
-            # --- ¡ARREGLO DEL TypeError! ---
-            # Llamamos al __init__ con los 2 argumentos correctos (self, correcciones_path)
-            processor = FinansuenosDataProcessorService(correcciones_path)
+            processor = FinansuenosDataProcessorService(self.db_path)
         else:
             raise ValueError(f"Tipo de empresa no válido: {empresa_actual}")
         
-        print(f"MODEL: 'processor' cargado. Mapas de corrección (84MB) están en memoria.", flush=True)
+        print(f"MODEL: 'processor' de SQLite cargado.", flush=True)
 
         # 2. Procesar el archivo plano (13MB) en trozos (chunks)
         print(f"MODEL: Iniciando procesamiento en chunks para {plano_path}...", flush=True)
         
         chunk_size = 50000  # Procesa 50,000 filas a la vez
         
-        # Creamos un 'ExcelWriter' para guardar los chunks procesados uno por uno
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             
             try:
-                # Usamos un iterador de chunks para leer el TXT (plano)
                 iterador_de_chunks = pd.read_fwf(
                     plano_path, colspecs=self.colspecs, names=self.names, encoding='cp1252',
                     skiprows=1, skipfooter=1, engine='python',
-                    chunksize=chunk_size  # ¡LA MAGIA ESTÁ AQUÍ!
+                    chunksize=chunk_size
                 )
-            except pd.errors.EmptyDataError:
-                print(f"MODEL_WARN: El archivo plano {plano_path} está vacío o no tiene datos.", flush=True)
-                # Creamos un archivo Excel vacío con headers
-                Workbook().save(output_path)
-                print(f"MODEL: Archivo de resultado vacío guardado en {output_path}.", flush=True)
-                return # Terminamos la función
-            
+            except Exception as e:
+                print(f"MODEL_ERROR: No se pudo abrir el archivo plano {plano_path}. Error: {e}", flush=True)
+                raise e
+                
             header = True # Para guardar el header solo en el primer chunk
+            found_chunks = False
             
             for i, chunk_df in enumerate(iterador_de_chunks):
-                print(f"MODEL: Procesando chunk #{i} (filas: {len(chunk_df)})...", flush=True)
+                found_chunks = True
+                print(f"MODEL: Procesando chunk #{i}...", flush=True)
                 chunk_df['NUMERO DE IDENTIFICACION'] = chunk_df['NUMERO DE IDENTIFICACION'].astype(str).str.strip()
                 
-                # --- ¡ARREGLO DEL TypeError! ---
-                # Ahora llamamos a 'run_all_transformations'
-                # pasándole el chunk como argumento.
-                chunk_procesado = processor.run_all_transformations(chunk_df)
+                # ¡Esta es la llamada clave!
+                # El 'processor' ahora recibe el chunk y hace queries SQL
+                try:
+                    chunk_procesado = processor.run_all_transformations(chunk_df)
+                except Exception as e:
+                    print(f"MODEL_ERROR: Falló 'run_all_transformations' en el chunk #{i}. Error: {e}", flush=True)
+                    # Opcional: ¿continuar con el siguiente chunk?
+                    # Por ahora, relanzamos el error.
+                    raise e
                 
                 # Guarda el chunk procesado en la misma hoja de Excel
                 chunk_procesado.to_excel(writer, sheet_name='Reporte', index=False, header=header)
                 header = False # Ya no escribimos el header
                 
                 print(f"MODEL: Chunk #{i} guardado.", flush=True)
+            
+            if not found_chunks:
+                # Arregla el bug de 'At least one sheet must be visible'
+                print("MODEL_WARN: No se encontraron chunks. Creando archivo Excel vacío.", flush=True)
+                pd.DataFrame().to_excel(writer, sheet_name='Reporte', index=False)
+
 
         print(f"MODEL: Archivo final guardado en {output_path}.", flush=True)
