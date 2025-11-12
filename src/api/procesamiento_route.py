@@ -35,9 +35,6 @@ def procesar_archivos_en_segundo_plano(
     temp_dir = f"/tmp/{uuid.uuid4().hex}" 
     os.makedirs(temp_dir, exist_ok=True)
     
-    # --- ¡CAMBIO IMPORTANTE! ---
-    # Usamos os.path.basename para extraer solo el nombre del archivo
-    # Esto arregla el error "[Errno 2] No such file or directory"
     plano_path = os.path.join(temp_dir, os.path.basename(plano_key))
     corrections_path = os.path.join(temp_dir, os.path.basename(correcciones_key))
     output_path = os.path.join(temp_dir, output_key)
@@ -135,8 +132,14 @@ def iniciar_procesamiento_datacredito(
     if not all([plano_key, correcciones_key, empresa]):
         raise HTTPException(status_code=400, detail="Se requieren plano_key, correcciones_key y empresa")
 
-    # Genera el nombre del archivo de salida
-    output_filename = f"Resultado_{empresa}_{os.path.basename(plano_key).split('-', 1)[-1]}"
+    # --- ¡¡¡LA LÍNEA CORREGIDA!!! ---
+    # 1. Obtenemos el nombre base del plano (ej: 'DATA MARZO FS.TXT')
+    base_name_plano = os.path.basename(plano_key).split('-', 1)[-1]
+    # 2. Le quitamos la extensión .TXT (ej: 'DATA MARZO FS')
+    base_name_sin_ext = os.path.splitext(base_name_plano)[0]
+    # 3. Creamos el nombre final con .xlsx
+    output_filename = f"Resultado_{empresa}_{base_name_sin_ext}.xlsx"
+    # --- FIN DE LA CORRECCIÓN ---
 
     # ¡LA SOLUCIÓN AL 502!
     # 1. Añade el trabajo pesado a la cola de fondo
@@ -145,7 +148,7 @@ def iniciar_procesamiento_datacredito(
         plano_key, 
         correcciones_key, 
         empresa, 
-        output_filename # El nombre del archivo de resultado
+        output_filename # El nombre del archivo de resultado (ahora .xlsx)
     )
     
     # 2. Responde INMEDIATAMENTE
