@@ -1,12 +1,10 @@
-# src/api/datacredito_service.py
-
+# Importa tu modelo (la lógica de pandas)
 from src.models.datacredito_model import DataCreditoModel
 
 class DataCreditoApiService:
     """
     Este servicio está diseñado EXCLUSIVAMENTE para la API de FastAPI.
-    No tiene dependencias de GUI y se encarga de orquestar
-    el procesamiento de archivos para las solicitudes web.
+    Orquesta el procesamiento de archivos para las solicitudes web.
     """
     def __init__(self):
         # Cada instancia del servicio tendrá su propia instancia del modelo.
@@ -15,24 +13,27 @@ class DataCreditoApiService:
     def process_files_for_api(self, plano_path: str, correcciones_path: str, output_path: str, empresa: str):
         """
         Orquesta el procesamiento de archivos para una solicitud de la API.
-        Este método es el equivalente al '_run_processing_thread' del controlador
-        de Tkinter, pero sin ninguna dependencia gráfica.
+        Llama al NUEVO método optimizado (process_files_in_chunks)
         """
         if not empresa:
             raise ValueError("El parámetro 'empresa' es obligatorio para el procesamiento.")
 
         try:
-            # 1. Cargar datos
-            self.model.load_plano_file(plano_path)
+            # Esta es la única llamada que hacemos.
+            # Este método ahora hace todo (cargar, procesar, guardar)
+            # de manera eficiente y optimizada para 2GB de RAM.
+            print("SERVICE_API: Iniciando procesamiento optimizado (chunks)...", flush=True)
             
-            # 2. Procesar datos
-            self.model.process_data(correcciones_path, empresa.lower())
+            self.model.process_files_in_chunks(
+                plano_path, 
+                correcciones_path, 
+                empresa.lower(), 
+                output_path
+            )
             
-            # 3. Guardar datos
-            self.model.save_processed_file(output_path)
+            print("SERVICE_API: Procesamiento optimizado completado.", flush=True)
             
         except Exception as e:
             # Si algo sale mal en el modelo, se relanza la excepción
-            # para que la ruta de FastAPI la capture y devuelva un error HTTP 500.
-            print(f"ERROR en DataCreditoApiService: {e}")
+            print(f"ERROR en DataCreditoApiService (chunks): {e}", flush=True)
             raise e

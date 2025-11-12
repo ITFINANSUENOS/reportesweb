@@ -1,80 +1,117 @@
 import pandas as pd
+import sqlite3
+import sys
+import os
+from collections import defaultdict
 
 class FinansuenosDataProcessorService:
-    """Clase responsable de todas las transformaciones de datos."""
-    def __init__(self, df, ruta_correcciones):
-        self.df = df
-        self.ruta_correcciones = ruta_correcciones
+    """
+    Clase responsable de todas las transformaciones de datos.
+    OPTIMIZADA (Opción C - SQLite): Lee las correcciones desde una 
+    base de datos SQLite ('corrections.db') para uso de RAM mínimo y alta velocidad.
+    """
+    def __init__(self, db_path):
+        """
+        En lugar de cargar 6GB de 'mapas' en RAM, solo guarda la ruta a la BD.
+        """
+        print(f"SERVICE (FINANSUEÑOS): Conectando a la base de datos: {db_path}", flush=True)
+        self.db_path = db_path
+        
+        # Verificamos la conexión (la mantenemos simple, abrimos en cada método)
+        if not os.path.exists(self.db_path):
+             print(f"SERVICE_ERROR: ¡No se encontró el archivo de base de datos en {self.db_path}!", flush=True)
+             raise FileNotFoundError(f"No se encontró el archivo de base de datos: {self.db_path}")
+        print(f"SERVICE (FINANSUEÑOS): Conexión a SQLite lista.", flush=True)
+            
+        # Este mapa es el único que guardamos, ya que es pequeño
+        self.mapa_vinc_cols_df = {'NOMBRE COMPLETO':'NOMBRE', 'DIRECCION DE CORRESPONDENCIA':'DIRECCI', 'CORREO ELECTRONICO':'VINEMAIL', 'CELULAR':'TELEFONO'}
 
-    def run_all_transformations(self):
-        """Ejecuta todos los pasos de limpieza y formato en orden."""
-        print("Servicio: Ejecutando todas las transformaciones...")
-        self._correct_data_from_excel()
-        self._update_data_from_sheets()
+    
+    def run_all_transformations(self, chunk_df):
+        """
+        Ejecuta todos los pasos de limpieza en un 'chunk' (trozo) del DataFrame.
+        Hace consultas SQL a la BD por cada chunk.
+        """
+        # print("Servicio: Ejecutando transformaciones en chunk...", flush=True)
+        self.df = chunk_df # Asigna el chunk actual
+        
+        # Abrimos una conexión a la BD por cada chunk
+        # SQLite es muy rápido para esto.
+        conn = sqlite3.connect(self.db_path)
+        
+        try:
+            # Llama a los métodos de transformación
+            self._correct_data_from_db(conn) 
+            self._update_data_from_db(conn)
+        except Exception as e:
+            print(f"SERVICE_ERROR: Falló la transformación del chunk. Error: {e}", flush=True)
+            raise e
+        finally:
+            # Cerramos la conexión a la BD
+            conn.close()
+        
+        # Estos métodos no necesitan la BD
         self._clean_and_validate_data()
         self._apply_final_formatting()
-        print("Servicio: Transformaciones completadas.")
+        
+        # print("Servicio: Transformaciones de chunk completadas.", flush=True)
         return self.df
 
-    def _correct_data_from_excel(self):
-        """PASO 3: Realiza correcciones desde el archivo Excel."""
-        print("  - Corrigiendo desde Excel...")
+    def _correct_data_from_db(self, conn):
+        """PASO 3: Realiza correcciones (LEYENDO DESDE SQLITE)"""
         # A. Corregir Cédulas
-        df_cedulas = pd.read_excel(self.ruta_correcciones, sheet_name='Cedulas a corregir')
-        mapa_cedulas = pd.Series(df_cedulas['CEDULA CORRECTA'].astype(str).str.strip().values, index=df_cedulas['CEDULA MAL'].astype(str).str.strip()).to_dict()
-        self.df['NUMERO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].replace(mapa_cedulas)
+        # Creamos un mapa (diccionario) solo para las cédulas de ESTE CHUNK
+        cedulas_en_chunk = tuple(self.df['NUMERO DE IDENTIFICACION'].unique())
+        # ¡IMPORTANTE! El '?' es para seguridad (evitar SQL Injection)
+        query_cedulas = f"SELECT CEDULA_MAL, CEDULA_CORRECTA FROM cedulas_map WHERE CEDULA_MAL IN ({','.join(['?']*len(cedulas_en_chunk))})"
+        mapa_cedulas_chunk = pd.read_sql_query(query_cedulas, conn, params=cedulas_en_chunk).set_index('CEDULA_MAL')['CEDULA_CORRECTA'].to_dict()
+        if mapa_cedulas_chunk:
+            self.df['NUMERO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].replace(mapa_cedulas_chunk)
 
         # B. Actualizar campos 'CORREGIR'
-        df_vinculado = pd.read_excel(self.ruta_correcciones, sheet_name='Vinculado')
-        df_vinculado['CODIGO'] = df_vinculado['CODIGO'].astype(str).str.strip()
-        df_vinculado = df_vinculado.set_index('CODIGO')
-        mapa_vinc = {'NOMBRE COMPLETO':'NOMBRE', 'DIRECCION DE CORRESPONDENCIA':'DIRECCI', 'CORREO ELECTRONICO':'VINEMAIL', 'CELULAR':'TELEFONO'}
-        for col_df, col_vinc in mapa_vinc.items():
-            mascara = self.df[col_df].astype(str).str.strip().str.contains('CORREGIR', case=False, na=False)
-            if mascara.any():
-                ids_a_buscar = self.df.loc[mascara, 'NUMERO DE IDENTIFICACION']
-                valores_nuevos = ids_a_buscar.map(df_vinculado[col_vinc])
-                self.df.loc[mascara, col_df] = valores_nuevos
+        mascara = self.df['NOMBRE COMPLETO'].astype(str).str.strip().str.contains('CORREGIR', case=False, na=False)
+        if mascara.any():
+            ids_a_buscar = tuple(self.df.loc[mascara, 'NUMERO DE IDENTIFICACION'].unique())
+            query_vinc = f"SELECT * FROM vinculado_map WHERE CODIGO IN ({','.join(['?']*len(ids_a_buscar))})"
+            df_vinculado_chunk = pd.read_sql_query(query_vinc, conn, params=ids_a_buscar).set_index('CODIGO')
+            
+            for col_df, col_vinc in self.mapa_vinc_cols_df.items():
+                if col_vinc in df_vinculado_chunk.columns:
+                    # Usamos .get() para evitar errores si un código no se encuentra
+                    valores_nuevos = self.df.loc[mascara, 'NUMERO DE IDENTIFICACION'].map(df_vinculado_chunk.get(col_vinc, {}))
+                    self.df.loc[mascara, col_df] = valores_nuevos.combine_first(self.df.loc[mascara, col_df]) # No sobrescribir con NaN
 
         # C. Actualizar Tipos de Identificación
+        ids_para_tipos = tuple(self.df['NUMERO DE IDENTIFICACION'].unique())
+        query_tipos = f"SELECT CEDULA_CORRECTA, CODIGO_DATA FROM tipos_map WHERE CEDULA_CORRECTA IN ({','.join(['?']*len(ids_para_tipos))})"
+        mapa_tipos_chunk = pd.read_sql_query(query_tipos, conn, params=ids_para_tipos).set_index('CEDULA_CORRECTA')['CODIGO_DATA'].to_dict()
+        
         self.df['TIPO DE IDENTIFICACION'] = 1
-        df_tipos = pd.read_excel(self.ruta_correcciones, sheet_name='Tipos de identificacion')
-        mapa_tipos = pd.Series(df_tipos['CODIGO DATA'].values, index=df_tipos['CEDULA CORRECTA'].astype(str).str.strip()).to_dict()
-        self.df['TIPO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].map(mapa_tipos).combine_first(self.df['TIPO DE IDENTIFICACION'])
+        if mapa_tipos_chunk:
+            self.df['TIPO DE IDENTIFICACION'] = self.df['NUMERO DE IDENTIFICACION'].map(mapa_tipos_chunk).combine_first(self.df['TIPO DE IDENTIFICACION'])
 
-    def _update_data_from_sheets(self):
-        """PASO 4: Actualiza desde FNZ001 y R05."""
-        print("  - Actualizando desde FNZ001 y R05...")
+    def _update_data_from_db(self, conn):
+        """PASO 4: Actualiza desde FNZ001 y R05 (LEYENDO DESDE SQLITE)"""
         self.df['NUMERO DE LA CUENTA U OBLIGACION'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].astype(str).str.replace(' ', '').str.zfill(18)
         
+        facturas_en_chunk = tuple(self.df['NUMERO DE LA CUENTA U OBLIGACION'].unique())
+        
         # A. Procesando FNZ001
-        df_fnz = pd.read_excel(self.ruta_correcciones, sheet_name='FNZ001', usecols=['DSM_TP', 'DSM_NUM', 'VLR_FNZ'])
-        df_fnz['VLR_FNZ'] = (pd.to_numeric(df_fnz['VLR_FNZ'], errors='coerce').fillna(0)).astype(int)
-        df_fnz['llave_base'] = df_fnz['DSM_TP'].astype(str).str.strip() + df_fnz['DSM_NUM'].astype(str).str.strip()
-        tabla_fnz = pd.concat([pd.DataFrame({'FACTURA': df_fnz['llave_base'], 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C1', 'VALOR': df_fnz['VLR_FNZ']}), pd.DataFrame({'FACTURA': df_fnz['llave_base'] + 'C2', 'VALOR': df_fnz['VLR_FNZ']})])
-        tabla_fnz['FACTURA'] = tabla_fnz['FACTURA'].astype(str).str.zfill(18)
-        mapa_fnz = pd.Series(tabla_fnz.VALOR.values, index=tabla_fnz.FACTURA).to_dict()
-        self.df['VALOR INICIAL'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(mapa_fnz).combine_first(self.df['VALOR INICIAL'])
+        query_fnz = f"SELECT FACTURA, VALOR FROM fnz_map WHERE FACTURA IN ({','.join(['?']*len(facturas_en_chunk))})"
+        mapa_fnz_chunk = pd.read_sql_query(query_fnz, conn, params=facturas_en_chunk).set_index('FACTURA')['VALOR'].to_dict()
+        if mapa_fnz_chunk:
+            self.df['VALOR INICIAL'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(mapa_fnz_chunk).combine_first(self.df['VALOR INICIAL'])
 
         # B. Procesando R05
-        df_r05 = pd.read_excel(self.ruta_correcciones, sheet_name='R05', usecols=['MCNTIPCRU2', 'MCNNUMCRU2', 'ABONO'])
-        df_r05['ABONO'] = pd.to_numeric(df_r05['ABONO'], errors='coerce').fillna(0)
-        df_r05['llave_base'] = df_r05['MCNTIPCRU2'].astype(str).str.strip() + df_r05['MCNNUMCRU2'].astype(str).str.strip()
-        abonos_sumados = df_r05.groupby('llave_base')['ABONO'].sum().reset_index()
-
-        tabla_r05 = pd.concat([
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'], 'VALOR_ABONO': abonos_sumados['ABONO']}),
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C1', 'VALOR_ABONO': abonos_sumados['ABONO']}),
-            pd.DataFrame({'LLAVE': abonos_sumados['llave_base'] + 'C2', 'VALOR_ABONO': abonos_sumados['ABONO']})
-        ])
-
-        # 6. Crear el mapa final: Llave -> Suma Total del Abono
-        mapa_r05 = pd.Series(tabla_r05.VALOR_ABONO.values, index=tabla_r05.LLAVE.astype(str).str.ljust(20)).to_dict()
-        self.df['VALOR SALDO MORA'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(mapa_r05).combine_first(self.df['VALOR SALDO MORA'])
+        query_r05 = f"SELECT LLAVE, VALOR_ABONO FROM r05_map WHERE LLAVE IN ({','.join(['?']*len(facturas_en_chunk))})"
+        mapa_r05_chunk = pd.read_sql_query(query_r05, conn, params=facturas_en_chunk).set_index('LLAVE')['VALOR_ABONO'].to_dict()
+        if mapa_r05_chunk:
+            self.df['VALOR SALDO MORA'] = self.df['NUMERO DE LA CUENTA U OBLIGACION'].map(mapa_r05_chunk).combine_first(self.df['VALOR SALDO MORA'])
 
     def _clean_and_validate_data(self):
         """PASO 5: Realiza limpieza y validaciones generales."""
-        print("  - Limpiando y validando datos...")
+        # (Este código no consume mucha RAM, se queda igual)
+        # print("  - Limpiando y validando datos...", flush=True)
         # A. Limpieza de caracteres de texto
         letter_replacements = {'Ñ':'N','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U','Ü':'U','Ÿ':'Y','Â':'A','Ã':'A','š':'S','©':'C','ñ':'N','á':'A','é':'E','í':'I','ó':'O','ú':'U','ü':'U','ÿ':'Y','â':'A','ã':'A'}
         chars_to_remove = ['@','°','|','¬','¡','“','#','$','%','&','/','(',')','=','‘','\\','¿','+','~','´´','´','[','{','^','-','_','.',':',',',';','<','>','Æ','±']
@@ -87,8 +124,12 @@ class FinansuenosDataProcessorService:
         # B. Limpieza y validación de fechas
         for col in ["FECHA APERTURA", "FECHA VENCIMIENTO", "FECHA DE PAGO"]:
             self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0).astype('Int64').astype(str)
-        condicion_fecha_invalida = self.df['FECHA VENCIMIENTO'] < self.df['FECHA APERTURA']
-        self.df.loc[condicion_fecha_invalida, 'FECHA VENCIMIENTO'] = self.df['FECHA APERTURA']
+        try:
+            condicion_fecha_invalida = self.df['FECHA VENCIMIENTO'] < self.df['FECHA APERTURA']
+            self.df.loc[condicion_fecha_invalida, 'FECHA VENCIMIENTO'] = self.df['FECHA APERTURA']
+        except TypeError:
+             print("SERVICE_WARN: Error de tipo al comparar fechas, saltando validación.", flush=True)
+             
         mascara_fecha_pago = (self.df['FECHA DE PAGO'].str.upper().str.contains('NA')) | (self.df['FECHA DE PAGO'] == '0')
         self.df.loc[mascara_fecha_pago, 'FECHA DE PAGO'] = '00000000'
 
@@ -101,9 +142,11 @@ class FinansuenosDataProcessorService:
         self.df['VALOR DISPONIBLE'] = 0
         self.df[columnas_numericas] = self.df[columnas_numericas].astype(int)
 
+
     def _apply_final_formatting(self):
         """PASO 6: Aplica el formato final de texto y longitud."""
-        print("  - Aplicando formatos finales...")
+        # (Este código no consume mucha RAM, se queda igual)
+        # print("  - Aplicando formatos finales...", flush=True)
         self.df['NOMBRE COMPLETO'] = self.df['NOMBRE COMPLETO'].astype(str).str.replace(r'\s+', ' ', regex=True).str.strip().str.upper()
         replacements_map = {'1118291452':'FANDINO LAYNE ASTRID', '1025529458':'MARTINEZ MUNOZ JOSE MANUEL', '25559122':'RAMIREZ DE CASTRO MARIA ESTELLA'}
         for id_number, new_name in replacements_map.items():
