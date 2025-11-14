@@ -10,13 +10,6 @@ app = FastAPI(
 # Incluye las nuevas rutas de procesamiento
 app.include_router(procesamiento_router, prefix="/api/v1")
 
-# NO INCLUIR LA RUTA ANTIGUA
-# ----------------------------------------------------
-# app.include_router(datacredito_route.router, prefix="/api/v1") 
-# ¡IMPORTANTE! Esta línea (si la tenías) debe ser eliminada.
-# Es la que causa el error 502 Bad Gateway.
-# ----------------------------------------------------
-
 
 @app.get("/", tags=["Root"])
 def read_root():
