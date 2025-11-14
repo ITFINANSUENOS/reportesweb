@@ -7,8 +7,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from src.api.datacredito_service import DataCreditoApiService 
 # --- Configuración (¡Ajusta esto!) ---
 router = APIRouter()
-s3_client = boto3.client('s3', region_name='us-east-2') # Asegúrate de que la región sea la de tu bucket
-BUCKET_NAME = 'electrocreditos-reportes-privados' # El nombre de tu bucket S3
+s3_client = boto3.client('s3', region_name='us-east-1') # Asegúrate de que la región sea la de tu bucket
+BUCKET_NAME = 'finansuenos-reportes-privados' # El nombre de tu bucket S3
 # ESTA ES LA TAREA PESADA (en segundo plano)
 def procesar_archivos_en_segundo_plano(
     plano_key: str, 
