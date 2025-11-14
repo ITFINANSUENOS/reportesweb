@@ -5,22 +5,17 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 # ¡Importamos tu servicio de Datacredito!
 from src.api.datacredito_service import DataCreditoApiService 
-
 # --- Configuración (¡Ajusta esto!) ---
 router = APIRouter()
 s3_client = boto3.client('s3', region_name='us-east-2') # Asegúrate de que la región sea la de tu bucket
 BUCKET_NAME = 'electrocreditos-reportes-privados' # El nombre de tu bucket S3
-# -------------------------------------
-
-# ----------------------------------------------------
 # ESTA ES LA TAREA PESADA (en segundo plano)
-# ----------------------------------------------------
 def procesar_archivos_en_segundo_plano(
     plano_key: str, 
     correcciones_key: str, 
     empresa: str,
     output_key: str
-):
+):  
     """
     Esta función se ejecuta en segundo plano. NO sufre de timeouts de API.
     1. Descarga los archivos de S3.
