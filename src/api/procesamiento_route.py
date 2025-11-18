@@ -163,3 +163,59 @@ def iniciar_procesamiento_datacredito(
         "message": "El procesamiento ha comenzado en segundo plano.",
         "output_key": f"resultados/{output_filename}"
     }
+
+@router.get("/estado_procesamiento", tags=["Procesamiento"])
+def estado_procesamiento(key: str):
+    """
+    PASO 4: El cliente "pregunta" (hace 'polling') si el trabajo ya terminó.
+    
+    Recibe el 'output_key' que le dimos en el PASO 3.
+    (Ej: 'resultados/Resultado_Empresa_miarchivo.xlsx')
+    """
+    
+    if not key:
+        raise HTTPException(status_code=400, detail="Se requiere el 'key' del archivo de resultado.")
+
+    try:
+        # 1. Intentamos "ver" (head_object) si el archivo ya existe en S3.
+        # head_object es más rápido y barato que get_object o list_objects.
+        s3_client.head_object(Bucket=BUCKET_NAME, Key=key)
+        
+        # 2. Si EXISTE (no hubo error), generamos una URL de DESCARGA
+        print(f"INFO: El trabajo {key} está completado. Generando URL de descarga.", flush=True)
+        
+        download_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': BUCKET_NAME, 'Key': key},
+            ExpiresIn=3600 # La URL de descarga dura 1 hora
+        )
+        
+        return {
+            "status": "completed",
+            "download_url": download_url,
+            "key": key
+        }
+
+    except s3_client.exceptions.ClientError as e:
+        # 3. Si Boto3 da un error, lo revisamos
+        error_code = e.response.get('Error', {}).get('Code')
+        
+        if error_code == '404' or error_code == 'NoSuchKey':
+            # Código 404 (Not Found) significa que el archivo AÚN NO EXISTE.
+            # Esto es normal, el trabajo sigue en proceso.
+            print(f"INFO: El trabajo {key} aún está en proceso.", flush=True)
+            return {
+                "status": "processing",
+                "message": "El archivo aún no está listo. Intente de nuevo en unos segundos."
+            }
+        else:
+            # Otro error de S3 (ej. 403 Forbidden, permisos incorrectos)
+            print(f"ERROR: Error de S3 al verificar {key}: {e}", flush=True)
+            raise HTTPException(status_code=500, detail=f"Error de S3: {e}")
+            
+    except Exception as e:
+        # Otro error inesperado
+        print(f"ERROR: Error inesperado al verificar {key}: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {e}")    
+    
+    
