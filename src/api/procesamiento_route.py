@@ -1,4 +1,5 @@
 import boto3
+import uuid
 import os
 import shutil
 import uuid
@@ -8,6 +9,56 @@ from src.api.datacredito_service import DataCreditoApiService
 router = APIRouter()
 s3_client = boto3.client('s3', region_name='us-east-1') # Región de App Runner y S3
 BUCKET_NAME = 'finansuenos-reportes-privados' # El nombre de tu bucket S3
+
+def limpiar_reportes_antiguos_s3(prefijo: str, max_archivos: int = 3):
+    """
+    Mantiene solo los 'max_archivos' más recientes en un prefijo de S3,
+    basado en la fecha de última modificación.
+    """
+    try:
+        # 1. Listar todos los objetos en el prefijo (directorio "resultados/")
+        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=prefijo)
+        
+        if 'Contents' not in response:
+            print(f"S3_CLEANUP: No hay archivos en '{prefijo}'. No se borra nada.", flush=True)
+            return
+
+        # 2. Filtrar solo archivos (excluir "carpetas" vacías si las hubiera)
+        archivos_en_s3 = [obj for obj in response['Contents'] if obj['Size'] > 0]
+
+        # 3. Ordenarlos por fecha de modificación (antiguos primero)
+        archivos_ordenados = sorted(
+            archivos_en_s3, 
+            key=lambda obj: obj['LastModified']
+        )
+        
+        # 4. Calcular cuántos archivos hay que borrar
+        archivos_a_borrar_count = len(archivos_ordenados) - max_archivos
+
+        if archivos_a_borrar_count <= 0:
+            print(f"S3_CLEANUP: Hay {len(archivos_ordenados)} archivos. Límite es {max_archivos}. No se borra nada.", flush=True)
+            return
+
+        # 5. Obtener las 'Keys' (nombres) de los archivos más antiguos
+        archivos_a_borrar = archivos_ordenados[:archivos_a_borrar_count]
+        
+        # 6. Preparar la lista para el borrado en lote (batch delete)
+        objetos_para_borrar = [{'Key': obj['Key']} for obj in archivos_a_borrar]
+        
+        print(f"S3_CLEANUP: Hay {len(archivos_ordenados)} archivos. Borrando {len(objetos_para_borrar)} archivos antiguos...", flush=True)
+
+        # 7. Ejecutar el borrado
+        s3_client.delete_objects(
+            Bucket=BUCKET_NAME,
+            Delete={'Objects': objetos_para_borrar}
+        )
+        
+        print(f"S3_CLEANUP: Borrado de {len(objetos_para_borrar)} archivos completado.", flush=True)
+
+    except Exception as e:
+        # ¡Importante! Si la limpieza falla, no debe romper la tarea principal.
+        print(f"S3_CLEANUP_ERROR: No se pudo limpiar los archivos antiguos. Error: {e}", flush=True)
+
 # ESTA ES LA TAREA PESADA (en segundo plano)
 def procesar_archivos_en_segundo_plano(
     plano_key: str, 
@@ -56,6 +107,9 @@ def procesar_archivos_en_segundo_plano(
         print(f"BG_TASK: Subiendo resultado a S3 en 'resultados/{output_key}'...", flush=True)
         s3_client.upload_file(output_path, BUCKET_NAME, f"resultados/{output_key}")
         print(f"BG_TASK: Resultado subido.", flush=True)
+        # Limpiar reportes antiguos en S3
+        print(f"BG_TASK: Verificando reportes antiguos en S3 (límite: 3)...", flush=True)
+        limpiar_reportes_antiguos_s3(prefijo="resultados/", max_archivos=3)
 
     except Exception as e:
         print(f"BG_TASK_ERROR: Falló el procesamiento. Error: {e}", flush=True)
@@ -127,12 +181,11 @@ def generar_urls_subida(data: dict):
 @router.post("/iniciar_procesamiento_datacredito", tags=["Procesamiento"])
 def iniciar_procesamiento_datacredito(
     data: dict, 
-    background_tasks: BackgroundTasks # FastAPI inyecta esto
+    background_tasks: BackgroundTasks
 ):
     """
     PASO 3: Inicia el procesamiento.
-    Recibe las 'keys' de S3 y la 'empresa', responde INMEDIATAMENTE 
-    y deja el trabajo pesado en segundo plano.
+    ...
     """
     plano_key = data.get("plano_key")
     correcciones_key = data.get("correcciones_key")
@@ -141,11 +194,17 @@ def iniciar_procesamiento_datacredito(
     if not all([plano_key, correcciones_key, empresa]):
         raise HTTPException(status_code=400, detail="Se requieren plano_key, correcciones_key y empresa")
 
-    # --- Nombres de archivos de salida ---
+    # --- Nombres de archivos de salida 
     base_name_plano = os.path.basename(plano_key).split('-', 1)[-1]
     base_name_sin_ext = os.path.splitext(base_name_plano)[0]
-    output_filename = f"Resultado_{empresa}_{base_name_sin_ext}.xlsx"
-    # --- FIN ---
+    
+    # 2. Creamos un identificador único para ESTE trabajo
+    job_id_unico = uuid.uuid4().hex[:8] # Genera un ID corto como 'a1b2c3d4'
+    
+    # 3. Lo añadimos al nombre del archivo de salida
+    output_filename = f"Resultado_{empresa}_{base_name_sin_ext}_{job_id_unico}.xlsx"
+
+
 
     # 1. Añade el trabajo pesado a la cola de fondo
     background_tasks.add_task(
@@ -153,7 +212,7 @@ def iniciar_procesamiento_datacredito(
         plano_key, 
         correcciones_key, 
         empresa, 
-        output_filename # El nombre del archivo de resultado (ahora .xlsx)
+        output_filename # <--- Ya lleva el nombre único
     )
     
     # 2. Responde INMEDIATAMENTE
@@ -161,6 +220,7 @@ def iniciar_procesamiento_datacredito(
     return {
         "status": "accepted",
         "message": "El procesamiento ha comenzado en segundo plano.",
+        # ¡Devolvemos el NUEVO nombre único!
         "output_key": f"resultados/{output_filename}"
     }
 
