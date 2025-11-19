@@ -28,7 +28,6 @@ class BaseMensualController:
         """Abre un diálogo para seleccionar uno o varios archivos."""
         filetypes = [("Excel files", "*.xlsx *.XLSX *.xls *.XLS")]
         
-        # Esta lógica de UI se mantiene en el controlador, lo cual es correcto.
         if tipo_archivo in ["ANALISIS", "R91", "VENCIMIENTOS", "R03"]:
             rutas = filedialog.askopenfilenames(title=f"Seleccione archivos para {tipo_archivo}", filetypes=filetypes)
         else:
