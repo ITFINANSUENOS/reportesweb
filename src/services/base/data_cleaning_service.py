@@ -155,3 +155,14 @@ class DataCleaningService:
         df[col_destino] = df[col_destino].fillna(valor_defecto)
         
         return df
+    
+    def run_cleaning_pipeline(self, reporte_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Punto de entrada principal para ejecutar todos los pasos de limpieza.
+        Por ahora, solo limpia los correos, pero puedes añadir más pasos aquí en el futuro.
+        """
+        print("\n--- 🧹 Iniciando pipeline de limpieza final ---")
+        reporte_df = self.clean_email_column(reporte_df)
+        reporte_df = self.clean_phone_numbers(reporte_df)
+        print("--- ✅ Pipeline de limpieza final completado ---\n")
+        return reporte_df
