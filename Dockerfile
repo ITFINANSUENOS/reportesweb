@@ -1,4 +1,3 @@
-# --- Dockerfile Final (Solución SQLite) ---
 
 # 1. Usa una imagen base oficial de Python 3.11
 FROM python:3.11-slim

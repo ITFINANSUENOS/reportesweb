@@ -4,7 +4,7 @@ import os
 import shutil
 import uuid
 from fastapi import APIRouter, BackgroundTasks, HTTPException
-from src.api.datacredito_service import DataCreditoApiService 
+from src.services.datacredito.datacredito_api_service import DataCreditoApiService 
 # --- Configuración (¡Ajusta esto!) ---
 router = APIRouter()
 s3_client = boto3.client('s3', region_name='us-east-1') # Región de App Runner y S3
