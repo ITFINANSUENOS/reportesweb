@@ -1,138 +1,228 @@
-import pandas as pd
-import numpy as np
+import polars as pl
+import json
+import os
+from datetime import datetime, date
+from src.services.tableros.cartera.cartera_analytics_service import CarteraAnalyticsService
+from src.services.tableros.seguimientos.seguimientos_analytics_service import SeguimientosAnalyticsService
 
-# ¡Importamos los nuevos servicios!
-from src.services.base.data_quality_audit_service import DataQualityAuditService
-
-class ReportProcessorService:
-    """
-    Orquesta los pasos finales de procesamiento del reporte,
-    delegando tareas específicas a servicios especializados y
-    manejando el formateo y la limpieza final.
-    """
-    def __init__(self, config):
-        self.config = config
-        # Instanciamos los servicios que este orquestador va a utilizar
-        self.quality_audit_service = DataQualityAuditService()
-        # NOTA: MetricsCalculationService y CategorizationService se llamarán
-        # desde el ReportService principal, antes de llegar aquí.
-
-    def filter_by_date_range(self, reporte_df, start_date, end_date):
-        """
-        Filtra el reporte por un rango de fechas. (Sin cambios)
-        """
-        if not start_date or not end_date:
-            return reporte_df
-
-        print(f"🔍 Aplicando filtro de fecha: desde {start_date} hasta {end_date}")
-        df = reporte_df.copy()
-        df['Fecha_Cuota_Vigente'] = pd.to_datetime(df['Fecha_Cuota_Vigente'], format='%d/%m/%Y', errors='coerce')
-        start_date_dt = pd.to_datetime(start_date, format='%d/%m/%Y', errors='coerce')
-        end_date_dt = pd.to_datetime(end_date, format='%d/%m/%Y', errors='coerce')
-
-        if pd.isna(start_date_dt) or pd.isna(end_date_dt):
-            print("⚠️ Formato de fecha inválido. Se omite el filtro.")
-            return reporte_df
-
-        mask = (df['Fecha_Cuota_Vigente'] >= start_date_dt) & (df['Fecha_Cuota_Vigente'] <= end_date_dt)
-        filtered_df = df[mask]
-        print(f"✅ Filtro aplicado. {len(filtered_df)} registros encontrados en el rango.")
-        return filtered_df
-
-    def finalize_report(self, reporte_df, orden_columnas):
-        """
-        Realiza la auditoría, el formateo y la reestructuración final del reporte.
-        """
-        print("🧹 Realizando transformaciones y limpieza final...")
-        
-        # 1. Ejecutar la auditoría de calidad usando el servicio especializado
-        df_a_corregir = self.quality_audit_service.run_audit(reporte_df)
-
-        # 2. Aplicar formateo de presentación
-        reporte_df = self._format_dates(reporte_df)
-        reporte_df = self._fill_final_na(reporte_df)
-        reporte_df = self._format_percentages(reporte_df)
-        reporte_df = self._clean_leader_info(reporte_df)
-
-        # 3. Limpiar y reordenar columnas
-        print("🏗️ Reordenando columnas según la configuración...")
-        columnas_a_eliminar = [
-            'Saldo_Factura', 'Tipo_Credito', 'Numero_Credito', 'Meta_DC_Al_Dia', 
-            'Meta_DC_Atraso', 'Meta_Atraso','Movil_Codeudor1','Movil_Codeudor2','Celular2',
-            *[col for col in reporte_df.columns if col.endswith(('_Analisis', '_R03', '_Venc', '_display'))]
-        ]
-        reporte_df.drop(columns=columnas_a_eliminar, inplace=True, errors='ignore')
-        
-        columnas_actuales = reporte_df.columns.tolist()
-        columnas_ordenadas = [col for col in orden_columnas if col in columnas_actuales]
-        columnas_restantes = [col for col in columnas_actuales if col not in columnas_ordenadas]
-        
-        final_df = reporte_df[columnas_ordenadas + columnas_restantes]
-
-        return final_df, df_a_corregir
-
-    # Los siguientes son métodos privados de apoyo para la finalización
-    def _format_dates(self, df):
-        print("📅 Formateando fechas a solo día/mes/año...")
-        columnas_de_fecha = [
-            'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso', 'Fecha_Facturada', 
-            'Fecha_Desembolso', 'Fecha_Ultima_Novedad', 'Fecha_Ultimo_Pago_Inicial'
-        ]
-        for col in columnas_de_fecha:
-            if col in df.columns:
-                mask_no_anticipado = df[col] != 'ANTICIPADO'
-                df.loc[mask_no_anticipado, col] = pd.to_datetime(
-                    df.loc[mask_no_anticipado, col], errors='coerce'
-                ).dt.date
-        return df
-
-    def _fill_final_na(self, df):
-        print(" Aplicando valores por defecto y formato de presentación...")
-        columnas_vencimiento = {
-            'Fecha_Cuota_Vigente': 'VIGENCIA EXPIRADA', 'Cuota_Vigente': 'VIGENCIA EXPIRADA',
-            'Valor_Cuota_Vigente': 'VIGENCIA EXPIRADA', 'Fecha_Cuota_Atraso': 'SIN MORA',
-            'Primera_Cuota_Mora': 'SIN MORA', 'Valor_Cuota_Atraso': 0, 'Valor_Vencido': 0
-        }
-        ref_col_anticipado = 'Cuota_Vigente'
-        for col, default_value in columnas_vencimiento.items():
-            if col in df.columns:
-                mask = df[col].isnull() & (df[ref_col_anticipado] != 'ANTICIPADO')
-                df.loc[mask, col] = default_value
-
-        mask_no_fns = df['Empresa'] != 'FINANSUEÑOS'
-        for col in ['Saldo_Avales', 'Saldo_Interes_Corriente']:
-            if col in df.columns:
-                df[col] = df[col].astype(object)
-                df.loc[mask_no_fns, col] = 'NO APLICA'
-        return df
-
-    def _format_percentages(self, df):
-        print("✨ Formateando columnas de porcentaje...")
-        for col in ['Meta_%', 'Meta_T.R_%']:
-            if col in df.columns:
-                numeric_col = pd.to_numeric(df[col].astype(str).str.replace('%', ''), errors='coerce')
-                numeric_col = np.where(numeric_col > 1, numeric_col / 100, numeric_col).round(4)
-                df[col] = (numeric_col * 100).round(0).astype(int).astype(str) + '%'
-        return df
+class DataProcessorService:
     
-    def _clean_leader_info(self, df):
-        print("👔 Limpiando y completando la columna 'Lider_Zona' y 'Movil_Lider'")
-        if 'Lider_Zona' in df.columns and 'Regional_Venta' in df.columns:
-            is_numeric_mask = pd.to_numeric(df['Lider_Zona'], errors='coerce').notna()
-            df.loc[is_numeric_mask, 'Lider_Zona'] = np.nan
+    def guardar_parquet_optimizado(self, df: pl.DataFrame, output_path: str):
+        """
+        Guarda una versión comprimida y ligera para el motor de búsqueda.
+        """
+        try:
+            # Selecciona SOLO las columnas que el usuario va a buscar o ver en la tabla de resultados
+            cols_deseadas = [
+                "Credito", "Cedula_Cliente", "Nombre_Cliente", "Celular", 
+                "Empresa", "Regional_Venta", "Regional_Cobro", "Zona", 
+                "Total_Recaudo", "Dias_Atraso_Final", "Valor_Vencido", 
+                "Nombre_Ciudad", "Gestor", "Valor_Saldo", "Franja_Cartera",
+                "CALL_CENTER_FILTRO", "Call_Center_Apoyo"
+            ]
             
-            mapa_moviles = {}
-            if 'Movil_Lider' in df.columns:
-                mapa_df = df.dropna(subset=['Lider_Zona', 'Movil_Lider']).drop_duplicates(subset=['Lider_Zona'])
-                mapa_moviles = pd.Series(mapa_df['Movil_Lider'].values, index=mapa_df['Lider_Zona']).to_dict()
+            # Intersección de columnas (solo las que existen)
+            cols_finales = [c for c in cols_deseadas if c in df.columns]
+            
+            if not cols_finales:
+                return False
 
-            def fill_with_mode(series):
-                mode_val = series.mode()
-                return series.fillna(mode_val.iloc[0]) if not mode_val.empty else series
-            df['Lider_Zona'] = df.groupby('Regional_Venta')['Lider_Zona'].transform(fill_with_mode)
-            if 'Movil_Lider' in df.columns:
-                df['Movil_Lider'] = df['Lider_Zona'].map(mapa_moviles)
-            df['Lider_Zona'].fillna('NO ASIGNADO', inplace=True)
-            if 'Movil_Lider' in df.columns:
-                df['Movil_Lider'].fillna('NO ASIGNADO', inplace=True)
+            # Guardar Parquet comprimido (Snappy es rápido para leer en AWS)
+            df.select(cols_finales).write_parquet(output_path, compression="snappy")
+            print(f"💾 Parquet de búsqueda generado: {output_path}")
+            return True
+        except Exception as e:
+            print(f"❌ Error guardando Parquet: {e}")
+            return False
+        
+    def _calcular_columna_call_center_filtro(self, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Calcula la lógica de negocio de Call Center para filtros.
+        VERSIÓN SEGURA: Maneja casos donde no existan las columnas Zona o Apoyo.
+        """
+        if "Zona" not in df.columns:
+            df = df.with_columns(pl.lit("SIN ZONA").alias("Zona"))
+            
+        if "Call_Center_Apoyo" not in df.columns:
+            df = df.with_columns(pl.lit("SIN APOYO").alias("Call_Center_Apoyo"))
+
+        df = df.with_columns([
+            pl.col("Zona").fill_null("").cast(pl.Utf8).str.replace_all(" ", "").str.strip_chars().str.to_uppercase(),
+            pl.col("Call_Center_Apoyo").fill_null("").cast(pl.Utf8).str.replace_all(" ", "").str.strip_chars().str.to_uppercase()
+        ])
+
+        zonas_cl = ['CL1', 'CL2', 'CL3', 'CL4']
+        apoyo_cl = ['CL5', 'CL6', 'CL7', 'CL8', 'CL9']
+
+        df = df.with_columns(
+            pl.when(pl.col("Zona").is_in(zonas_cl))
+            .then(pl.col("Zona"))
+            .when(pl.col("Call_Center_Apoyo").is_in(apoyo_cl))
+            .then(pl.col("Call_Center_Apoyo"))
+            .otherwise(pl.lit("SIN CALL CENTER"))
+            .alias("CALL_CENTER_FILTRO")
+        )
+        
         return df
+
+    def procesar_excel_multi_modulo(self, file_path: str) -> dict:
+        resultados_modulos = {}
+        df_cartera = pl.DataFrame()
+        df_novedades = pl.DataFrame()
+        
+        common_options = {
+            "infer_schema_length": 10000,
+            # REMOVED "ANTICIPADO" from null_values so it is read as a valid string
+            "null_values": [
+                "NO APLICA", "No Aplica", "no aplica", "NO ASIGNADO", "No Asignado",
+                "NA", "N/A", "SIN DATO", "null", "nan", "NaN", 
+                "VIGENCIA EXPIRADA", "Vigencia Expirada"
+            ]
+        }
+
+        # --- 1. LEER CARTERA ---
+        try:
+             # READ EVERYTHING AS UTF8 FIRST to catch "ANTICIPADO"
+             df_cartera = pl.read_excel(
+                file_path, 
+                sheet_name="Analisis_de_Cartera",
+                engine="xlsx2csv",
+                read_csv_options={
+                    **common_options,
+                    "schema_overrides": {
+                        "Cedula_Cliente": pl.Utf8,
+                        "Credito": pl.Utf8,
+                        "Fecha_Cuota_Vigente": pl.Utf8, # Important: Read as String
+                        "Celular": pl.Utf8,
+                        "Valor_Desembolso": pl.Float64,
+                        "Valor_Cuota_Vigente": pl.Utf8,
+                        "Valor_Cuota": pl.Float64,
+                        "Valor_Cuota_Atraso": pl.Float64,
+                        "Total_Recaudo": pl.Float64,
+                        "Cantidad_Novedades": pl.Float64,
+                        "Meta_General": pl.Float64,
+                        "Valor_Vencido": pl.Float64,
+                        "Meta_$": pl.Float64,
+                        "Meta_Saldo": pl.Float64,
+                        "Saldo_Capital": pl.Float64,
+                        "Saldo_Interes_Corriente": pl.Float64,
+                        "Saldo_Avales": pl.Float64,
+                        "Dias_Atraso_Final": pl.Float64
+                    }
+                }
+            )
+             
+             cols_moneda_texto = ["Valor_Cuota_Vigente"]
+             
+             for col in cols_moneda_texto:
+                 if col in df_cartera.columns:
+                     df_cartera = df_cartera.with_columns(
+                         pl.col(col)
+                           .str.replace("ANTICIPADO", "0") # Si dice ANTICIPADO, vale 0 pesos
+                           .str.replace("anticipado", "0")
+                           .cast(pl.Float64, strict=False) # Ahora sí, convertir a número
+                           .fill_null(0) # Cualquier otro error se vuelve 0
+                     )
+
+             # --- 1.2 LÓGICA DE VIGENCIA (Recuperar etiqueta) ---
+             df_cartera = df_cartera.with_columns(
+                 pl.when(pl.col("Fecha_Cuota_Vigente").str.to_uppercase().str.contains("ANTICIPADO"))
+                 .then(pl.lit("ANTICIPADO"))
+                 .otherwise(pl.lit("FECHA"))
+                 .alias("Tipo_Vigencia_Temp")
+             )
+
+             # --- 1.3 CONVERSIÓN DE FECHAS ---
+             df_cartera = df_cartera.with_columns(
+                 pl.col("Fecha_Cuota_Vigente")
+                   .str.strptime(pl.Date, "%Y-%m-%d", strict=False) 
+                   .alias("Fecha_Cuota_Vigente") 
+             )
+             
+             if "Fecha_Desembolso" in df_cartera.columns:
+                 df_cartera = df_cartera.with_columns(pl.col("Fecha_Desembolso").str.strptime(pl.Date, "%Y-%m-%d", strict=False))
+
+        except Exception as e:
+             print(f"⚠️ Error leyendo Cartera: {e}")
+
+        # --- 2. LEER NOVEDADES ---
+        try:
+            df_novedades = pl.read_excel(
+                file_path, 
+                sheet_name="Detalle_Novedades",
+                engine="xlsx2csv",
+                read_csv_options={
+                    **common_options,
+                    "schema_overrides": {
+                        "Cedula_Cliente": pl.Utf8,
+                        "Cargo_Usuario": pl.Utf8,
+                        "Tipo_Novedad": pl.Utf8,
+                        "Novedad": pl.Utf8,
+                        "Valor": pl.Float64,
+                        "Celular_Cliente": pl.Utf8
+                    }
+                }
+            )
+        except Exception as e:
+            print(f"⚠️ Error leyendo Novedades: {e}")
+
+        # --- 3. PRE-PROCESAMIENTO GLOBAL ---
+        if not df_cartera.is_empty():
+            try:
+                df_cartera = self._calcular_columna_call_center_filtro(df_cartera)
+                
+                if "Regional_Cobro" in df_cartera.columns:
+                    df_cartera = df_cartera.with_columns(
+                        pl.col("Regional_Cobro").fill_null("OTRAS ZONAS")
+                    )
+
+                df_cartera = df_cartera.with_columns(
+                    (
+                        pl.col("Saldo_Capital").fill_null(0) + 
+                        pl.col("Saldo_Interes_Corriente").fill_null(0) + 
+                        pl.col("Saldo_Avales").fill_null(0)
+                    ).alias("Valor_Saldo")
+                )
+
+            except Exception as e:
+                print(f"❌ Error crítico en pre-procesamiento de Cartera: {e}")
+
+        # --- 4. EJECUCIÓN DE MÓDULOS ---
+        
+        if not df_cartera.is_empty():
+            try:
+                print("📊 ANALYTICS: Calculando métricas de Cartera...")
+                analytics_cartera = CarteraAnalyticsService()
+                resultados_modulos["cartera"] = analytics_cartera.calcular_metricas_tablero_principal(df_cartera)
+            except Exception as e:
+                print(f"❌ ERROR EN MODULO CARTERA: {e}")
+                resultados_modulos["cartera"] = {"error": str(e)}
+
+        if not df_cartera.is_empty():
+            try:
+                print("📊 ANALYTICS: Calculando métricas de Seguimientos...")
+                analytics_seg = SeguimientosAnalyticsService()
+                resultados_modulos["seguimientos"] = analytics_seg.calcular_metricas_seguimientos(df_cartera, df_novedades)
+            except Exception as e:
+                print(f"❌ ERROR EN MODULO SEGUIMIENTOS: {e}")
+                resultados_modulos["seguimientos"] = {"error": str(e)}
+
+        # --- 5. GENERAR BASE DE DATOS PARA BUSCADOR ---
+        if not df_cartera.is_empty():
+            try:
+                parquet_filename = "temp_data_searchable.parquet"
+                if self.guardar_parquet_optimizado(df_cartera, parquet_filename):
+                    resultados_modulos["_archivo_parquet"] = parquet_filename
+            except Exception as e:
+                print(f"⚠️ No se pudo generar archivo de búsqueda: {e}")
+
+        return resultados_modulos
+
+    def guardar_json_resultado(self, data: dict, output_path: str):
+        def json_serial(obj):
+            if isinstance(obj, (datetime, date)):
+                return obj.isoformat()
+            raise TypeError (f"Type {type(obj)} not serializable")
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4, default=json_serial)
