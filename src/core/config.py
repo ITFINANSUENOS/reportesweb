@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
-        # Esto permite que si hay variables extra en el .env (basura), no rompa la app
         extra = "ignore" 
 
 settings = Settings()
