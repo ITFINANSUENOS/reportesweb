@@ -22,7 +22,6 @@ class CarteraAnalyticsService:
             .agg([
                 pl.len().alias("count"),
                 pl.col("Total_Recaudo").sum().alias("Total_Recaudo"), 
-                pl.col("Valor_Saldo").sum().alias("Saldo_Total")
             ])
         )
 
@@ -76,15 +75,12 @@ class CarteraAnalyticsService:
         )
 
     def _calcular_vigencia(self, df: pl.DataFrame, cols_filtro: list):
-        # We need Tipo_Vigencia_Temp which we created in the processor service
         if "Tipo_Vigencia_Temp" not in df.columns: 
-            # Fallback if column is missing (should not happen with correct processor)
             if "Fecha_Cuota_Vigente" not in df.columns: return None
             df = df.with_columns(pl.lit("FECHA").alias("Tipo_Vigencia_Temp"))
 
         return (
             df.with_columns(
-                # 1. Logic for Parent State
                 pl.when(pl.col("Tipo_Vigencia_Temp") == "ANTICIPADO")
                 .then(pl.lit("ANTICIPADO"))
                 .when(pl.col("Fecha_Cuota_Vigente").is_not_null())
@@ -93,14 +89,13 @@ class CarteraAnalyticsService:
                 .alias("Estado_Vigencia_Agrupado")
             )
             .with_columns(
-                # 2. Logic for Child State (RANGES for VIGENTES)
                 pl.when(pl.col("Estado_Vigencia_Agrupado") == "VIGENTES")
                 .then(
                     pl.when(pl.col("Fecha_Cuota_Vigente").dt.day() <= 10).then(pl.lit("Días 1-10"))
                     .when(pl.col("Fecha_Cuota_Vigente").dt.day() <= 20).then(pl.lit("Días 11-20"))
                     .otherwise(pl.lit("Días 21+"))
                 )
-                .otherwise(pl.lit(None)) # Anticipado and Expirada have no children
+                .otherwise(pl.lit(None))
                 .alias("Sub_Estado_Vigencia")
             )
             .group_by(cols_filtro + ["Estado_Vigencia_Agrupado", "Sub_Estado_Vigencia"])

@@ -10,7 +10,12 @@ def guardar_json(data: dict, output_path: str) -> bool:
         if isinstance(obj, (datetime, date)): return obj.isoformat()
         raise TypeError (f"Type {type(obj)} not serializable")
     try:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # --- CORRECCIÓN AQUÍ ---
+        # Solo intentamos crear carpetas si la ruta tiene un directorio padre
+        parent_dir = os.path.dirname(output_path)
+        if parent_dir: 
+            os.makedirs(parent_dir, exist_ok=True)
+
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4, default=json_serial)
         return True
@@ -21,7 +26,10 @@ def guardar_json(data: dict, output_path: str) -> bool:
 def guardar_parquet(df: pl.DataFrame, output_path: str, cols_especificas: list = None) -> bool:
     """Guarda un DataFrame en Parquet comprimido."""
     try:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        parent_dir = os.path.dirname(output_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+
         if cols_especificas:
             cols_existentes = [c for c in cols_especificas if c in df.columns]
             df_to_save = df.select(cols_existentes)
@@ -51,7 +59,6 @@ def leer_hoja_excel(file_path, sheet_name, cols_requeridas, overrides):
             "schema_overrides": overrides
         }
         
-        # Carga estricta: Solo leer lo necesario
         if cols_requeridas:
             opciones_lectura["columns"] = cols_requeridas
 
@@ -63,7 +70,6 @@ def leer_hoja_excel(file_path, sheet_name, cols_requeridas, overrides):
         )
         return df
     except Exception as e:
-        # Fallback: Si falla por columnas desconocidas, intenta leer todo
         if "columns" in str(e) or "not found" in str(e):
             print(f"⚠️ Aviso: Columnas no coinciden en '{sheet_name}'. Leyendo todo...")
             try:
@@ -82,15 +88,15 @@ def leer_hoja_excel(file_path, sheet_name, cols_requeridas, overrides):
             return pl.DataFrame()
 
 def limpiar_texto_lote(df: pl.DataFrame, cols: list) -> pl.DataFrame:
-    """Limpia espacios en blanco de una lista de columnas."""
     valid_cols = [c for c in cols if c in df.columns]
     if valid_cols:
         df = df.with_columns([pl.col(c).cast(pl.Utf8).str.strip_chars() for c in valid_cols])
     return df
 
 def parsear_fechas(df: pl.DataFrame, cols: list) -> pl.DataFrame:
-    """Intenta convertir columnas a fecha YYYY-MM-DD."""
     for c in cols:
         if c in df.columns:
-            df = df.with_columns(pl.col(c).str.strptime(pl.Date, "%Y-%m-%d", strict=False))
+            df = df.with_columns(
+                pl.col(c).str.strptime(pl.Date, "%Y-%m-%d", strict=False)
+            )
     return df

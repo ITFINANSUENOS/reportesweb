@@ -54,50 +54,48 @@ class ReportesController:
             print(f"⬇️ Descargando {file_key}...")
             self.s3_client.download_file(settings.S3_BUCKET_NAME, file_key, local_input)
             
-            # 2. Procesar Datos (Genera Dict con DataFrames/Listas)
+            # 2. Procesar Datos
             processor = DataProcessorService()
-            todos_los_datos = processor.procesar_excel_multi_modulo(local_input)
+            todos_los_datos = processor.procesar_excel_multi_modulo(local_input, job_id=job_id)
             
             archivos_generados = 0
             
             # 3. Iterar y Distribuir Resultados
             for modulo, data in todos_los_datos.items():
                 
-                # =======================================================
-                # CASO A: ES EL ARCHIVO PARQUET (PARA BUSCADOR) 🕵️‍♂️
-                # =======================================================
-                if modulo == "_archivo_parquet":
-                    local_parquet_path = data # 'data' es la ruta del archivo temporal
+                # CASO A: ARCHIVOS INTERNOS (PARQUET, ETC.) 📦
+                # Si la llave empieza con "_", es una ruta de archivo local.
+                if modulo.startswith("_"):
+                    local_path = data # Ej: "data/cartera/abcd.parquet"
                     
-                    # Lo subimos a la carpeta especial 'data/' en S3
-                    s3_key_parquet = f"data/{job_id}.parquet"
-                    
-                    print(f"📦 Detectado archivo de búsqueda. Subiendo a: {s3_key_parquet}...")
-                    
-                    try:
-                        self.s3_client.upload_file(
-                            local_parquet_path, 
-                            settings.S3_BUCKET_NAME, 
-                            s3_key_parquet
-                        )
-                        print("✅ Base de datos de búsqueda subida con éxito.")
-                    except Exception as e:
-                        print(f"❌ Error subiendo Parquet: {e}")
-                    
-                    # Borramos el temporal y CONTINUAMOS (no creamos JSON para esto)
-                    if os.path.exists(local_parquet_path): os.remove(local_parquet_path)
+                    if os.path.exists(local_path):
+                        # Usamos la misma estructura de carpetas para S3
+                        # Reemplazamos \ por / para compatibilidad Windows/Linux en S3
+                        s3_key_file = local_path.replace("\\", "/")
+                        
+                        print(f"📦 Subiendo archivo optimizado ({modulo}) a: {s3_key_file}...")
+                        
+                        try:
+                            self.s3_client.upload_file(
+                                local_path, 
+                                settings.S3_BUCKET_NAME, 
+                                s3_key_file
+                            )
+                            # Borramos el archivo local después de subirlo
+                            os.remove(local_path)
+                        except Exception as e:
+                            print(f"❌ Error subiendo archivo {modulo}: {e}")
+                    else:
+                        print(f"⚠️ El archivo reportado en {modulo} no se encontró en disco: {local_path}")
+                    # CRÍTICO: 'continue' evita que este archivo se intente procesar como JSON abajo
                     continue 
                 
-                # =======================================================
-                # CASO B: ES UN MÓDULO DE GRÁFICOS (JSON) 📊
-                # =======================================================
+                # CASO B: MÓDULOS DE DATOS (PARA GRÁFICOS JSON) 📊
                 if not data or "error" in data:
-                    # --- AGREGA ESTE PRINT PARA VER EL ERROR OCULTO ---
-                    if "error" in data:
+                    if isinstance(data, dict) and "error" in data:
                         print(f"⚠️ MÓDULO {modulo} FALLÓ CON ERROR: {data['error']}")
                     else:
                         print(f"⚠️ MÓDULO {modulo} ESTÁ VACÍO.")
-                    # --------------------------------------------------
                     continue
 
                 local_json_name = f"temp_{job_id}_{modulo}.json"
@@ -112,6 +110,7 @@ class ReportesController:
                     "data": data
                 }
 
+                # Usamos el wrapper del servicio (o podrías importar guardar_json de utils)
                 processor.guardar_json_resultado(json_final, local_json_name)
                 
                 # Subir a carpeta 'graficos/modulo/'
@@ -130,10 +129,9 @@ class ReportesController:
 
             # 4. FINALIZACIÓN Y ACTUALIZACIÓN DE PUNTERO
             if archivos_generados > 0:
-                print(f"✅ EXITO: Job {job_id} completado. {archivos_generados} módulos generados.")
+                print(f"✅ EXITO: Job {job_id} completado. Reportes generados.")
                 
-                # --- NUEVO: ACTUALIZAR EL "REPORTE ACTIVO" PARA EL FRONTEND ---
-                # Esto permite que los usuarios vean automáticamente la data nueva
+                # Actualizar "Reporte Activo"
                 try:
                     manifest_data = {
                         "active_job_id": job_id,
@@ -144,7 +142,7 @@ class ReportesController:
                     
                     self.s3_client.put_object(
                         Bucket=settings.S3_BUCKET_NAME,
-                        Key="config/reporte_activo.json", # Ruta fija que el Front consultará
+                        Key="config/reporte_activo.json",
                         Body=json.dumps(manifest_data),
                         ContentType="application/json"
                     )
@@ -152,7 +150,6 @@ class ReportesController:
                     
                 except Exception as e:
                     print(f"⚠️ Advertencia: No se pudo actualizar el reporte activo: {e}")
-                # --------------------------------------------------------------
 
                 return True
             
