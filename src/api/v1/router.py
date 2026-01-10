@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from src.api.v1.routes import reportes_route
 from src.api.v1.routes import cartera_analytics_route
 from src.api.v1.routes import datacredito_route
+from src.api.v1.routes import busquedas_route
 
 api_router = APIRouter()
 
@@ -22,5 +23,11 @@ api_router.include_router(
     datacredito_route.router,
     prefix="/datacredito",
     tags=["DataCrédito"]
+)
+
+api_router.include_router(
+    busquedas_route.router,
+    prefix="/busquedas",
+    tags=["Motor de Búsqueda"]
 )
 

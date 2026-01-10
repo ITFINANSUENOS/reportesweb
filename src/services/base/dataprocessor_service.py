@@ -1,138 +1,164 @@
-import pandas as pd
-import numpy as np
+import polars as pl
+from src.core.columns_config import (
+    COLS_CARTERA, COLS_NOVEDADES, COLS_LLAMADAS, COLS_MENSAJERIA, MAPA_FNZ,
+    COLS_TABLA_NOVEDADES, COLS_TABLA_RODAMIENTOS
+)
+from src.utils.polars_utils import leer_hoja_excel, guardar_parquet, guardar_json, limpiar_texto_lote, parsear_fechas
+from src.services.tableros.cartera.cartera_analytics_service import CarteraAnalyticsService
+from src.services.tableros.seguimientos.seguimientos_analytics_service import SeguimientosAnalyticsService
 
-# ¡Importamos los nuevos servicios!
-from src.services.base.data_quality_audit_service import DataQualityAuditService
+class DataProcessorService:
 
-class ReportProcessorService:
-    """
-    Orquesta los pasos finales de procesamiento del reporte,
-    delegando tareas específicas a servicios especializados y
-    manejando el formateo y la limpieza final.
-    """
-    def __init__(self, config):
-        self.config = config
-        # Instanciamos los servicios que este orquestador va a utilizar
-        self.quality_audit_service = DataQualityAuditService()
-        # NOTA: MetricsCalculationService y CategorizationService se llamarán
-        # desde el ReportService principal, antes de llegar aquí.
+    def _preprocesar_cartera(self, df_cartera: pl.DataFrame) -> pl.DataFrame:
+        """Aplica lógica de negocio específica para Cartera (Limpieza y Normalización)."""
+        try:
+            # 1. Asegurar columnas de negocio básicas (Zona, Call Center) para filtros
+            defaults = {"Zona": "SIN ZONA", "Call_Center_Apoyo": "SIN APOYO"}
+            for col, val in defaults.items():
+                if col not in df_cartera.columns:
+                    df_cartera = df_cartera.with_columns(pl.lit(val).alias(col))
 
-    def filter_by_date_range(self, reporte_df, start_date, end_date):
-        """
-        Filtra el reporte por un rango de fechas. (Sin cambios)
-        """
-        if not start_date or not end_date:
-            return reporte_df
+            # 2. Normalización de Textos (Mayúsculas y sin espacios)
+            df_cartera = df_cartera.with_columns([
+                pl.col("Zona").cast(pl.Utf8).str.replace_all(" ", "").str.strip_chars().str.to_uppercase(),
+                pl.col("Call_Center_Apoyo").cast(pl.Utf8).str.replace_all(" ", "").str.strip_chars().str.to_uppercase()
+            ])
 
-        print(f"🔍 Aplicando filtro de fecha: desde {start_date} hasta {end_date}")
-        df = reporte_df.copy()
-        df['Fecha_Cuota_Vigente'] = pd.to_datetime(df['Fecha_Cuota_Vigente'], format='%d/%m/%Y', errors='coerce')
-        start_date_dt = pd.to_datetime(start_date, format='%d/%m/%Y', errors='coerce')
-        end_date_dt = pd.to_datetime(end_date, format='%d/%m/%Y', errors='coerce')
+            # 3. Lógica para columna calculada 'CALL_CENTER_FILTRO'
+            # (Esto sí es necesario para los filtros del frontend)
+            zonas_cl = ['CL1', 'CL2', 'CL3', 'CL4']
+            apoyo_cl = ['CL5', 'CL6', 'CL7', 'CL8', 'CL9']
 
-        if pd.isna(start_date_dt) or pd.isna(end_date_dt):
-            print("⚠️ Formato de fecha inválido. Se omite el filtro.")
-            return reporte_df
-
-        mask = (df['Fecha_Cuota_Vigente'] >= start_date_dt) & (df['Fecha_Cuota_Vigente'] <= end_date_dt)
-        filtered_df = df[mask]
-        print(f"✅ Filtro aplicado. {len(filtered_df)} registros encontrados en el rango.")
-        return filtered_df
-
-    def finalize_report(self, reporte_df, orden_columnas):
-        """
-        Realiza la auditoría, el formateo y la reestructuración final del reporte.
-        """
-        print("🧹 Realizando transformaciones y limpieza final...")
-        
-        # 1. Ejecutar la auditoría de calidad usando el servicio especializado
-        df_a_corregir = self.quality_audit_service.run_audit(reporte_df)
-
-        # 2. Aplicar formateo de presentación
-        reporte_df = self._format_dates(reporte_df)
-        reporte_df = self._fill_final_na(reporte_df)
-        reporte_df = self._format_percentages(reporte_df)
-        reporte_df = self._clean_leader_info(reporte_df)
-
-        # 3. Limpiar y reordenar columnas
-        print("🏗️ Reordenando columnas según la configuración...")
-        columnas_a_eliminar = [
-            'Saldo_Factura', 'Tipo_Credito', 'Numero_Credito', 'Meta_DC_Al_Dia', 
-            'Meta_DC_Atraso', 'Meta_Atraso','Movil_Codeudor1','Movil_Codeudor2','Celular2',
-            *[col for col in reporte_df.columns if col.endswith(('_Analisis', '_R03', '_Venc', '_display'))]
-        ]
-        reporte_df.drop(columns=columnas_a_eliminar, inplace=True, errors='ignore')
-        
-        columnas_actuales = reporte_df.columns.tolist()
-        columnas_ordenadas = [col for col in orden_columnas if col in columnas_actuales]
-        columnas_restantes = [col for col in columnas_actuales if col not in columnas_ordenadas]
-        
-        final_df = reporte_df[columnas_ordenadas + columnas_restantes]
-
-        return final_df, df_a_corregir
-
-    # Los siguientes son métodos privados de apoyo para la finalización
-    def _format_dates(self, df):
-        print("📅 Formateando fechas a solo día/mes/año...")
-        columnas_de_fecha = [
-            'Fecha_Cuota_Vigente', 'Fecha_Cuota_Atraso', 'Fecha_Facturada', 
-            'Fecha_Desembolso', 'Fecha_Ultima_Novedad', 'Fecha_Ultimo_Pago_Inicial'
-        ]
-        for col in columnas_de_fecha:
-            if col in df.columns:
-                mask_no_anticipado = df[col] != 'ANTICIPADO'
-                df.loc[mask_no_anticipado, col] = pd.to_datetime(
-                    df.loc[mask_no_anticipado, col], errors='coerce'
-                ).dt.date
-        return df
-
-    def _fill_final_na(self, df):
-        print(" Aplicando valores por defecto y formato de presentación...")
-        columnas_vencimiento = {
-            'Fecha_Cuota_Vigente': 'VIGENCIA EXPIRADA', 'Cuota_Vigente': 'VIGENCIA EXPIRADA',
-            'Valor_Cuota_Vigente': 'VIGENCIA EXPIRADA', 'Fecha_Cuota_Atraso': 'SIN MORA',
-            'Primera_Cuota_Mora': 'SIN MORA', 'Valor_Cuota_Atraso': 0, 'Valor_Vencido': 0
-        }
-        ref_col_anticipado = 'Cuota_Vigente'
-        for col, default_value in columnas_vencimiento.items():
-            if col in df.columns:
-                mask = df[col].isnull() & (df[ref_col_anticipado] != 'ANTICIPADO')
-                df.loc[mask, col] = default_value
-
-        mask_no_fns = df['Empresa'] != 'FINANSUEÑOS'
-        for col in ['Saldo_Avales', 'Saldo_Interes_Corriente']:
-            if col in df.columns:
-                df[col] = df[col].astype(object)
-                df.loc[mask_no_fns, col] = 'NO APLICA'
-        return df
-
-    def _format_percentages(self, df):
-        print("✨ Formateando columnas de porcentaje...")
-        for col in ['Meta_%', 'Meta_T.R_%']:
-            if col in df.columns:
-                numeric_col = pd.to_numeric(df[col].astype(str).str.replace('%', ''), errors='coerce')
-                numeric_col = np.where(numeric_col > 1, numeric_col / 100, numeric_col).round(4)
-                df[col] = (numeric_col * 100).round(0).astype(int).astype(str) + '%'
-        return df
-    
-    def _clean_leader_info(self, df):
-        print("👔 Limpiando y completando la columna 'Lider_Zona' y 'Movil_Lider'")
-        if 'Lider_Zona' in df.columns and 'Regional_Venta' in df.columns:
-            is_numeric_mask = pd.to_numeric(df['Lider_Zona'], errors='coerce').notna()
-            df.loc[is_numeric_mask, 'Lider_Zona'] = np.nan
+            df_cartera = df_cartera.with_columns(
+                pl.when(pl.col("Zona").is_in(zonas_cl)).then(pl.col("Zona"))
+                .when(pl.col("Call_Center_Apoyo").is_in(apoyo_cl)).then(pl.col("Call_Center_Apoyo"))
+                .otherwise(pl.lit("SIN CALL CENTER")).alias("CALL_CENTER_FILTRO"),
+                
+                pl.col("Regional_Cobro").fill_null("OTRAS ZONAS")
+            )
             
-            mapa_moviles = {}
-            if 'Movil_Lider' in df.columns:
-                mapa_df = df.dropna(subset=['Lider_Zona', 'Movil_Lider']).drop_duplicates(subset=['Lider_Zona'])
-                mapa_moviles = pd.Series(mapa_df['Movil_Lider'].values, index=mapa_df['Lider_Zona']).to_dict()
+            return df_cartera
+        except Exception as e:
+            print(f"❌ Error en lógica de negocio Cartera: {e}")
+            return df_cartera
 
-            def fill_with_mode(series):
-                mode_val = series.mode()
-                return series.fillna(mode_val.iloc[0]) if not mode_val.empty else series
-            df['Lider_Zona'] = df.groupby('Regional_Venta')['Lider_Zona'].transform(fill_with_mode)
-            if 'Movil_Lider' in df.columns:
-                df['Movil_Lider'] = df['Lider_Zona'].map(mapa_moviles)
-            df['Lider_Zona'].fillna('NO ASIGNADO', inplace=True)
-            if 'Movil_Lider' in df.columns:
-                df['Movil_Lider'].fillna('NO ASIGNADO', inplace=True)
-        return df
+    def procesar_excel_multi_modulo(self, file_path: str, job_id: str = "temp_job") -> dict:
+        resultados_modulos = {}
+        # 1. CARTERA
+        overrides_cartera = {
+            "Valor_Desembolso": pl.Float64, "Valor_Cuota": pl.Float64, "Valor_Cuota_Atraso": pl.Float64,
+            "Valor_Cuota_Vigente": pl.Utf8, "Total_Recaudo": pl.Float64, "Valor_Vencido": pl.Float64,
+            "Cedula_Cliente": pl.Utf8, "Celular": pl.Utf8, "Telefono_Cobrador": pl.Utf8, "Telefono_Gestor": pl.Utf8,
+            "Telefono_Codeudor1": pl.Utf8, "Telefono_Codeudor2": pl.Utf8, "Credito": pl.Utf8,"Movil_Lider": pl.Utf8,
+            "Cantidad_Novedades": pl.Float64, "Meta_General": pl.Float64, "Meta_$": pl.Float64, 
+            "Meta_Saldo": pl.Float64, "Recaudo_Meta": pl.Float64, "Meta_Intereses": pl.Float64
+        }
+        df_cartera = leer_hoja_excel(file_path, "Analisis_de_Cartera", COLS_CARTERA, overrides_cartera)
+
+        if not df_cartera.is_empty():
+            # --- DETECCIÓN DE ANTICIPADOS ---
+            # Se hace antes de limpiar los números para no perder la palabra "ANTICIPADO"
+            if "Valor_Cuota_Vigente" in df_cartera.columns:
+                df_cartera = df_cartera.with_columns(
+                    pl.when(pl.col("Valor_Cuota_Vigente").str.to_uppercase().str.contains("ANTICIPADO"))
+                    .then(pl.lit("ANTICIPADO"))
+                    .otherwise(pl.lit("NORMAL"))
+                    .alias("Tipo_Vigencia_Temp")
+                )
+                # Ahora sí convertimos a numérico reemplazando texto por 0
+                df_cartera = df_cartera.with_columns(
+                    pl.col("Valor_Cuota_Vigente").str.replace("(?i)ANTICIPADO", "0").str.replace(",", "").cast(pl.Float64, strict=False).fill_null(0)
+                )
+            else:
+                df_cartera = df_cartera.with_columns(pl.lit("NORMAL").alias("Tipo_Vigencia_Temp"))
+            
+            # Parseo de fechas y limpieza general
+            df_cartera = parsear_fechas(df_cartera, ["Fecha_Desembolso", "Fecha_Ultima_Novedad", "Fecha_Cuota_Atraso", "Fecha_Cuota_Vigente"])
+            df_cartera = limpiar_texto_lote(df_cartera, ["Empresa", "Regional_Venta", "Nombre_Ciudad", "Nombre_Vendedor", "Franja_Meta", "Rodamiento", "Regional_Cobro", "Zona", "Cedula_Cliente"])
+            
+            if "Cantidad_Novedades" in df_cartera.columns:
+                df_cartera = df_cartera.with_columns(pl.col("Cantidad_Novedades").fill_null(0))
+            
+            # Ejecutar preprocesamiento (Zonas, Call Center)
+            df_cartera = self._preprocesar_cartera(df_cartera)
+
+        # 2. NOVEDADES
+        overrides_nov = {
+            "Celular_Cliente": pl.Utf8, "Telefono_Cliente": pl.Utf8, "Cedula_Cliente": pl.Utf8, 
+            "Valor": pl.Float64, "Novedad": pl.Utf8
+        }
+        df_novedades = leer_hoja_excel(file_path, "Detalle_Novedades", COLS_NOVEDADES, overrides_nov)
+
+        if not df_novedades.is_empty():
+            if "Celular_Cliente" in df_novedades.columns: 
+                df_novedades = df_novedades.with_columns(pl.col("Celular_Cliente").str.replace(r"\.$", ""))
+            df_novedades = parsear_fechas(df_novedades, ["Fecha_Novedad", "Fecha_Compromiso"])
+            df_novedades = limpiar_texto_lote(df_novedades, ["Cedula_Cliente"])
+            
+        # 3. HOJAS OPCIONALES
+        # Llamadas
+        df_llamadas = leer_hoja_excel(file_path, "Reporte_Llamadas", COLS_LLAMADAS, 
+            {"Destino_Llamada": pl.Utf8, "Extension_Llamada": pl.Utf8, "Codigo_Llamada": pl.Utf8})
+        if not df_llamadas.is_empty():
+            df_llamadas = parsear_fechas(df_llamadas, ["Fecha_Llamada"])
+            guardar_parquet(df_llamadas, f"data/llamadas/{job_id}.parquet")
+
+        # Mensajeria
+        df_mensajeria = leer_hoja_excel(file_path, "Reporte_Mensajes", COLS_MENSAJERIA, 
+            {"Fecha_Llamada": pl.Utf8, "Numero_Telefono": pl.Utf8})
+        if not df_mensajeria.is_empty():
+            df_mensajeria = parsear_fechas(df_mensajeria, ["Fecha_Llamada"])
+            guardar_parquet(df_mensajeria, f"data/mensajes/{job_id}.parquet")
+
+        # FNZ007
+        df_fnz = leer_hoja_excel(file_path, "FNZ007", list(MAPA_FNZ.keys()), 
+            {"PAGARE": pl.Utf8, "CEDULA": pl.Utf8, "TELEFONO1": pl.Utf8, "MOVIL": pl.Utf8, "VALOR_TOTA": pl.Float64, "DESEMBOLSO": pl.Utf8})
+        if not df_fnz.is_empty():
+            df_fnz = df_fnz.rename({k:v for k,v in MAPA_FNZ.items() if k in df_fnz.columns})
+            df_fnz = parsear_fechas(df_fnz, ["Fecha_Nacimiento"])
+            guardar_parquet(df_fnz, f"data/fnz/{job_id}.parquet")
+
+        # 4. EJECUCIÓN ANALÍTICA
+        df_cartera_save = None
+        df_novedades_save = None
+
+        if not df_cartera.is_empty():
+            try:
+                resultados_modulos["cartera"] = CarteraAnalyticsService().calcular_metricas_tablero_principal(df_cartera)
+                # Este 'df_cartera_save' es la base, pero será reemplazado si 'seguimientos' retorna uno enriquecido
+                df_cartera_save = df_cartera 
+            except Exception as e:
+                resultados_modulos["cartera"] = {"error": str(e)}
+
+            try:
+                res_seg = SeguimientosAnalyticsService().calcular_metricas_seguimientos(df_cartera, df_novedades)
+                # A. Extraemos el DF Full para la TABLA DE GESTIÓN (cruzado)
+                if "_df_novedades_full" in res_seg:
+                    df_novedades_save = res_seg.pop("_df_novedades_full")
+                # B. Extraemos el DF Base para la TABLA DE RODAMIENTOS (cartera única + estados)
+                if "_df_cartera_base" in res_seg:
+                    # Sobrescribimos df_cartera_save con este porque ya tiene Estado_Pago y Estado_Gestion calculados
+                    df_cartera_save = res_seg.pop("_df_cartera_base") 
+                resultados_modulos["seguimientos"] = res_seg
+            except Exception as e:
+                resultados_modulos["seguimientos"] = {"error": str(e)}
+                
+        # 5. GUARDADO FINAL DIFERENCIADO
+        # A. TABLA RODAMIENTOS (Data financiera única por crédito)
+        if df_cartera_save is not None:
+            # 'seguimientos_rodamientos'
+            path_cartera = f"data/seguimientos_rodamientos/{job_id}.parquet"
+            
+            guardar_parquet(df_cartera_save, path_cartera, cols_especificas=COLS_TABLA_RODAMIENTOS)
+            resultados_modulos["_archivo_cartera"] = path_cartera
+
+        # B. TABLA GESTIÓN (Data detallada con novedades)
+        if df_novedades_save is not None:
+            # 'seguimientos_gestion'
+            path_nov = f"data/seguimientos_gestion/{job_id}.parquet"
+            guardar_parquet(df_novedades_save, path_nov, cols_especificas=COLS_TABLA_NOVEDADES)
+            resultados_modulos["_archivo_novedades"] = path_nov
+        return resultados_modulos
+    
+    def guardar_json_resultado(self, data: dict, output_path: str):
+        return guardar_json(data, output_path)
