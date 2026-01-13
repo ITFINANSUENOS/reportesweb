@@ -27,3 +27,17 @@ dist/
 build/
 temp_4c029a7c5d2e49058a05b68ab9bdf51a/.env
 .env
+
+# Ignorar carpeta de datos
+data/
+
+# Ignorar archivos de datos pesados (por si quedan fuera de data)
+*.parquet
+*.csv
+*.xlsx
+
+# Ignorar archivos temporales que empiezan con "temp_"
+temp_*
+
+# Asegurar que ignore el .env
+.env
