@@ -3,7 +3,8 @@ from pydantic import BaseModel
 from typing import List, Optional, Any
 import polars as pl
 import os
-import boto3 
+import boto3
+import time
 from src.core.config import settings 
 
 router = APIRouter()
@@ -31,22 +32,48 @@ class FiltrosTabla(BaseModel):
     rodamiento: List[str] = []
     origen: str = "cartera" 
 
-# --- HELPER: DESCARGAR DE S3 ---
+# --- 1. FUNCIÓN DE LIMPIEZA (CRÍTICA PARA AWS) ---
+def limpiar_cache_antigua(directorio: str = "temp", max_archivos: int = 10):
+    """
+    Mantiene la carpeta temporal limpia. Si hay más de 'max_archivos',
+    borra los más viejos para liberar espacio en disco.
+    """
+    try:
+        if not os.path.exists(directorio): return
+
+        archivos = [
+            os.path.join(directorio, f) 
+            for f in os.listdir(directorio) 
+            if f.endswith('.parquet')
+        ]
+        
+        if len(archivos) > max_archivos:
+            # Ordenar por fecha de modificación (el más viejo primero)
+            archivos.sort(key=os.path.getmtime)
+            
+            # Borrar los sobrantes
+            archivos_a_borrar = archivos[:len(archivos) - max_archivos]
+            for f in archivos_a_borrar:
+                try:
+                    os.remove(f)
+                    print(f"🧹 Limpieza automática: Eliminado {f}")
+                except OSError:
+                    pass
+    except Exception as e:
+        print(f"⚠️ Warning limpieza caché: {e}")
+
+# --- 2. HELPER DE DESCARGA ---
 def garantizar_archivo_local(s3_key: str, local_path: str):
-    """
-    Descarga un archivo de S3 si no existe localmente.
-    Retorna True si el archivo está listo para usarse.
-    """
+    """Descarga de S3 a local si no existe."""
     if os.path.exists(local_path): return True
     
     print(f"📥 Descargando {s3_key} de S3 a {local_path}...")
     try:
-        # --- CORRECCIÓN AQUÍ ---
-        # Solo creamos directorios si local_path tiene carpetas (ej: "temp/archivo.parquet")
-        # Si es solo "archivo.parquet", directory será "" y saltamos este paso.
+        # Aseguramos que la carpeta (temp/) exista
         directory = os.path.dirname(local_path)
         if directory:
             os.makedirs(directory, exist_ok=True)
+            
         s3 = boto3.client(
             's3', 
             region_name=settings.AWS_REGION, 
@@ -57,20 +84,24 @@ def garantizar_archivo_local(s3_key: str, local_path: str):
         return True
     except Exception as e:
         print(f"❌ Error S3 ({s3_key}): {e}")
-        # Limpieza si quedó corrupto
         if os.path.exists(local_path): os.remove(local_path)
         return False
 
 @router.post("/filtrar-tabla-detalle")
 def filtrar_tabla_detalle(payload: FiltrosTabla):
     try:
+        # A. Limpieza preventiva antes de empezar
+        limpiar_cache_antigua(directorio="temp", max_archivos=20)
+
         job_id = payload.job_id
         origen = payload.origen
         
-        # 1. MAPEO INTELIGENTE DE RUTAS
+        # B. Mapeo de Rutas (Frontend -> S3)
         MAPA_RUTAS = {
+            # Rutas nuevas
             "seguimientos_gestion": "data/seguimientos_gestion",
             "seguimientos_rodamientos": "data/seguimientos_rodamientos",
+            # Compatibilidad
             "novedades": "data/seguimientos_gestion",
             "cartera": "data/seguimientos_rodamientos"
         }
@@ -78,23 +109,24 @@ def filtrar_tabla_detalle(payload: FiltrosTabla):
         carpeta_s3 = MAPA_RUTAS.get(origen, f"data/{origen}")
         s3_key = f"{carpeta_s3}/{job_id}.parquet"
         
-        # Nombre local
-        local_path = f"temp_search_{job_id}_{origen}.parquet"
+        # C. Definir ruta local en carpeta 'temp'
+        # Usamos os.path.join para evitar problemas de rutas
+        nombre_archivo = f"search_{job_id}_{origen}.parquet"
+        local_path = os.path.join("temp", nombre_archivo)
 
-        # 2. VERIFICAR EXISTENCIA Y DESCARGAR
+        # D. Descargar (con reintento de fallback si falla la ruta nueva)
         if not garantizar_archivo_local(s3_key, local_path):
-            print(f"⚠️ Ruta principal falló ({s3_key}), intentando fallback...")
-            # Fallback a ruta vieja por si acaso
+            print(f"⚠️ Ruta {s3_key} falló, intentando ruta legacy...")
             fallback_key = f"data/{origen}/{job_id}.parquet"
             if not garantizar_archivo_local(fallback_key, local_path):
                  return {"data": [], "total_registros": 0, "pagina_actual": 1, "total_paginas": 0}
 
-        # 3. LEER EL PARQUET
+        # E. Leer Parquet (Optimizado)
         try:
-            # Usamos read_parquet por seguridad (memory_map=True es eficiente)
+            # memory_map=True es excelente para velocidad sin saturar RAM
             df = pl.read_parquet(local_path, memory_map=True)
         except Exception as e:
-            print(f"❌ Error leyendo Parquet corrupto: {e}")
+            print(f"❌ Archivo corrupto, eliminando: {e}")
             if os.path.exists(local_path): os.remove(local_path)
             return {"data": [], "total_registros": 0, "pagina_actual": 1, "total_paginas": 0}
         
@@ -113,7 +145,7 @@ def filtrar_tabla_detalle(payload: FiltrosTabla):
         # 5. CONSTRUCCIÓN DE FILTROS DINÁMICOS
         condicion = pl.lit(True)
 
-        # --- A. FILTROS GLOBALES ---
+        # --- Filtros Globales ---
         filtros_map = {
             "Empresa": payload.empresa,
             "Zona": payload.zona,
@@ -131,7 +163,7 @@ def filtrar_tabla_detalle(payload: FiltrosTabla):
             if valores and col_name in df.columns:
                 condicion = condicion & pl.col(col_name).is_in(valores)
 
-        # --- B. FILTROS LOCALES ---
+        # --- Filtros Locales ---
         if payload.estado_pago and "Estado_Pago" in df.columns:
             condicion = condicion & pl.col("Estado_Pago").is_in(payload.estado_pago)
             
@@ -176,6 +208,7 @@ def filtrar_tabla_detalle(payload: FiltrosTabla):
 
     except Exception as e:
         print(f"❌ ERROR EN BUSCADOR: {str(e)}")
+        # Importante para debug en CloudWatch
         import traceback
-        traceback.print_exc()
+        traceback.print_exc() 
         raise HTTPException(status_code=500, detail=str(e))
