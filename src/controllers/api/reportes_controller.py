@@ -1,6 +1,5 @@
 # src/controllers/api/reportes_controller.py
-import sys
-import subprocess
+from fastapi import  HTTPException,BackgroundTasks
 import boto3
 import uuid
 import json
@@ -11,41 +10,105 @@ from src.services.base.dataprocessor_service import DataProcessorService
 
 class ReportesController:
     def __init__(self):
+        # 1. Cliente S3 (Siempre necesario)
         self.s3_client = boto3.client(
             's3',
             region_name=settings.AWS_REGION,
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
         )
+        
+        # 2. Cliente SQS (Solo si hay configuración)
+        self.sqs = None
+        if settings.SQS_QUEUE_URL:
+            try:
+                self.sqs = boto3.client(
+                    'sqs',
+                    region_name=settings.AWS_REGION,
+                    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+                )
+            except Exception as e:
+                print(f"⚠️ Error inicializando SQS: {e}")
+                self.sqs = None
 
     def generar_url_subida(self, filename: str, content_type: str):
         file_key = f"uploads/{uuid.uuid4().hex}-{filename}"
-        url = self.s3_client.generate_presigned_url(
-            'put_object', 
-            Params={'Bucket': settings.S3_BUCKET_NAME, 'Key': file_key, 'ContentType': content_type}, 
-            ExpiresIn=3600
-        )
-        return {"upload_url": url, "file_key": file_key}
+        try:
+            url = self.s3_client.generate_presigned_url(
+                'put_object', 
+                Params={'Bucket': settings.S3_BUCKET_NAME, 'Key': file_key, 'ContentType': content_type}, 
+                ExpiresIn=3600
+            )
+            return {"upload_url": url, "file_key": file_key}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error generando URL firmada: {str(e)}")
 
-    def iniciar_procesamiento(self, file_key: str, empresa: str):
+    async def iniciar_procesamiento_async(self, file_key, empresa, tipo_reporte, background_tasks: BackgroundTasks):
+        """
+        Orquesta el inicio del trabajo.
+        - Si hay SQS configurado -> Envía a la cola (Producción).
+        - Si NO hay SQS -> Ejecuta en background thread (Local).
+        """
         job_id = uuid.uuid4().hex
         
-        # En producción esto usaría SQS, en local lanza un subproceso
-        if getattr(settings, "ENVIRONMENT", "production") == "local":
-            subprocess.Popen([
-                sys.executable, "worker.py", 
-                "--file-key", file_key, 
-                "--job-id", job_id, 
-                "--empresa", empresa
-            ])
-            return {"status": "simulated", "message": "Worker lanzado localmente", "job_id": job_id}
+        # Opción A: MODO PRODUCCIÓN (SQS)
+        if self.sqs and settings.SQS_QUEUE_URL:
+            try:
+                message_body = {
+                    "job_id": job_id,
+                    "file_key": file_key,
+                    "empresa": empresa,
+                    "tipo_reporte": tipo_reporte
+                }
+                self.sqs.send_message(
+                    QueueUrl=settings.SQS_QUEUE_URL,
+                    MessageBody=json.dumps(message_body)
+                )
+                return {
+                    "status": "queued",
+                    "job_id": job_id,
+                    "message": "Archivo encolado exitosamente (Modo Producción)."
+                }
+            except Exception as e:
+                return {"status": "error", "message": f"Fallo al encolar en SQS: {str(e)}"}
+
+        # Opción B: MODO LOCAL (Simulación)
         else:
-            # Aquí iría la integración con AWS SQS
-            return {"status": "queued", "job_id": job_id}
+            print(f"⚠️ SQS no configurado. Ejecutando Job {job_id} en hilo local.")
+            
+            # Inyectamos la tarea en el loop de eventos de FastAPI
+            background_tasks.add_task(
+                self.procesar_reporte_batch, 
+                file_key, 
+                job_id, 
+                empresa
+            )
+            
+            return {
+                "status": "processing_local",
+                "job_id": job_id,
+                "message": "Ejecutando en segundo plano (Modo Local/Sin SQS)."
+            }
+
+    def obtener_json_graficos(self, job_id, modulo):
+        """Descarga JSON de gráficos desde S3."""
+        s3_key = f"graficos/{modulo}/{job_id}.json"
+        
+        try:
+            print(f"📥 Descargando gráfico: {s3_key}")
+            response = self.s3_client.get_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key)
+            content = response['Body'].read().decode('utf-8')
+            return json.loads(content)
+            
+        except self.s3_client.exceptions.NoSuchKey:
+            raise HTTPException(status_code=404, detail=f"No se encontraron datos para el módulo '{modulo}'.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error leyendo S3: {str(e)}")
 
     # --- LÓGICA DEL WORKER ---
     async def procesar_reporte_batch(self, file_key: str, job_id: str, empresa: str):
-        print(f"⚙️ WORKER: Iniciando procesamiento MULTI-MÓDULO para {empresa}...")
+        print(f"⚙️ WORKER: Iniciando procesamiento para {empresa}...")
         
         local_input = f"temp_{job_id}.xlsx"
         
@@ -54,84 +117,16 @@ class ReportesController:
             print(f"⬇️ Descargando {file_key}...")
             self.s3_client.download_file(settings.S3_BUCKET_NAME, file_key, local_input)
             
-            # 2. Procesar Datos
+            # 2. Procesar Datos (El Servicio guarda todo en S3 internamente)
             processor = DataProcessorService()
-            todos_los_datos = processor.procesar_excel_multi_modulo(local_input, job_id=job_id)
             
-            archivos_generados = 0
+            # Esta función ya guarda los Parquets y los JSONs en S3
+            resultados = processor.procesar_excel_multi_modulo(local_input, job_id=job_id, empresa=empresa)
             
-            # 3. Iterar y Distribuir Resultados
-            for modulo, data in todos_los_datos.items():
+            # 3. Finalización: Actualizar Puntero "Reporte Activo"
+            if resultados:
+                print(f"✅ EXITO: Job {job_id} completado. Archivos guardados por el servicio.")
                 
-                # CASO A: ARCHIVOS INTERNOS (PARQUET, ETC.) 📦
-                # Si la llave empieza con "_", es una ruta de archivo local.
-                if modulo.startswith("_"):
-                    local_path = data # Ej: "data/cartera/abcd.parquet"
-                    
-                    if os.path.exists(local_path):
-                        # Usamos la misma estructura de carpetas para S3
-                        # Reemplazamos \ por / para compatibilidad Windows/Linux en S3
-                        s3_key_file = local_path.replace("\\", "/")
-                        
-                        print(f"📦 Subiendo archivo optimizado ({modulo}) a: {s3_key_file}...")
-                        
-                        try:
-                            self.s3_client.upload_file(
-                                local_path, 
-                                settings.S3_BUCKET_NAME, 
-                                s3_key_file
-                            )
-                            # Borramos el archivo local después de subirlo
-                            os.remove(local_path)
-                        except Exception as e:
-                            print(f"❌ Error subiendo archivo {modulo}: {e}")
-                    else:
-                        print(f"⚠️ El archivo reportado en {modulo} no se encontró en disco: {local_path}")
-                    # CRÍTICO: 'continue' evita que este archivo se intente procesar como JSON abajo
-                    continue 
-                
-                # CASO B: MÓDULOS DE DATOS (PARA GRÁFICOS JSON) 📊
-                if not data or "error" in data:
-                    if isinstance(data, dict) and "error" in data:
-                        print(f"⚠️ MÓDULO {modulo} FALLÓ CON ERROR: {data['error']}")
-                    else:
-                        print(f"⚠️ MÓDULO {modulo} ESTÁ VACÍO.")
-                    continue
-
-                local_json_name = f"temp_{job_id}_{modulo}.json"
-                
-                json_final = {
-                    "metadata": {
-                        "job_id": job_id,
-                        "empresa": empresa,
-                        "modulo": modulo,
-                        "fecha_generacion": datetime.now().isoformat()
-                    },
-                    "data": data
-                }
-
-                # Usamos el wrapper del servicio (o podrías importar guardar_json de utils)
-                processor.guardar_json_resultado(json_final, local_json_name)
-                
-                # Subir a carpeta 'graficos/modulo/'
-                s3_key = f"graficos/{modulo}/{job_id}.json"
-                print(f"⬆️ Subiendo reporte {modulo} a: {s3_key}...")
-                
-                self.s3_client.upload_file(
-                    local_json_name, 
-                    settings.S3_BUCKET_NAME, 
-                    s3_key,
-                    ExtraArgs={'ContentType': 'application/json'}
-                )
-                
-                if os.path.exists(local_json_name): os.remove(local_json_name)
-                archivos_generados += 1
-
-            # 4. FINALIZACIÓN Y ACTUALIZACIÓN DE PUNTERO
-            if archivos_generados > 0:
-                print(f"✅ EXITO: Job {job_id} completado. Reportes generados.")
-                
-                # Actualizar "Reporte Activo"
                 try:
                     manifest_data = {
                         "active_job_id": job_id,
@@ -147,11 +142,11 @@ class ReportesController:
                         ContentType="application/json"
                     )
                     print(f"🔄 Reporte Activo actualizado a: {job_id}")
+                    return True
                     
                 except Exception as e:
-                    print(f"⚠️ Advertencia: No se pudo actualizar el reporte activo: {e}")
-
-                return True
+                    print(f"⚠️ Advertencia actualizando reporte activo: {e}")
+                    return True # El proceso fue exitoso, aunque falle el config update
             
             return False
 
@@ -161,4 +156,5 @@ class ReportesController:
             traceback.print_exc()
             return False
         finally:
+            # Limpieza del Excel de entrada
             if os.path.exists(local_input): os.remove(local_input)

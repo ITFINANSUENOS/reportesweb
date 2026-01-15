@@ -1,46 +1,62 @@
-import sys
-import argparse
-import asyncio
-from src.controllers.api.reportes_controller import ReportesController
-
-# Configura logs para verlos en AWS CloudWatch
+import boto3
+import json
+import time
 import logging
+from src.core.config import settings
+from src.services.base.dataprocessor_service import DataProcessorService
+
+# Configurar Logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("AWS-Worker")
+logger = logging.getLogger("Worker")
 
-async def main():
-    # 1. Recibir argumentos desde AWS Batch
-    parser = argparse.ArgumentParser(description="Worker de Procesamiento Pesado")
-    parser.add_argument("--file-key", required=True, help="Ruta del archivo en S3")
-    parser.add_argument("--job-id", required=True, help="ID único del trabajo")
-    parser.add_argument("--empresa", required=True, help="Nombre de la empresa")
+def process_message(message_body):
+    job_id = message_body.get("job_id")
+    file_key = message_body.get("file_key")
+    empresa = message_body.get("empresa")
+    tipo_reporte = message_body.get("tipo_reporte")
+
+    logger.info(f"👷 Worker iniciando Job: {job_id} [{tipo_reporte}]")
+
+    service = DataProcessorService()
     
-    args = parser.parse_args()
-
-    logger.info(f"🚀 INICIANDO JOB {args.job_id} para {args.empresa}")
-    logger.info(f"📂 Archivo a procesar: {args.file_key}")
-
     try:
-        # 2. Instanciar el controlador (Reutilizamos tu lógica existente)
-        controller = ReportesController()
-        
-        # 3. Ejecutar el proceso (Síncrono o Asíncrono)
-        # Nota: En el worker, como es un solo proceso dedicado, 
-        # no nos preocupa tanto bloquear el event loop, pero usamos async por consistencia.
-        await controller.procesar_reporte_batch(
-            file_key=args.file_key,
-            job_id=args.job_id,
-            empresa=args.empresa
-        )
-        
-        logger.info("✅ PROCESO FINALIZADO CON ÉXITO")
-        sys.exit(0) # Salida limpia (AWS marca el Job como SUCCEEDED)
-
+        # Llamamos al servicio que sabe qué hacer según el tipo de reporte
+        service.ejecutar_pipeline(job_id, file_key, empresa, tipo_reporte)
+        logger.info(f"✅ Job {job_id} completado.")
+        return True
     except Exception as e:
-        logger.error(f"❌ ERROR FATAL: {str(e)}")
-        sys.exit(1) # Salida con error (AWS marca el Job como FAILED y puede reintentar)
+        logger.error(f"❌ Job {job_id} falló: {e}")
+        return False
+
+def main():
+    sqs = boto3.client('sqs', region_name=settings.AWS_REGION)
+    queue_url = settings.SQS_QUEUE_URL
+    
+    logger.info(f"🚀 Worker escuchando en {queue_url}")
+
+    while True:
+        try:
+            # Long Polling
+            response = sqs.receive_message(
+                QueueUrl=queue_url,
+                MaxNumberOfMessages=1,
+                WaitTimeSeconds=20
+            )
+
+            if 'Messages' in response:
+                for msg in response['Messages']:
+                    body = json.loads(msg['Body'])
+                    receipt_handle = msg['ReceiptHandle']
+
+                    if process_message(body):
+                        # Borrar mensaje solo si tuvo éxito
+                        sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+            else:
+                pass # Sigue esperando (en Fargate Spot esto escala a 0 si no hay mensajes)
+
+        except Exception as e:
+            logger.error(f"Error en loop: {e}")
+            time.sleep(5)
 
 if __name__ == "__main__":
-    asyncio.run(main())
-    
-    
+    main()

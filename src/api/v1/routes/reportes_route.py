@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException,Path
+from fastapi import APIRouter, HTTPException,BackgroundTasks
 import boto3
 import json
 from src.core.config import settings
@@ -37,59 +37,31 @@ def obtener_reporte_activo():
 # 1. Endpoint para pedir permiso de subida (Generar URL)
 @router.post("/generar-url-subida")
 def generar_url_subida(data: dict):
-    # Esperamos {"filename": "x.xlsx", "content_type": "..."}
     filename = data.get("filename")
     content_type = data.get("content_type")
-    
     if not filename or not content_type:
         raise HTTPException(status_code=400, detail="Faltan datos")
-        
     return controller.generar_url_subida(filename, content_type)
 
 # 2. Endpoint para activar el Worker (Iniciar procesamiento)
 @router.post("/iniciar-procesamiento")
-def iniciar_procesamiento(data: dict):
+async def iniciar_procesamiento(data: dict, background_tasks: BackgroundTasks): # <--- AGREGAR EL PARÁMETRO
     # Esperamos {"file_key": "uploads/...", "empresa": "..."}
     file_key = data.get("file_key")
     empresa = data.get("empresa")
+    # Capturamos el tipo, por defecto SEGUIMIENTOS
+    tipo_reporte = data.get("tipo_reporte", "SEGUIMIENTOS") 
     
     if not file_key or not empresa:
         raise HTTPException(status_code=400, detail="Faltan datos")
-
-    return controller.iniciar_procesamiento(file_key, empresa)
+    # Pasamos background_tasks al controlador
+    return await controller.iniciar_procesamiento_async(
+        file_key, 
+        empresa, 
+        tipo_reporte, 
+        background_tasks
+    )
 
 @router.get("/contenido/{job_id}/{modulo}")
-def obtener_contenido_grafico(
-    job_id: str = Path(..., description="ID del reporte"),
-    modulo: str = Path(..., description="Nombre del módulo: cartera, seguimientos, novedades")
-):
-    """
-    Descarga el JSON de gráficos específico desde S3 y lo devuelve al Frontend.
-    Ruta en S3: graficos/{modulo}/{job_id}.json
-    """
-    s3 = boto3.client(
-        's3', 
-        region_name=settings.AWS_REGION, 
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID, 
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
-    )
-    
-    # Construimos la ruta tal cual la guardó el worker
-    s3_key = f"graficos/{modulo}/{job_id}.json"
-    
-    try:
-        print(f"📥 Descargando gráfico: {s3_key}")
-        response = s3.get_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key)
-        
-        # Leemos el contenido del archivo
-        content = response['Body'].read().decode('utf-8')
-        
-        # Convertimos de texto a JSON real
-        data = json.loads(content)
-        
-        return data
-        
-    except s3.exceptions.NoSuchKey:
-        raise HTTPException(status_code=404, detail=f"No se encontraron datos para el módulo '{modulo}' en este reporte.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error leyendo S3: {str(e)}")
+def obtener_contenido_grafico(job_id: str, modulo: str):
+    return controller.obtener_json_graficos(job_id, modulo)
