@@ -8,8 +8,7 @@ class SeguimientosAnalyticsService:
         if df_cartera.is_empty():
             return {}
 
-        # 1. PREPARAR BASE (Lógica de negocio existente)
-        # Asumimos que Tipo_Vigencia_Temp viene del DataProcessor
+        # 1. PREPARAR BASE
         col_vigencia = pl.col("Tipo_Vigencia_Temp") if "Tipo_Vigencia_Temp" in df_cartera.columns else pl.lit("NORMAL")
 
         df_base = df_cartera.with_columns([
@@ -22,7 +21,6 @@ class SeguimientosAnalyticsService:
         ])
 
         # --- A. CÁLCULOS PARA GRÁFICOS ---
-        
         # Filtros dinámicos disponibles
         posibles_filtros = ["Empresa", "Regional_Cobro", "Zona", "Franja_Cartera", "CALL_CENTER_FILTRO", "Regional_Venta"]
         cols_filtro = [c for c in posibles_filtros if c in df_base.columns]
@@ -121,11 +119,7 @@ class SeguimientosAnalyticsService:
             "sunburst_grouped": grouped_sunburst.to_dicts(),
             "detalle_pago": { "grouped": grouped_pago.to_dicts(), "counts": [] },
             "detalle_sin_pago": { "grouped": grouped_sin_pago.to_dicts(), "counts": [] },
-            
-            # ESTO ES LO QUE NECESITABAS:
-            # Data cruda de rodamientos con todas las columnas de filtro para el frontend
             "rodamiento_data": agg_rodamiento.to_dicts() if not agg_rodamiento.is_empty() else [],
-            
             # Dataframes para Parquet
             "_df_novedades_full": df_tabla_final, 
             "_df_cartera_base": df_base 

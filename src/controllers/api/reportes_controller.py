@@ -146,7 +146,7 @@ class ReportesController:
                     
                 except Exception as e:
                     print(f"⚠️ Advertencia actualizando reporte activo: {e}")
-                    return True # El proceso fue exitoso, aunque falle el config update
+                    return True
             
             return False
 
