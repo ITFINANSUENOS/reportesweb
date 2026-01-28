@@ -3,14 +3,12 @@ runtime: python3
 build:
   commands:
     build:
-      # Instalamos dependencias del sistema necesarias para compilar Polars/Pandas
       - yum install -y gcc libpq-devel
-      # Instalamos las librerías de Python
       - pip install -r requirements.txt
 run:
-  # Comando de arranque (Igual que en tu Dockerfile)
   command: uvicorn main_api:app --host 0.0.0.0 --port 8000
   network:
     port: 8000
     env:
-      APP_PORT: 8000
+      - name: APP_PORT
+        value: "8000"
