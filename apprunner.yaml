@@ -3,16 +3,19 @@ runtime: python311
 build:
   commands:
     build:
-      # Usamos dnf (gestor moderno) e instalamos gcc y herramientas de desarrollo
+      # 1. Instalar dependencias del sistema necesarias para compilar librerias
       - dnf install -y gcc python3-devel postgresql-devel
-      # Actualizamos pip antes de instalar
-      - python3 -m pip install --upgrade pip
-      # Instalamos las dependencias
-      - python3 -m pip install -r requirements.txt
-      # Debug: Listar paquetes instalados para verificar uvicorn
-      - python3 -m pip list
+      # 2. Crear un entorno virtual explícito en la carpeta del proyecto
+      - python3 -m venv venv
+      # 3. Actualizar pip dentro del entorno virtual
+      - ./venv/bin/pip install --upgrade pip
+      # 4. Instalar librerías DENTRO del entorno virtual
+      - ./venv/bin/pip install -r requirements.txt
+      # 5. Verificar instalación
+      - ./venv/bin/pip list
 run:
-  command: python3 -m uvicorn main_api:app --host 0.0.0.0 --port 8000
+  # Usamos el python del entorno virtual para arrancar
+  command: ./venv/bin/python -m uvicorn main_api:app --host 0.0.0.0 --port 8000
   network:
     port: 8000
   env:
