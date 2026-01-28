@@ -21,3 +21,9 @@ run:
   env:
     - name: APP_PORT
       value: "8000"
+    - name: S3_BUCKET_NAME
+      value: "finansuenos-reportes-privados"
+    - name: AWS_REGION
+      value: "us-east-1"
+    - name: ENVIRONMENT
+      value: "production"
