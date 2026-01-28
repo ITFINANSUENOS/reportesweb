@@ -7,8 +7,8 @@ build:
       - pip install -r requirements.txt
 run:
   command: uvicorn main_api:app --host 0.0.0.0 --port 8000
-  # CORRECTO: 'env' es hermano de 'network', no hijo.
-  env:
-    APP_PORT: "8000"
   network:
     port: 8000
+  env:
+    - name: APP_PORT
+      value: "8000"
