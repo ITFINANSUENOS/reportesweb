@@ -15,7 +15,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
 # Instalar dependencias en el entorno virtual
-RUN pip install --no-cache-dir -r requirements.txt
+RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 
 # ETAPA 2: Final (Ejecución)
