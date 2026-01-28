@@ -3,7 +3,11 @@ runtime: python311
 build:
   commands:
     build:
-      - yum install -y gcc libpq-devel
+      # Usamos dnf (gestor moderno) e instalamos gcc y herramientas de desarrollo
+      - dnf install -y gcc python3-devel postgresql-devel
+      # Actualizamos pip antes de instalar
+      - pip install --upgrade pip
+      # Instalamos las dependencias
       - pip install -r requirements.txt
 run:
   command: uvicorn main_api:app --host 0.0.0.0 --port 8000
