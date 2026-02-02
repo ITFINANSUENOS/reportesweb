@@ -39,9 +39,18 @@ def obtener_reporte_activo():
 def generar_url_subida(data: dict):
     filename = data.get("filename")
     content_type = data.get("content_type")
+    
+    # NUEVO: Recibimos el tamaño del archivo desde el frontend
+    file_size = data.get("file_size", 0) 
+
     if not filename or not content_type:
-        raise HTTPException(status_code=400, detail="Faltan datos")
-    return controller.generar_url_subida(filename, content_type)
+        raise HTTPException(status_code=400, detail="Faltan datos (filename o content_type)")
+    
+    if file_size <= 0:
+        raise HTTPException(status_code=400, detail="El tamaño del archivo (file_size) es inválido o no se envió.")
+
+    # Pasamos los 3 datos al controller para validar
+    return controller.generar_url_subida(filename, content_type, file_size)
 
 # 2. Endpoint para activar el Worker (Iniciar procesamiento)
 @router.post("/iniciar-procesamiento")

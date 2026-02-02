@@ -9,8 +9,14 @@ from src.core.config import settings
 from src.services.base.dataprocessor_service import DataProcessorService
 
 class ReportesController:
+    # Definimos las constantes de validación aquí
+    MAX_FILE_SIZE_MB = 25
+    MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+    ALLOWED_EXTENSIONS = {".xlsx"} # Solo xlsx como pediste
+    REQUIRED_NAME_PATTERN = "Reporte_General"
+
     def __init__(self):
-        # 1. Cliente S3 (Siempre necesario)
+        # 1. Cliente S3
         self.s3_client = boto3.client(
             's3',
             region_name=settings.AWS_REGION,
@@ -18,7 +24,7 @@ class ReportesController:
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
         )
         
-        # 2. Cliente SQS (Solo si hay configuración)
+        # 2. Cliente SQS
         self.sqs = None
         if settings.SQS_QUEUE_URL:
             try:
@@ -32,12 +38,47 @@ class ReportesController:
                 print(f"⚠️ Error inicializando SQS: {e}")
                 self.sqs = None
 
-    def generar_url_subida(self, filename: str, content_type: str):
+    def generar_url_subida(self, filename: str, content_type: str, file_size: int):
+        """
+        Genera la URL firmada, pero PRIMERO valida las reglas de negocio.
+        """
+        # --- 1. VALIDACIÓN DE NOMBRE (Patrón obligatorio) ---
+        # Verificamos si 'Reporte_General' está en el nombre (ignorando mayúsculas/minúsculas si prefieres)
+        if self.REQUIRED_NAME_PATTERN not in filename:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Nombre de archivo inválido. Debe contener '{self.REQUIRED_NAME_PATTERN}'."
+            )
+
+        # --- 2. VALIDACIÓN DE EXTENSIÓN (.xlsx) ---
+        _, ext = os.path.splitext(filename)
+        if ext.lower() not in self.ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Formato no permitido ({ext}). Solo se aceptan archivos .xlsx"
+            )
+
+        # --- 3. VALIDACIÓN DE TAMAÑO (25MB) ---
+        if file_size > self.MAX_FILE_SIZE_BYTES:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"El archivo excede el tamaño máximo permitido de {self.MAX_FILE_SIZE_MB}MB."
+            )
+
+        # --- 4. GENERACIÓN DE URL (Si pasa todo lo anterior) ---
+        # Usamos uuid para que el archivo en S3 sea único, pero mantenemos el nombre original al final
         file_key = f"uploads/{uuid.uuid4().hex}-{filename}"
+        
         try:
             url = self.s3_client.generate_presigned_url(
                 'put_object', 
-                Params={'Bucket': settings.S3_BUCKET_NAME, 'Key': file_key, 'ContentType': content_type}, 
+                Params={
+                    'Bucket': settings.S3_BUCKET_NAME, 
+                    'Key': file_key, 
+                    'ContentType': content_type
+                    # Nota: generate_presigned_url no fuerza el Content-Length en el put, 
+                    # pero validamos el intento del usuario arriba.
+                }, 
                 ExpiresIn=3600
             )
             return {"upload_url": url, "file_key": file_key}
