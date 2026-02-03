@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from src.services.tableros.cartera.cartera_analytics_service import CarteraAnalyticsService
+from src.services.analytics.cartera import CarteraAnalyticsService
 
 class CarteraAnalyticsController:
     def __init__(self):

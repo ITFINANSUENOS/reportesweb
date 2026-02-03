@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException,BackgroundTasks
 import boto3
 import json
 from src.core.config import settings
-from src.controllers.api.reportes_controller import ReportesController
+from src.controllers.reportes import ReportesController
 
 router = APIRouter()
 controller = ReportesController()

@@ -5,16 +5,16 @@ import boto3
 import os
 from datetime import datetime
 from src.core.config import settings
-from src.core.columns_config import (
+from src.core.constants import (
     COLS_CARTERA, COLS_NOVEDADES, COLS_LLAMADAS, COLS_MENSAJERIA, MAPA_FNZ,
     COLS_TABLA_NOVEDADES, COLS_TABLA_RODAMIENTOS
 )
 from src.utils.polars_utils import leer_hoja_excel, guardar_parquet, limpiar_texto_lote, parsear_fechas
 
 # IMPORTS DE SERVICIOS ANALÍTICOS
-from src.services.tableros.cartera.cartera_analytics_service import CarteraAnalyticsService
-from src.services.tableros.seguimientos.seguimientos_analytics_service import SeguimientosAnalyticsService
-from src.services.tableros.resultados.resultados_analytics_service import ResultadosAnalyticsService # <--- IMPORTANTE
+from src.services.analytics.cartera import CarteraAnalyticsService
+from src.services.analytics.seguimientos import SeguimientosAnalyticsService
+from src.services.analytics.resultados import ResultadosAnalyticsService 
 
 class DataProcessorService:
     def __init__(self):
