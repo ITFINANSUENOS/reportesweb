@@ -3,7 +3,7 @@ import json
 import time
 import logging
 from src.core.config import settings
-from src.services.base.dataprocessor_service import DataProcessorService
+from src.services.orchestrator import ReportesOrchestrator
 
 # Configurar Logging
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +17,7 @@ def process_message(message_body):
 
     logger.info(f"👷 Worker iniciando Job: {job_id} [{tipo_reporte}]")
 
-    service = DataProcessorService()
+    service = ReportesOrchestrator()
     
     try:
         # Llamamos al servicio que sabe qué hacer según el tipo de reporte

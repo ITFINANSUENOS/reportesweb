@@ -1,6 +1,6 @@
 import polars as pl
 from datetime import datetime
-from src.services.tableros.cartera.cartera_constants import ZONA_COBRO_MAP
+from src.core.constants import ZONA_COBRO_MAP
 
 class CarteraAnalyticsService:
     
