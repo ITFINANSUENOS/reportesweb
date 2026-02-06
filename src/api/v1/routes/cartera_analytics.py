@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query
-from src.controllers.api.cartera_analytics_controller import CarteraAnalyticsController
+from src.controllers.cartera_analytics import CarteraAnalyticsController
 
 router = APIRouter()
 controller = CarteraAnalyticsController()

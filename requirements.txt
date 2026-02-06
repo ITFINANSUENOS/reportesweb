@@ -49,6 +49,7 @@ urllib3
 watchfiles
 websockets
 annotated-types
+pytest
 
 # python -m uvicorn main_api:app --comando para correr la api localmente
 # docker build -t api-reportes:v1.0.0 . --comando para crear la imagen docker
