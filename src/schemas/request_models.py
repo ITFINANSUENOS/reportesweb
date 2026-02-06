@@ -1,20 +1,18 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
-# --- MODELOS PARA REPORTES (INPUT) ---
-
+# --- MODELOS PARA REPORTES input ---
 class GenerarUrlRequest(BaseModel):
     filename: str
     content_type: str
-    file_size: int = 0  # Opcional por compatibilidad
+    file_size: int = 0
 
 class IniciarProcesamientoRequest(BaseModel):
     file_key: str
     empresa: str
     tipo_reporte: str = "SEGUIMIENTOS"
 
-# --- MODELOS PARA BÚSQUEDAS (INPUT) ---
-
+# --- MODELOS PARA BÚSQUEDAS input ---
 class FiltrosTabla(BaseModel):
     job_id: str
     page: int = 1
@@ -37,3 +35,10 @@ class FiltrosTabla(BaseModel):
     
     rodamiento: List[str] = []
     origen: str = "cartera"
+    
+class ConsultaRelacionada(BaseModel):
+    job_id: str
+    origen_destino: str
+    columna_clave: str   
+    valor_clave: str      
+    

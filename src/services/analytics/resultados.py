@@ -40,12 +40,10 @@ class ResultadosAnalyticsService:
                 df_filtrado = df_filtrado.with_columns(pl.col(col).fill_null(0.0))
 
         # B. Asegurar columnas de FILTROS (Empresa, Call Center)
-        # Si no existen, las creamos por defecto para que no falle el grouping
         if "Empresa" not in df_filtrado.columns:
             df_filtrado = df_filtrado.with_columns(pl.lit("SIN EMPRESA").alias("Empresa"))
         
         if "CALL_CENTER_FILTRO" not in df_filtrado.columns:
-             # Intentamos buscar Call_Center_Apoyo si no existe el filtro calculado
             if "Call_Center_Apoyo" in df_filtrado.columns:
                  df_filtrado = df_filtrado.with_columns(pl.col("Call_Center_Apoyo").alias("CALL_CENTER_FILTRO"))
             else:
@@ -56,7 +54,6 @@ class ResultadosAnalyticsService:
 
 
         # 3. DEFINIR COLUMNAS DE AGRUPACIÓN (INCLUYENDO LOS FILTROS)
-        # Esto es lo que faltaba: Agrupar también por Empresa y Call Center
         cols_group_base = [
             'Empresa', 
             'CALL_CENTER_FILTRO', 
@@ -84,7 +81,6 @@ class ResultadosAnalyticsService:
         )
 
         # 5. AGREGACIÓN 2: POR COBRADOR
-        # (También heredará Empresa y Call Center gracias a cols_group_base)
         if "Cobrador" in df_filtrado.columns:
             df_cobrador = df_filtrado.filter(
                 pl.col("Cobrador").is_not_null() & (pl.col("Cobrador") != "")

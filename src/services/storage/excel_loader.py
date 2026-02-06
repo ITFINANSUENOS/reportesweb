@@ -8,24 +8,38 @@ from src.utils.polars_utils import leer_hoja_excel, limpiar_texto_lote, parsear_
 class ExcelLoaderService:
     
     def cargar_cartera(self, file_path: str) -> pl.DataFrame:
+        # Definimos tipos para las columnas numéricas nuevas y viejas
         overrides = {
+            # Columnas Monetarias / Numéricas
             "Valor_Desembolso": pl.Float64, "Valor_Cuota": pl.Float64, 
             "Valor_Cuota_Atraso": pl.Float64, "Total_Recaudo": pl.Float64,
-            "Valor_Cuota_Vigente": pl.Utf8, "Valor_Vencido": pl.Float64,
-            "Cedula_Cliente": pl.Utf8, "Celular": pl.Utf8, "Cobrador": pl.Utf8,
+            "Valor_Vencido": pl.Float64, "Saldo_Capital": pl.Float64,
+            "Saldo_Interes_Corriente": pl.Float64, "Saldo_Avales": pl.Float64,
+            "Meta_Intereses": pl.Float64, "Meta_General": pl.Float64,
+            "Meta_Saldo": pl.Float64, "Meta_$": pl.Float64, "Meta_T.R_$": pl.Float64,
+            "Recaudo_Meta": pl.Float64, "Recaudo_Anticipado": pl.Float64,
+            "Total_Recaudo_Sin_Anti": pl.Float64, "Cantidad_Producto": pl.Float64,
+            "Cantidad_Obsequio": pl.Float64, "Total_Cuotas": pl.Float64,
+            "Cuotas_Pagadas": pl.Float64, "Dias_Atraso": pl.Float64,
+            "Dias_Atraso_Final": pl.Float64, "Cantidad_Novedades": pl.Float64,
+            
+            # Columnas de Texto que a veces parecen números
+            "Valor_Cuota_Vigente": pl.Utf8, # Se limpia manualmente después
+            "Cedula_Cliente": pl.Utf8, "Celular": pl.Utf8, 
+            "Cobrador": pl.Utf8, "Credito": pl.Utf8, 
             "Telefono_Cobrador": pl.Utf8, "Telefono_Gestor": pl.Utf8,
             "Telefono_Codeudor1": pl.Utf8, "Telefono_Codeudor2": pl.Utf8,
-            "Credito": pl.Utf8, "Movil_Lider": pl.Utf8,
-            "Cantidad_Novedades": pl.Float64, "Meta_General": pl.Float64, 
-            "Meta_$": pl.Float64, "Meta_Saldo": pl.Float64, 
-            "Recaudo_Meta": pl.Float64, "Meta_Intereses": pl.Float64,
-            "Meta_T.R_$": pl.Float64, "Total_Recaudo_Sin_Anti": pl.Float64 
+            "Movil_Lider": pl.Utf8, "Codigo_Vendedor": pl.Utf8,
+            "Cedula_Vendedor": pl.Utf8, "Codigo_Centro_Costos": pl.Utf8,
+            "Meta_%": pl.Utf8,      
+            "Meta_T.R_%": pl.Utf8,
         }
         
+        # Leemos usando la lista completa definida en constants.py
         df = leer_hoja_excel(file_path, "Analisis_de_Cartera", COLS_CARTERA, overrides)
 
         if not df.is_empty():
-            # Limpieza específica de Cartera
+            # Limpieza específica de "Valor_Cuota_Vigente" (Manejo de "ANTICIPADO")
             if "Valor_Cuota_Vigente" in df.columns:
                 df = df.with_columns(
                     pl.when(pl.col("Valor_Cuota_Vigente").str.to_uppercase().str.contains("ANTICIPADO"))
@@ -38,13 +52,26 @@ class ExcelLoaderService:
             else:
                 df = df.with_columns(pl.lit("NORMAL").alias("Tipo_Vigencia_Temp"))
             
-            df = parsear_fechas(df, ["Fecha_Desembolso", "Fecha_Ultima_Novedad", "Fecha_Cuota_Atraso", "Fecha_Cuota_Vigente"])
-            df = limpiar_texto_lote(df, ["Empresa", "Regional_Venta", "Nombre_Ciudad", "Nombre_Vendedor", "Franja_Meta", "Rodamiento", "Regional_Cobro", "Zona", "Cedula_Cliente"])
+            # Parseo de fechas (Incluyendo las nuevas)
+            cols_fechas = [
+                "Fecha_Desembolso", "Fecha_Ultima_Novedad", "Fecha_Facturada",
+                "Fecha_Cuota_Vigente", "Fecha_Cuota_Atraso", "Primera_Cuota_Mora",
+                "Fecha_Ultimo_Pago_Inicial", "Fecha_Ultimo_pago"
+            ]
+            df = parsear_fechas(df, cols_fechas)
+            
+            # Limpieza de espacios en blanco en columnas de texto clave
+            cols_texto = [
+                "Empresa", "Regional_Venta", "Nombre_Ciudad", "Nombre_Vendedor", 
+                "Franja_Meta", "Rodamiento", "Regional_Cobro", "Zona", "Cedula_Cliente",
+                "Zona_Cobro", "Zona_Venta"
+            ]
+            df = limpiar_texto_lote(df, cols_texto)
             
             if "Cantidad_Novedades" in df.columns:
                 df = df.with_columns(pl.col("Cantidad_Novedades").fill_null(0))
             
-            # Normalización de Zonas y Call Center
+            # Normalización de Zonas y Call Center (Tu lógica de negocio)
             df = self._limpiar_zonas_y_callcenter(df)
             
         return df
@@ -52,8 +79,11 @@ class ExcelLoaderService:
     def cargar_novedades(self, file_path: str) -> pl.DataFrame:
         overrides = {
             "Celular_Cliente": pl.Utf8, "Telefono_Cliente": pl.Utf8, 
-            "Cedula_Cliente": pl.Utf8, "Valor": pl.Float64, "Novedad": pl.Utf8
+            "Cedula_Cliente": pl.Utf8, "Valor": pl.Float64, 
+            "Novedad": pl.Utf8, "Codigo_Novedad": pl.Utf8,
+            "Celular_Corporativo": pl.Utf8
         }
+        # Leemos usando la lista completa
         df = leer_hoja_excel(file_path, "Detalle_Novedades", COLS_NOVEDADES, overrides)
 
         if not df.is_empty():
@@ -61,7 +91,7 @@ class ExcelLoaderService:
                 df = df.with_columns(pl.col("Celular_Cliente").str.replace(r"\.$", ""))
             
             df = parsear_fechas(df, ["Fecha_Novedad", "Fecha_Compromiso"])
-            df = limpiar_texto_lote(df, ["Cedula_Cliente"])
+            df = limpiar_texto_lote(df, ["Cedula_Cliente", "Empresa", "Nombre_Usuario"])
             
         return df
 
@@ -81,7 +111,7 @@ class ExcelLoaderService:
 
     def cargar_fnz(self, file_path: str) -> pl.DataFrame:
         overrides = {
-            "PAGARE": pl.Utf8, "CEDULA": pl.Utf8, "TELEFONO1": pl.Utf8, 
+            "PAGARE": pl.Utf8, "CEDULA": pl.Utf8, "TELEFONO1": pl.Utf8,"FS1NACFEC": pl.Utf8, 
             "MOVIL": pl.Utf8, "VALOR_TOTA": pl.Float64, "DESEMBOLSO": pl.Utf8
         }
         df = leer_hoja_excel(file_path, "FNZ007", list(MAPA_FNZ.keys()), overrides)

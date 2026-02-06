@@ -1,26 +1,28 @@
 COLS_CARTERA = [
-    "Fecha_Desembolso", "Fecha_Ultima_Novedad", "Empresa", "Regional_Venta",
-    "Nombre_Ciudad", "Nombre_Vendedor", "Franja_Meta", "Rodamiento", "Gestor",
-    "Regional_Cobro", "Zona_Cobro", "Zona", "Factura_Venta", "Fecha_Facturada",
-    "Cantidad_Novedades", "Cedula_Cliente", "Credito", "Nombre_Producto",
-    "Obsequio", "Nombre_Cliente", "Correo", "Celular", "Direccion", "Barrio",
-    "Nombre_Codeudor2", "Cobrador", "Telefono_Cobrador", "Call_Center_Apoyo",
-    "Codigo_Vendedor", "Nombre_Call_Center", "Telefono_Call_Center",
-    "Telefono_Gestor", "Valor_Desembolso", "Movil_Vendedor", "Vendedor_Activo",
-    "Lider_Zona", "Codeudor1", "Total_Cuotas", "Nombre_Codeudor1",
-    "Telefono_Codeudor1", "Ciudad_Codeudor1", "Codeudor2",
-    "Telefono_Codeudor2", "Ciudad_Codeudor2", "Valor_Cuota", "Dias_Atraso", "Franja_Cartera",
-    "Meta_Intereses", "Meta_Saldo", "Meta_%", "Meta_$", "Meta_T.R_%", "Meta_General",
-    "Meta_T.R_$", "Cuotas_Pagadas", "Fecha_Cuota_Atraso", "Primera_Cuota_Mora",
-    "Valor_Cuota_Atraso", "Valor_Vencido", "Dias_Atraso_Final", "Fecha_Ultimo_pago", "Rango_Ultimo_pago",
-    "Franja_Meta_Final", "Franja_Cartera_Final", "Rodamiento_Cartera", 'Cuota_Vigente', "Valor_Cuota_Vigente",
-    "Recaudo_Anticipado", "Recaudo_Meta", "Total_Recaudo", "Fecha_Cuota_Vigente", "Total_Recaudo_Sin_Anti"
+    'Empresa', 'Credito', 'Fecha_Desembolso', 'Factura_Venta', 'Fecha_Facturada',
+    'Nombre_Producto', 'Cantidad_Producto', 'Obsequio', 'Cantidad_Obsequio',
+    'Cedula_Cliente', 'Nombre_Cliente', 'Correo','Celular','Direccion', 'Barrio',
+    'Nombre_Ciudad','Zona', 'Cobrador','Telefono_Cobrador', 'Zona_Cobro',
+    'Call_Center_Apoyo', 'Nombre_Call_Center','Telefono_Call_Center', 'Regional_Cobro',
+    'Gestor', 'Telefono_Gestor','Jefe_ventas', 'Codigo_Vendedor','Cedula_Vendedor',
+    'Nombre_Vendedor','Vendedor_Activo','Zona_Venta','Lider_Zona', 'Codigo_Centro_Costos',
+    'Regional_Venta', 'Codeudor1', 'Nombre_Codeudor1', 'Telefono_Codeudor1',
+    'Ciudad_Codeudor1', 'Codeudor2', 'Nombre_Codeudor2', 'Telefono_Codeudor2',
+    'Ciudad_Codeudor2', 'Valor_Desembolso', 'Total_Cuotas', 'Valor_Cuota',
+    'Dias_Atraso', 'Franja_Meta','Franja_Cartera', 'Saldo_Capital', 'Saldo_Interes_Corriente',
+    'Saldo_Avales', 'Meta_Intereses', 'Meta_General','Meta_Saldo', 'Meta_%', 'Meta_$',
+    'Meta_T.R_%', 'Meta_T.R_$', 'Cuotas_Pagadas', 'Cuota_Vigente',
+    'Fecha_Cuota_Vigente', 'Valor_Cuota_Vigente', 'Fecha_Cuota_Atraso',
+    'Primera_Cuota_Mora', 'Fecha_Ultimo_Pago_Inicial', 'Rango_Ultimo_pago_Inicial',
+    'Valor_Cuota_Atraso', 'Valor_Vencido','Fecha_Ultima_Novedad', 'Cantidad_Novedades','Fecha_Ultimo_pago','Rango_Ultimo_pago', 'Dias_Atraso_Final',
+    'Franja_Meta_Final','Franja_Cartera_Final', 'Rodamiento','Rodamiento_Cartera' ,
+    'Recaudo_Anticipado', 'Recaudo_Meta','Total_Recaudo','Total_Recaudo_Sin_Anti'
 ]
 
 COLS_NOVEDADES = [
-    "Fecha_Novedad", "Cedula_Cliente", "Nombre_Cliente", "Usuario_Novedad",
-    "Nombre_Usuario", "Cargo_Usuario", "Celular_Corporativo", "Tipo_Novedad",
-    "Novedad", "Fecha_Compromiso", "Valor", "Empresa", "Celular_Cliente", "Telefono_Cliente"
+    'Empresa','Cedula_Cliente', 'Nombre_Cliente', 'Fecha_Novedad', 'Usuario_Novedad','Nombre_Usuario',
+    'Telefono_Cliente','Celular_Cliente','Cargo_Usuario', 'Celular_Corporativo','Codigo_Novedad', 'Tipo_Novedad',
+    'Novedad', 'Fecha_Compromiso', 'Valor'
 ]
 
 COLS_LLAMADAS = [
@@ -79,3 +81,7 @@ COLS_TABLA_RODAMIENTOS = [
     'Rodamiento_Cartera', 'Estado_Pago', 'Estado_Gestion', 'Meta_$',
     'CALL_CENTER_FILTRO', 'Tipo_Vigencia_Temp'
 ]
+
+COLS_MASTER_CARTERA = COLS_CARTERA + ["Tipo_Vigencia_Temp", "CALL_CENTER_FILTRO", "Estado_Pago", "Estado_Gestion"]
+# Novedades suele usarse completa
+COLS_MASTER_NOVEDADES = COLS_NOVEDADES
