@@ -5,6 +5,7 @@ import boto3
 from src.core.config import settings
 from src.schemas.request_models import FiltrosTabla, ConsultaRelacionada
 from src.schemas.response_models import BusquedaResponse
+from src.services.analytics.call_center import CallCenterAnalyticsService   
 
 router = APIRouter()
 
@@ -64,6 +65,7 @@ def filtrar_tabla_detalle(payload: FiltrosTabla):
                 "seguimientos_rodamientos": "data/seguimientos_rodamientos",
                 "detallados_cartera": "data/detallados_cartera",
                 "detallados_novedades": "data/detallados_novedades",
+                "detallados_call_center": "data/detallados_call_center",
                 "novedades": "data/seguimientos_gestion",
                 "cartera": "data/seguimientos_rodamientos"
             }
@@ -265,4 +267,83 @@ def consultar_relacionados(payload: ConsultaRelacionada):
 
     except Exception as e:
         print(f"Error endpoint relacionados: {e}")
-        raise HTTPException(status_code=500, detail=str(e))    
+        raise HTTPException(status_code=500, detail=str(e))  
+    
+@router.post("/metricas/call-center")
+def obtener_metricas_call_center(payload: FiltrosTabla):
+    try:
+        job_id = payload.job_id
+        
+        # 1. Definir Rutas de Archivos Base
+        # Usamos 'detallados_call_center' porque YA tiene la lógica de cascada aplicada
+        path_cartera = os.path.join("temp", f"search_{job_id}_detallados_call_center.parquet")
+        s3_cartera = f"data/detallados_call_center/{job_id}.parquet"
+        
+        path_llamadas = os.path.join("temp", f"calls_{job_id}.parquet")
+        s3_llamadas = f"data/llamadas/{job_id}.parquet"
+        
+        path_mensajes = os.path.join("temp", f"msgs_{job_id}.parquet")
+        s3_mensajes = f"data/mensajes/{job_id}.parquet"
+        
+        path_novedades = os.path.join("temp", f"novs_{job_id}.parquet")
+        s3_novedades = f"data/seguimientos_gestion/{job_id}.parquet" # Novedades suele estar aquí
+
+        # 2. Descargar si no existen
+        if not garantizar_archivo_local(s3_cartera, path_cartera): return {}
+        garantizar_archivo_local(s3_llamadas, path_llamadas)
+        garantizar_archivo_local(s3_mensajes, path_mensajes)
+        garantizar_archivo_local(s3_novedades, path_novedades)
+
+        # 3. Cargar DataFrames
+        df_cartera = pl.read_parquet(path_cartera)
+        df_llamadas = pl.read_parquet(path_llamadas) if os.path.exists(path_llamadas) else pl.DataFrame()
+        df_mensajes = pl.read_parquet(path_mensajes) if os.path.exists(path_mensajes) else pl.DataFrame()
+        df_novedades = pl.read_parquet(path_novedades) if os.path.exists(path_novedades) else pl.DataFrame()
+
+        # 4. APLICAR FILTROS GLOBALES A LA CARTERA
+        condicion = pl.lit(True)
+        filtros_map = {
+            "Empresa": payload.empresa, "Zona": payload.zona, "Regional_Cobro": payload.regional,
+            "Regional": payload.regional, "Franja_Cartera": payload.franja, 
+            "CALL_CENTER_FILTRO": payload.call_center,
+        }
+        for col, val in filtros_map.items():
+            if val and col in df_cartera.columns:
+                condicion = condicion & pl.col(col).is_in(val)
+        
+        if payload.rodamiento and "Rodamiento" in df_cartera.columns:
+            condicion = condicion & pl.col("Rodamiento").is_in(payload.rodamiento)
+
+        df_cartera_filtrada = df_cartera.filter(condicion)
+
+        # 5. FILTRAR AUXILIARES (Para que las gráficas de abajo coincidan con los filtros)
+        if not df_cartera_filtrada.is_empty():
+            # Intentamos filtrar llamadas/mensajes por las cédulas resultantes
+            cedulas_filtradas = df_cartera_filtrada["Cedula_Cliente"].unique()
+            
+            if "Cedula_Cliente" in df_novedades.columns:
+                df_novedades = df_novedades.filter(pl.col("Cedula_Cliente").is_in(cedulas_filtradas))
+            
+            # Si hay filtro explícito de Call Center, lo aplicamos a llamadas también
+            if payload.call_center and "Call_Center" in df_llamadas.columns:
+                 df_llamadas = df_llamadas.filter(pl.col("Call_Center").is_in(payload.call_center))
+
+        # 6. RECALCULAR MÉTRICAS
+        cc_service = CallCenterAnalyticsService()
+        resultados = cc_service.calcular_metricas_call_center(
+            df_cartera=df_cartera_filtrada,
+            df_novedades=df_novedades,
+            df_llamadas=df_llamadas,
+            df_mensajeria=df_mensajes
+        )
+        
+        # Eliminamos el parquet interno para no enviarlo por la red
+        if "df_parquet_detalle" in resultados:
+            del resultados["df_parquet_detalle"]
+
+        return resultados
+
+    except Exception as e:
+        print(f"Error calculando métricas dinámicas: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))      

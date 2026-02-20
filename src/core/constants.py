@@ -31,8 +31,8 @@ COLS_LLAMADAS = [
 ]
 
 COLS_MENSAJERIA = [
-    "Codigo_Pais", "Numero_Telefono", "Nombre_Saliente", "Estado", "Estado_Mensaje", "Estado_Respuesta_Saliente",
-    "Respuesta_Saliente", "Flujo_Truora", "Primer_Mensaje_Agente", "Fecha_Llamada", "Call_Center", "Nombre_Call"
+    "Fecha_Mensaje", "Numero_Telefono", "Nombre_Saliente", "Estado", "Estado_Mensaje", "Estado_Respuesta_Entrante",
+    "Flujo_Truora", "Estado_Proceso", "Fallo_Proceso","Tipo_Respuesta_Agente","Call_Center", "Nombre_Call"
 ]
 
 # 2. MAPEOS Y DICCIONARIOS DE TRANSFORMACIÓN
