@@ -8,6 +8,7 @@ from src.services.analytics.cartera import CarteraAnalyticsService
 from src.services.analytics.seguimientos import SeguimientosAnalyticsService
 from src.services.analytics.resultados import ResultadosAnalyticsService
 from src.services.analytics.comercial import ComercialAnalyticsService
+from src.services.analytics.call_center import CallCenterAnalyticsService
 
 class ReportesOrchestrator:
     def __init__(self):
@@ -110,7 +111,45 @@ class ReportesOrchestrator:
         except Exception as e:
             print(f"❌ Error Módulo Comercial: {e}")
             import traceback
-            traceback.print_exc()        
+            traceback.print_exc()  
+            
+        # E. CALL CENTER (NUEVO BLOQUE)
+        try:
+            print("📞 ANALYTICS: Procesando Módulo Call Center...")
+            cc_service = CallCenterAnalyticsService()
+            
+            resultados_cc = cc_service.calcular_metricas_call_center(
+                df_cartera=df_cartera,
+                df_novedades=df_novedades,
+                df_llamadas=df_llamadas,
+                df_mensajeria=df_mensajeria
+            )
+            
+            # 1. Extraer y guardar el Parquet de Detalle (Antes de guardar el JSON)
+            if "df_parquet_detalle" in resultados_cc:
+                df_detalle_cc = resultados_cc.pop("df_parquet_detalle") # Sacar del dict para no ensuciar el JSON
+                
+                # ✅ Guardamos en una carpeta nueva exclusiva para este módulo
+                self.storage.guardar_parquet(
+                    df_detalle_cc, 
+                    f"data/detallados_call_center/{job_id}.parquet"
+                )
+                print("💾 Parquet 'detallados_call_center' guardado.")
+
+            # 2. Guardar JSON para Dashboard
+            self.storage.guardar_json(
+                resultados_cc, 
+                f"graficos/call_center/{job_id}.json", 
+                {"job_id": job_id, "modulo": "call_center", "empresa": empresa}
+            )
+            
+            resultados_modulos["call_center"] = True
+            print("✅ Call Center: Métricas procesadas y guardadas.")
+
+        except Exception as e:
+            print(f"❌ Error Call Center: {e}")
+            import traceback
+            traceback.print_exc()          
 
         # 3. GUARDADO FINAL DE TABLAS 
         # --- A. CARTERA ---

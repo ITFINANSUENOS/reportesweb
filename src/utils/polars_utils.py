@@ -96,7 +96,21 @@ def limpiar_texto_lote(df: pl.DataFrame, cols: list) -> pl.DataFrame:
 def parsear_fechas(df: pl.DataFrame, cols: list) -> pl.DataFrame:
     for c in cols:
         if c in df.columns:
-            df = df.with_columns(
-                pl.col(c).str.strptime(pl.Date, "%Y-%m-%d", strict=False)
-            )
+            # 1. Si Pandas/Orquestador ya lo leyó como fecha nativa, solo aseguramos que no tenga horas
+            if df.schema[c] in [pl.Date, pl.Datetime]:
+                df = df.with_columns(pl.col(c).cast(pl.Date))
+            else:
+                # 2. Si viene como Texto, aplicamos la magia para adivinar el formato
+                df = df.with_columns(
+                    pl.coalesce([
+                        # Opcion A: Cortar los primeros 10 caracteres ("2026-02-16 08:31:21" -> "2026-02-16")
+                        pl.col(c).cast(pl.Utf8).str.slice(0, 10).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
+                        
+                        # Opcion B: Por si viene con formato de fecha y hora explícito
+                        pl.col(c).cast(pl.Utf8).str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S", strict=False).dt.date(),
+                        
+                        # Opcion C: Por si el Excel manda barras invertidas ("2026/02/16")
+                        pl.col(c).cast(pl.Utf8).str.slice(0, 10).str.replace_all("/", "-").str.strptime(pl.Date, "%Y-%m-%d", strict=False)
+                    ])
+                )
     return df
