@@ -1,3 +1,8 @@
+Documentación funcional
+
+Que hace, como lo hace, quien lo toma
+
+
 ```mermaid
 graph TD
 %% Usuarios y Trigger
