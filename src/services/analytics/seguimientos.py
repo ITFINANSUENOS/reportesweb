@@ -2,11 +2,31 @@ import polars as pl
 
 class SeguimientosAnalyticsService:
     
+    # 1. NUEVA FUNCIÓN: Extrae los filtros limpios en milisegundos
+    def _extraer_opciones_filtros(self, df: pl.DataFrame) -> dict:
+        """Extrae los valores únicos de las columnas para los selects del Frontend"""
+        def obtener_unicos(nombres_posibles):
+            for col in nombres_posibles:
+                if col in df.columns:
+                    return df.select(pl.col(col).drop_nulls().unique().sort()).to_series().to_list()
+            return []
+
+        return {
+            "empresas": obtener_unicos(["Empresa"]),
+            "zonas": obtener_unicos(["Zona"]),
+            "regionales": obtener_unicos(["Regional_Cobro", "Regional_Venta", "Regional"]),
+            "call_centers": obtener_unicos(["CALL_CENTER_FILTRO", "CALL_CENTER", "Call_Center"]),
+            "franjas": obtener_unicos(["Franja_Cartera", "Franja_Meta", "Franja"])
+        }
+
     def calcular_metricas_seguimientos(self, df_cartera: pl.DataFrame, df_novedades: pl.DataFrame) -> dict:
         print("📊 ANALYTICS: Calculando métricas de Seguimientos...")
         
         if df_cartera.is_empty():
             return {}
+
+        #2. SACAMOS LOS FILTROS ANTES DE HACER CRUCES O AGRUPACIONES
+        filtros_limpios = self._extraer_opciones_filtros(df_cartera)
 
         # 1. PREPARAR BASE
         col_vigencia = pl.col("Tipo_Vigencia_Temp") if "Tipo_Vigencia_Temp" in df_cartera.columns else pl.lit("NORMAL")
@@ -29,7 +49,6 @@ class SeguimientosAnalyticsService:
         agg_donut = df_base.group_by(cols_filtro + ["Estado_Pago"]).len().rename({"len": "count"})
         
         # 2. Barras (Rodamiento) - DATA CRUDA SIN CRUCE
-        # Esta es la lógica que pediste: Usamos df_base directo (1 fila por crédito)
         agg_rodamiento = pl.DataFrame()
         if "Rodamiento" in df_base.columns:
             agg_rodamiento = (
@@ -42,7 +61,6 @@ class SeguimientosAnalyticsService:
             )
 
         # 3. Sunburst (Gestión y Asignación) - DATA CRUZADA
-        # Aquí sí necesitamos el cruce para ver "Cargo_Usuario"
         if not df_novedades.is_empty() and "Cedula_Cliente" in df_novedades.columns and "Cargo_Usuario" in df_novedades.columns:
             cargos_unicos = df_novedades.select(["Cedula_Cliente", "Cargo_Usuario"]).unique()
         else:
@@ -114,7 +132,9 @@ class SeguimientosAnalyticsService:
                 pl.lit("").alias("Tipo_Novedad")
             ])
 
+        #3. RETORNAMOS INTACTO, AÑADIENDO LOS FILTROS DISPONIBLES
         return {
+            "filtros_disponibles": filtros_limpios,  # <--- Esta es la clave que lee tu React
             "donut_data": agg_donut.to_dicts(),
             "sunburst_grouped": grouped_sunburst.to_dicts(),
             "detalle_pago": { "grouped": grouped_pago.to_dicts(), "counts": [] },

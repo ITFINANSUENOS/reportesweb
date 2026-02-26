@@ -4,11 +4,33 @@ from src.core.constants import ZONA_COBRO_MAP
 
 class CarteraAnalyticsService:
     
+    # Extrae los valores únicos para los filtros en milisegundos
+    def _extraer_opciones_filtros(self, df: pl.DataFrame) -> dict:
+        """Extrae los valores únicos de las columnas para los selects del Frontend"""
+        def obtener_unicos(nombres_posibles):
+            # Busca la primera columna que exista en el DataFrame
+            for col in nombres_posibles:
+                if col in df.columns:
+                    # Saca únicos, quita nulos y ordena alfabéticamente
+                    return df.select(pl.col(col).drop_nulls().unique().sort()).to_series().to_list()
+            return []
+
+        return {
+            "empresas": obtener_unicos(["Empresa"]),
+            "zonas": obtener_unicos(["Zona"]),
+            "regionales": obtener_unicos(["Regional_Cobro", "Regional_Venta", "Regional"]),
+            "call_centers": obtener_unicos(["CALL_CENTER_FILTRO", "CALL_CENTER", "Call_Center"]),
+            "franjas": obtener_unicos(["Franja_Cartera", "Franja_Meta", "Franja"])
+        }
+
     def calcular_metricas_tablero_principal(self, df: pl.DataFrame) -> dict:
         if df.is_empty():
             return {}
 
         print("📊 ANALYTICS: Generando Cubos de Datos para el Tablero Principal...")
+
+        # 1. SACAR FILTROS RÁPIDOS ANTES DE AGRUPAR
+        filtros_limpios = self._extraer_opciones_filtros(df)
 
         posibles_filtros = [
             "Empresa", "Regional_Cobro", "Zona", "Franja_Cartera", 
@@ -34,7 +56,9 @@ class CarteraAnalyticsService:
         # 5. CUBO VIGENCIA
         agg_vigencia = self._calcular_vigencia(df, cols_filtro)
 
+        # RETORNO INTACTO Solo agregamos la llave de filtros_disponibles
         return {
+            "filtros_disponibles": filtros_limpios,
             "cubo_regional": agg_regional.to_dicts(),
             "cubo_cobro": agg_cobro.to_dicts() if agg_cobro is not None else [],
             "cubo_desembolso": agg_desembolso.to_dicts() if agg_desembolso is not None else [],
