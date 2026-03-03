@@ -20,7 +20,8 @@ class CarteraAnalyticsService:
             "zonas": obtener_unicos(["Zona"]),
             "regionales": obtener_unicos(["Regional_Cobro", "Regional_Venta", "Regional"]),
             "call_centers": obtener_unicos(["CALL_CENTER_FILTRO", "CALL_CENTER", "Call_Center"]),
-            "franjas": obtener_unicos(["Franja_Cartera", "Franja_Meta", "Franja"])
+            "franjas": obtener_unicos(["Franja_Cartera", "Franja_Meta", "Franja"]),
+            "estados_vigencia": ["vigente", "vencido", "anticipado"]
         }
 
     def calcular_metricas_tablero_principal(self, df: pl.DataFrame) -> dict:
@@ -34,9 +35,14 @@ class CarteraAnalyticsService:
 
         posibles_filtros = [
             "Empresa", "Regional_Cobro", "Zona", "Franja_Cartera", 
-            "CALL_CENTER_FILTRO", "Call_Center_Apoyo", "Regional_Venta"
+            "CALL_CENTER_FILTRO", "Call_Center_Apoyo", "Regional_Venta",
+            "Estado_Vigencia"
         ]
         cols_filtro = [c for c in posibles_filtros if c in df.columns]
+
+        # Agregar Estado_Vigencia si no existe
+        if "Estado_Vigencia" not in df.columns:
+            df = self.agregar_estado_vigencia(df)
 
         # 2. CUBO GENERAL
         agg_regional = (
@@ -106,14 +112,14 @@ class CarteraAnalyticsService:
         return (
             df.with_columns(
                 pl.when(pl.col("Tipo_Vigencia_Temp") == "ANTICIPADO")
-                .then(pl.lit("ANTICIPADO"))
+                .then(pl.lit("anticipado"))
                 .when(pl.col("Fecha_Cuota_Vigente").is_not_null())
-                .then(pl.lit("VIGENTES"))
-                .otherwise(pl.lit("VIGENCIA EXPIRADA"))
+                .then(pl.lit("vigente"))
+                .otherwise(pl.lit("vencido"))
                 .alias("Estado_Vigencia_Agrupado")
             )
             .with_columns(
-                pl.when(pl.col("Estado_Vigencia_Agrupado") == "VIGENTES")
+                pl.when(pl.col("Estado_Vigencia_Agrupado") == "vigente")
                 .then(
                     pl.when(pl.col("Fecha_Cuota_Vigente").dt.day() <= 10).then(pl.lit("Días 1-10"))
                     .when(pl.col("Fecha_Cuota_Vigente").dt.day() <= 20).then(pl.lit("Días 11-20"))
@@ -125,4 +131,26 @@ class CarteraAnalyticsService:
             .group_by(cols_filtro + ["Estado_Vigencia_Agrupado", "Sub_Estado_Vigencia"])
             .len()
             .rename({"len": "count"})
+        )
+
+    def agregar_estado_vigencia(self, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Agrega columna 'Estado_Vigencia' al DataFrame para Parquets y filtros globales.
+        Retorna el DataFrame con la nueva columna.
+        """
+        if df.is_empty():
+            return df
+
+        if "Tipo_Vigencia_Temp" not in df.columns:
+            if "Fecha_Cuota_Vigente" not in df.columns:
+                return df.with_columns(pl.lit(None).alias("Estado_Vigencia"))
+            df = df.with_columns(pl.lit("FECHA").alias("Tipo_Vigencia_Temp"))
+
+        return df.with_columns(
+            pl.when(pl.col("Tipo_Vigencia_Temp") == "ANTICIPADO")
+            .then(pl.lit("anticipado"))
+            .when(pl.col("Fecha_Cuota_Vigente").is_not_null())
+            .then(pl.lit("vigente"))
+            .otherwise(pl.lit("vencido"))
+            .alias("Estado_Vigencia")
         )

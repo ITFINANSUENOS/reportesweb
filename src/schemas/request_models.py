@@ -26,6 +26,7 @@ class FiltrosTabla(BaseModel):
     franja: List[str] = []
     call_center: List[str] = []
     novedades: List[str] = []
+    vigencia: List[str] = []
     
     # Filtros Locales (Seguimientos)
     estado_pago: Optional[List[str]] = None      

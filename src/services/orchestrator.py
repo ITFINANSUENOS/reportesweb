@@ -40,6 +40,10 @@ class ReportesOrchestrator:
         df_cartera_save = None 
         df_novedades_save = None
 
+        # Agregar Estado_Vigencia al DataFrame de cartera para filtros globales
+        cartera_service = CarteraAnalyticsService()
+        df_cartera = cartera_service.agregar_estado_vigencia(df_cartera)
+
         if not df_cartera.is_empty():
             metadata_base = {"job_id": job_id, "empresa": empresa}
 

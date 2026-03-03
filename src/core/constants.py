@@ -71,7 +71,7 @@ COLS_TABLA_NOVEDADES = [
     'Total_Recaudo', 'Valor_Vencido', 'Estado_Pago', 'Estado_Gestion', "Regional_Cobro", 'Cargo_Usuario', 'Nombre_Usuario', 'Novedades_Por_Cargo',
     'Codeudor1', 'Nombre_Codeudor1', 'Telefono_Codeudor1', 'Codeudor2', 'Nombre_Codeudor2', 'Telefono_Codeudor2',
     'Fecha_Cuota_Vigente', 'Valor_Cuota_Vigente', 'Meta_$', 'Novedad', 'Tipo_Novedad',
-    'CALL_CENTER_FILTRO', 'Tipo_Vigencia_Temp'
+    'CALL_CENTER_FILTRO', 'Tipo_Vigencia_Temp', 'Estado_Vigencia'
 ]
 
 COLS_TABLA_RODAMIENTOS = [
@@ -79,9 +79,9 @@ COLS_TABLA_RODAMIENTOS = [
     'Nombre_Ciudad', "Regional_Cobro", 'Zona', 'Codeudor1', 'Nombre_Codeudor1', 'Telefono_Codeudor1', 'Codeudor2', 'Nombre_Codeudor2', 'Franja_Cartera',
     'Telefono_Codeudor2', 'Dias_Atraso_Final', 'Total_Recaudo', 'Meta_Intereses', 'Meta_Saldo', 'Valor_Vencido', 'Rodamiento',
     'Rodamiento_Cartera', 'Estado_Pago', 'Estado_Gestion', 'Meta_$',
-    'CALL_CENTER_FILTRO', 'Tipo_Vigencia_Temp'
+    'CALL_CENTER_FILTRO', 'Tipo_Vigencia_Temp', 'Estado_Vigencia'
 ]
 
-COLS_MASTER_CARTERA = COLS_CARTERA + ["Tipo_Vigencia_Temp", "CALL_CENTER_FILTRO", "Estado_Pago", "Estado_Gestion"]
+COLS_MASTER_CARTERA = COLS_CARTERA + ["Tipo_Vigencia_Temp", "CALL_CENTER_FILTRO", "Estado_Pago", "Estado_Gestion", "Estado_Vigencia"]
 # Novedades suele usarse completa
 COLS_MASTER_NOVEDADES = COLS_NOVEDADES

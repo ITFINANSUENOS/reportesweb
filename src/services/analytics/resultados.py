@@ -1,4 +1,5 @@
 import polars as pl
+from src.services.analytics.cartera import CarteraAnalyticsService
 
 class ResultadosAnalyticsService:
     
@@ -52,13 +53,18 @@ class ResultadosAnalyticsService:
         if "Regional_Cobro" not in df_filtrado.columns:
              df_filtrado = df_filtrado.with_columns(pl.lit("OTRAS ZONAS").alias("Regional_Cobro"))
 
+        # Agregar Estado_Vigencia si no existe
+        if "Estado_Vigencia" not in df_filtrado.columns:
+            df_filtrado = CarteraAnalyticsService().agregar_estado_vigencia(df_filtrado)
+
 
         # 3. DEFINIR COLUMNAS DE AGRUPACIÓN (INCLUYENDO LOS FILTROS)
         cols_group_base = [
             'Empresa', 
             'CALL_CENTER_FILTRO', 
             'Regional_Cobro', 
-            'Zona'
+            'Zona',
+            'Estado_Vigencia'
         ]
 
         # 4. AGREGACIÓN 1: POR ZONA Y FRANJA
