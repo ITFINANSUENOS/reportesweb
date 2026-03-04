@@ -35,10 +35,10 @@ class FiltrosTabla(BaseModel):
     
     rodamiento: List[str] = []
     origen: str = "cartera"
+    columnas_visibles: Optional[List[str]] = None
     
 class ConsultaRelacionada(BaseModel):
     job_id: str
     origen_destino: str
     columna_clave: str   
-    valor_clave: str      
-    
+    valor_clave: str
