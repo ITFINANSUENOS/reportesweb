@@ -104,6 +104,15 @@ class BusquedasService:
         if payload.estado_gestion and "Estado_Gestion" in df.columns: condicion = condicion & pl.col("Estado_Gestion").is_in(payload.estado_gestion)
         if payload.rodamiento and "Rodamiento" in df.columns: condicion = condicion & pl.col("Rodamiento").is_in(payload.rodamiento)
         
+        if payload.Regional_Venta and "Regional_Venta" in df.columns: 
+            condicion = condicion & pl.col("Regional_Venta").is_in(payload.Regional_Venta)
+        
+        if payload.Vendedor_Activo and "Vendedor_Activo" in df.columns: 
+            condicion = condicion & pl.col("Vendedor_Activo").is_in(payload.Vendedor_Activo)
+            
+        if payload.Nombre_Vendedor and "Nombre_Vendedor" in df.columns: 
+            condicion = condicion & pl.col("Nombre_Vendedor").is_in(payload.Nombre_Vendedor)
+        
         # Filtrar por vigencia - requiere cruce con cartera
         if payload.vigencia and len(payload.vigencia) > 0 and "Cedula_Cliente" in df.columns:
             # Determinar el archivo de cartera según el origen
