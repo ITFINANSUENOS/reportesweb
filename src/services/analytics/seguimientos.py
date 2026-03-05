@@ -1,4 +1,5 @@
 import polars as pl
+from src.services.analytics.cartera import CarteraAnalyticsService
 
 class SeguimientosAnalyticsService:
     
@@ -16,7 +17,8 @@ class SeguimientosAnalyticsService:
             "zonas": obtener_unicos(["Zona"]),
             "regionales": obtener_unicos(["Regional_Cobro", "Regional_Venta", "Regional"]),
             "call_centers": obtener_unicos(["CALL_CENTER_FILTRO", "CALL_CENTER", "Call_Center"]),
-            "franjas": obtener_unicos(["Franja_Cartera", "Franja_Meta", "Franja"])
+            "franjas": obtener_unicos(["Franja_Cartera", "Franja_Meta", "Franja"]),
+            "estados_vigencia": ["vigente", "vencido", "anticipado"]
         }
 
     def calcular_metricas_seguimientos(self, df_cartera: pl.DataFrame, df_novedades: pl.DataFrame) -> dict:
@@ -42,8 +44,12 @@ class SeguimientosAnalyticsService:
 
         # --- A. CÁLCULOS PARA GRÁFICOS ---
         # Filtros dinámicos disponibles
-        posibles_filtros = ["Empresa", "Regional_Cobro", "Zona", "Franja_Cartera", "CALL_CENTER_FILTRO", "Regional_Venta"]
+        posibles_filtros = ["Empresa", "Regional_Cobro", "Zona", "Franja_Cartera", "CALL_CENTER_FILTRO", "Regional_Venta", "Estado_Vigencia"]
         cols_filtro = [c for c in posibles_filtros if c in df_base.columns]
+
+        # Agregar Estado_Vigencia si no existe
+        if "Estado_Vigencia" not in df_base.columns:
+            df_base = CarteraAnalyticsService().agregar_estado_vigencia(df_base)
         
         # 1. Dona (Recaudo)
         agg_donut = df_base.group_by(cols_filtro + ["Estado_Pago"]).len().rename({"len": "count"})

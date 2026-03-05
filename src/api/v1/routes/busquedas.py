@@ -78,6 +78,27 @@ def obtener_metricas_call_center(payload: FiltrosTabla):
         if payload.rodamiento and "Rodamiento" in df_cartera.columns:
             condicion = condicion & pl.col("Rodamiento").is_in(payload.rodamiento)
 
+        # Filtrar por vigencia - requiere obtener las cedulas de la cartera filtrada
+        if payload.vigencia and len(payload.vigencia) > 0:
+            # Primero aplicar los otros filtros
+            df_cartera_filtrada_base = df_cartera.filter(condicion)
+            
+            # Luego filtrar por vigencia usando la cartera
+            if "Estado_Vigencia" in df_cartera_filtrada_base.columns:
+                cedulas_vigencia = df_cartera_filtrada_base.filter(pl.col("Estado_Vigencia").is_in(payload.vigencia))["Cedula_Cliente"].unique()
+                condicion = condicion & pl.col("Cedula_Cliente").is_in(cedulas_vigencia)
+            else:
+                # Si no tiene la columna, intentar cargar parquet de rodamientos
+                try:
+                    archivos_rodamientos = busquedas_svc.descargar_dependencias_metricas(payload.job_id)
+                    if archivos_rodamientos and "cartera" in archivos_rodamientos:
+                        df_cartera_ref = pl.read_parquet(archivos_rodamientos["cartera"][1], columns=["Cedula_Cliente", "Estado_Vigencia"])
+                        if "Estado_Vigencia" in df_cartera_ref.columns:
+                            cedulas_vigencia = df_cartera_ref.filter(pl.col("Estado_Vigencia").is_in(payload.vigencia))["Cedula_Cliente"].unique()
+                            condicion = condicion & pl.col("Cedula_Cliente").is_in(cedulas_vigencia)
+                except Exception as e:
+                    print(f"⚠️ Warning: No se pudo aplicar filtro vigencia: {e}")
+
         df_cartera_filtrada = df_cartera.filter(condicion)
 
         # Filtrar auxiliares basados en Cartera

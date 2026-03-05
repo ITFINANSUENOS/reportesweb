@@ -26,6 +26,7 @@ class FiltrosTabla(BaseModel):
     franja: List[str] = []
     call_center: List[str] = []
     novedades: List[str] = []
+    vigencia: List[str] = []
     
     # Filtros Locales (Seguimientos)
     estado_pago: Optional[List[str]] = None      
@@ -36,7 +37,12 @@ class FiltrosTabla(BaseModel):
     rodamiento: List[str] = []
     origen: str = "cartera"
     columnas_visibles: Optional[List[str]] = None
-    
+
+    # 👇 NUEVOS FILTROS LOCALES (Comercial / Retanqueos)
+    Regional_Venta: Optional[List[str]] = None
+    Vendedor_Activo: Optional[List[str]] = None
+    Nombre_Vendedor: Optional[List[str]] = None
+
 class ConsultaRelacionada(BaseModel):
     job_id: str
     origen_destino: str

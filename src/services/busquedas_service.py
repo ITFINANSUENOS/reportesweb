@@ -73,8 +73,8 @@ class BusquedasService:
         
         # Filtros de Cosechas
         if origen == "comercial_cosechas_s1": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_1_SIN_PAGO")
-        elif origen == "comercial_cosechas_s2": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_2_FALLO_2DA")
-        elif origen == "comercial_cosechas_s3": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_3_FALLO_3RA_PLUS")
+        elif origen == "comercial_cosechas_s2": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_2_FALLA_2DA")
+        elif origen == "comercial_cosechas_s3": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_3_FALLA_3RA_PLUS")
         
         # Filtro Texto
         if payload.search_term:
@@ -103,6 +103,37 @@ class BusquedasService:
         if payload.estado_pago and "Estado_Pago" in df.columns: condicion = condicion & pl.col("Estado_Pago").is_in(payload.estado_pago)
         if payload.estado_gestion and "Estado_Gestion" in df.columns: condicion = condicion & pl.col("Estado_Gestion").is_in(payload.estado_gestion)
         if payload.rodamiento and "Rodamiento" in df.columns: condicion = condicion & pl.col("Rodamiento").is_in(payload.rodamiento)
+        
+        if payload.Regional_Venta and "Regional_Venta" in df.columns: 
+            condicion = condicion & pl.col("Regional_Venta").is_in(payload.Regional_Venta)
+        
+        if payload.Vendedor_Activo and "Vendedor_Activo" in df.columns: 
+            condicion = condicion & pl.col("Vendedor_Activo").is_in(payload.Vendedor_Activo)
+            
+        if payload.Nombre_Vendedor and "Nombre_Vendedor" in df.columns: 
+            condicion = condicion & pl.col("Nombre_Vendedor").is_in(payload.Nombre_Vendedor)
+        
+        # Filtrar por vigencia - requiere cruce con cartera
+        if payload.vigencia and len(payload.vigencia) > 0 and "Cedula_Cliente" in df.columns:
+            # Determinar el archivo de cartera según el origen
+            origen_cartera = "seguimientos_rodamientos"
+            if origen == "detallados_call_center":
+                origen_cartera = "detallados_call_center"
+            elif origen == "detallados_cartera":
+                origen_cartera = "detallados_cartera"
+            
+            # Intentar cargar la cartera para hacer el filtro
+            try:
+                s3_key_cartera, local_path_cartera = self._resolver_rutas(origen_cartera, payload.job_id)
+                if self._garantizar_archivo_local(s3_key_cartera, local_path_cartera):
+                    df_cartera = pl.read_parquet(local_path_cartera, columns=["Cedula_Cliente", "Estado_Vigencia"], memory_map=True)
+                    if "Estado_Vigencia" in df_cartera.columns:
+                        # Filtrar las cedulas que tienen la vigencia deseada
+                        cedulas_vigencia = df_cartera.filter(pl.col("Estado_Vigencia").is_in(payload.vigencia))["Cedula_Cliente"].unique()
+                        condicion = condicion & pl.col("Cedula_Cliente").is_in(cedulas_vigencia)
+            except Exception as e:
+                print(f"⚠️ Warning: No se pudo aplicar filtro vigencia: {e}")
+
         if payload.cargos and "Cargo_Usuario" in df.columns:
              if "SIN ASIGNAR" in payload.cargos:
                 condicion = condicion & (pl.col("Cargo_Usuario").is_in(payload.cargos) | pl.col("Cargo_Usuario").is_null() | (pl.col("Cargo_Usuario") == ""))

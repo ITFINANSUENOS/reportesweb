@@ -1,4 +1,5 @@
 import polars as pl
+from src.services.analytics.cartera import CarteraAnalyticsService
 
 class ResultadosAnalyticsService:
     
@@ -52,13 +53,23 @@ class ResultadosAnalyticsService:
         if "Regional_Cobro" not in df_filtrado.columns:
              df_filtrado = df_filtrado.with_columns(pl.lit("OTRAS ZONAS").alias("Regional_Cobro"))
 
+        # 👉 NUEVO: Asegurar que Franja_Cartera exista para no romper el group_by
+        if "Franja_Cartera" not in df_filtrado.columns:
+             df_filtrado = df_filtrado.with_columns(pl.lit("SIN FRANJA").alias("Franja_Cartera"))
+
+        # Agregar Estado_Vigencia si no existe
+        if "Estado_Vigencia" not in df_filtrado.columns:
+            df_filtrado = CarteraAnalyticsService().agregar_estado_vigencia(df_filtrado)
+
 
         # 3. DEFINIR COLUMNAS DE AGRUPACIÓN (INCLUYENDO LOS FILTROS)
         cols_group_base = [
             'Empresa', 
             'CALL_CENTER_FILTRO', 
             'Regional_Cobro', 
-            'Zona'
+            'Zona',
+            'Estado_Vigencia',
+            'Franja_Cartera' # 👉 NUEVO: Lo agregamos para que viaje al JSON y el filtro global del frontend funcione
         ]
 
         # 4. AGREGACIÓN 1: POR ZONA Y FRANJA
@@ -67,6 +78,7 @@ class ResultadosAnalyticsService:
         resultados_zona = (
             df_filtrado.group_by(group_cols_zona)
             .agg([
+                pl.col("Zona").count().alias("Total_Cuentas"),
                 pl.col("Meta_$").sum().alias("Meta_Total"),
                 pl.col("Recaudo_Meta").sum().alias("Recaudo_Total"),
                 pl.col("Total_Recaudo_Sin_Anti").sum().alias("Recaudo_Sin_Anti_Total"),
@@ -91,6 +103,7 @@ class ResultadosAnalyticsService:
             resultados_cobrador = (
                 df_cobrador.group_by(group_cols_cobrador)
                 .agg([
+                    pl.col("Cobrador").count().alias("Total_Cuentas"),
                     pl.col("Meta_T.R_$").sum().alias("Meta_Total"),            
                     pl.col("Total_Recaudo_Sin_Anti").sum().alias("Recaudo_Total") 
                 ])
