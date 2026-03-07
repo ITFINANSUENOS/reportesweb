@@ -73,8 +73,8 @@ class BusquedasService:
         
         # Filtros de Cosechas
         if origen == "comercial_cosechas_s1": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_1_SIN_PAGO")
-        elif origen == "comercial_cosechas_s2": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_2_FALLA_2DA")
-        elif origen == "comercial_cosechas_s3": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_3_FALLA_3RA_PLUS")
+        elif origen == "comercial_cosechas_s2": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_2_FALLO_2DA")
+        elif origen == "comercial_cosechas_s3": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_3_FALLO_3RA_PLUS")
         
         # Filtro Texto
         if payload.search_term:
