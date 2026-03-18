@@ -188,3 +188,21 @@ class ReportesOrchestrator:
                 resultados_modulos["_archivo_novedades_master"] = path_master_nov
 
         return resultados_modulos
+
+    def ejecutar_pipeline(self, job_id: str, file_key: str, empresa: str, tipo_reporte: str = None) -> dict:
+        """
+        Pipeline principal para procesar reportes desde S3.
+        Descarga el archivo de S3, lo procesa y retorna los resultados.
+        """
+        print(f"📥 ORCHESTRATOR: Descargando archivo {file_key} de S3...")
+        local_path = self.storage.descargar_archivo(file_key, f"/tmp/{job_id}_input.xlsx")
+        
+        if not local_path:
+            raise ValueError(f"No se pudo descargar el archivo: {file_key}")
+        
+        try:
+            return self.procesar_excel_multi_modulo(local_path, job_id, empresa)
+        finally:
+            import os
+            if os.path.exists(local_path):
+                os.remove(local_path)
