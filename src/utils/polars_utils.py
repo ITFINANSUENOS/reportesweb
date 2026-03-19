@@ -31,7 +31,7 @@ def guardar_parquet(df: pl.DataFrame, output_path: str, cols_especificas: list =
             os.makedirs(parent_dir, exist_ok=True)
 
         if cols_especificas:
-            cols_existentes = [c for c in cols_especificas if c in df.columns]
+            cols_existentes = list(dict.fromkeys([c for c in cols_especificas if c in df.columns]))
             df_to_save = df.select(cols_existentes)
         else:
             df_to_save = df

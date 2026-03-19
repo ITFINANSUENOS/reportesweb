@@ -69,7 +69,8 @@ class ResultadosAnalyticsService:
             'Regional_Cobro', 
             'Zona',
             'Estado_Vigencia',
-            'Franja_Cartera' # 👉 NUEVO: Lo agregamos para que viaje al JSON y el filtro global del frontend funcione
+            'Franja_Cartera',
+            'Cantidad_Novedades'
         ]
 
         # 4. AGREGACIÓN 1: POR ZONA Y FRANJA

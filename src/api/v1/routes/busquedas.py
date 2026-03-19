@@ -99,6 +99,19 @@ def obtener_metricas_call_center(payload: FiltrosTabla):
                 except Exception as e:
                     print(f"⚠️ Warning: No se pudo aplicar filtro vigencia: {e}")
 
+        # Filtro de Novedades
+        if payload.novedades and len(payload.novedades) > 0:
+            if "Cantidad_Novedades" in df_cartera.columns:
+                if "Con Novedades" in payload.novedades and "Sin Novedades" not in payload.novedades:
+                    condicion = condicion & (pl.col("Cantidad_Novedades") > 0)
+                elif "Sin Novedades" in payload.novedades and "Con Novedades" not in payload.novedades:
+                    condicion = condicion & (pl.col("Cantidad_Novedades") == 0)
+            elif "Estado_Gestion" in df_cartera.columns:
+                if "Con Novedades" in payload.novedades and "Sin Novedades" not in payload.novedades:
+                    condicion = condicion & (pl.col("Estado_Gestion") == "CON GESTIÓN")
+                elif "Sin Novedades" in payload.novedades and "Con Novedades" not in payload.novedades:
+                    condicion = condicion & (pl.col("Estado_Gestion") == "SIN GESTIÓN")
+
         df_cartera_filtrada = df_cartera.filter(condicion)
 
         # Filtrar auxiliares basados en Cartera

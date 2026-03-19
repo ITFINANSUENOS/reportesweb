@@ -68,7 +68,7 @@ ORDEN_FRANJAS = ['AL DIA', '1 A 30', '31 A 90', '91 A 180', '181 A 360', 'MAS DE
 
 COLS_TABLA_NOVEDADES = [
     'Empresa', 'Credito', 'Nombre_Cliente', 'Cedula_Cliente', 'Celular', 'Nombre_Ciudad', 'Zona', 'Dias_Atraso_Final',
-    'Total_Recaudo', 'Valor_Vencido', 'Estado_Pago', 'Estado_Gestion', "Regional_Cobro", 'Cargo_Usuario', 'Nombre_Usuario', 'Novedades_Por_Cargo',
+    'Total_Recaudo', 'Valor_Vencido', 'Estado_Pago', 'Estado_Gestion', 'Cantidad_Novedades', "Regional_Cobro", 'Cargo_Usuario', 'Nombre_Usuario', 'Novedades_Por_Cargo',
     'Codeudor1', 'Nombre_Codeudor1', 'Telefono_Codeudor1', 'Codeudor2', 'Nombre_Codeudor2', 'Telefono_Codeudor2',
     'Fecha_Cuota_Vigente', 'Valor_Cuota_Vigente', 'Meta_$', 'Novedad', 'Tipo_Novedad',
     'CALL_CENTER_FILTRO', 'Tipo_Vigencia_Temp', 'Estado_Vigencia'
@@ -78,7 +78,7 @@ COLS_TABLA_RODAMIENTOS = [
     'Empresa', 'Credito', 'Cedula_Cliente', 'Nombre_Cliente', 'Celular', 'Fecha_Cuota_Vigente', 'Valor_Cuota_Vigente',
     'Nombre_Ciudad', "Regional_Cobro", 'Zona', 'Codeudor1', 'Nombre_Codeudor1', 'Telefono_Codeudor1', 'Codeudor2', 'Nombre_Codeudor2', 'Franja_Cartera',
     'Telefono_Codeudor2', 'Dias_Atraso_Final', 'Total_Recaudo', 'Meta_Intereses', 'Meta_Saldo', 'Valor_Vencido', 'Rodamiento',
-    'Rodamiento_Cartera', 'Estado_Pago', 'Estado_Gestion', 'Meta_$',
+    'Rodamiento_Cartera', 'Estado_Pago', 'Estado_Gestion', 'Cantidad_Novedades', 'Meta_$',
     'CALL_CENTER_FILTRO', 'Tipo_Vigencia_Temp', 'Estado_Vigencia'
 ]
 

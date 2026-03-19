@@ -1,3 +1,4 @@
+import polars as pl
 from src.core.constants import (
     COLS_TABLA_NOVEDADES, COLS_TABLA_RODAMIENTOS,
     COLS_MASTER_CARTERA, COLS_MASTER_NOVEDADES)
@@ -40,9 +41,14 @@ class ReportesOrchestrator:
         df_cartera_save = None 
         df_novedades_save = None
 
-        # Agregar Estado_Vigencia al DataFrame de cartera para filtros globales
+        # Agregar Estado_Vigencia y Estado_Pago al DataFrame de cartera para filtros globales
         cartera_service = CarteraAnalyticsService()
         df_cartera = cartera_service.agregar_estado_vigencia(df_cartera)
+        df_cartera = df_cartera.with_columns(
+            pl.when(pl.col("Tipo_Vigencia_Temp") == "ANTICIPADO").then(pl.lit("ANTICIPADO"))
+            .when(pl.col("Total_Recaudo") > 50000).then(pl.lit("PAGO"))
+            .otherwise(pl.lit("SIN PAGO")).alias("Estado_Pago")
+        )
 
         if not df_cartera.is_empty():
             metadata_base = {"job_id": job_id, "empresa": empresa}

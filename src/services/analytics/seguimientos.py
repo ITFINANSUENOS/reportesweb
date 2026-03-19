@@ -43,24 +43,27 @@ class SeguimientosAnalyticsService:
         ])
 
         # --- A. CÁLCULOS PARA GRÁFICOS ---
-        # Filtros dinámicos disponibles
-        posibles_filtros = ["Empresa", "Regional_Cobro", "Zona", "Franja_Cartera", "CALL_CENTER_FILTRO", "Regional_Venta", "Estado_Vigencia"]
-        cols_filtro = [c for c in posibles_filtros if c in df_base.columns]
+        # Filtros base para agrupaciones
+        posibles_filtros_base = ["Empresa", "Regional_Cobro", "Zona", "Franja_Cartera", "CALL_CENTER_FILTRO", "Regional_Venta", "Estado_Vigencia", "Estado_Gestion"]
+        cols_filtro = [c for c in posibles_filtros_base if c in df_base.columns]
 
         # Agregar Estado_Vigencia si no existe
         if "Estado_Vigencia" not in df_base.columns:
             df_base = CarteraAnalyticsService().agregar_estado_vigencia(df_base)
         
-        # 1. Dona (Recaudo)
-        agg_donut = df_base.group_by(cols_filtro + ["Estado_Pago"]).len().rename({"len": "count"})
+        # columnas base sin Estado_Gestion (para evitar duplicados)
+        cols_filtro_base = [c for c in cols_filtro if c != "Estado_Gestion"]
         
-        # 2. Barras (Rodamiento) - DATA CRUDA SIN CRUCE
+        # 1. Dona (Recaudo) - solo necesita cols_filtro_base
+        agg_donut = df_base.group_by(cols_filtro_base + ["Estado_Pago", "Estado_Gestion"]).len().rename({"len": "count"})
+        
+        # 2. Barras (Rodamiento) - usa cols_filtro_base + Estado_Gestion
         agg_rodamiento = pl.DataFrame()
         if "Rodamiento" in df_base.columns:
             agg_rodamiento = (
                 df_base
                 .filter(pl.col("Rodamiento").is_not_null() & (pl.col("Rodamiento") != ""))
-                .group_by(cols_filtro + ["Rodamiento", "Estado_Gestion"])
+                .group_by(cols_filtro_base + ["Rodamiento", "Estado_Gestion"])
                 .len()
                 .rename({"len": "Número de Cuentas"})
                 .sort("Rodamiento")
@@ -81,7 +84,7 @@ class SeguimientosAnalyticsService:
 
         grouped_sunburst = (
             df_merged.filter(filtro_valido)
-            .group_by(cols_filtro + ["Estado_Gestion", "Cargo_Usuario"])
+            .group_by(cols_filtro_base + ["Estado_Gestion", "Cargo_Usuario"])
             .len()
             .rename({"len": "Cantidad"})
             .sort("Cantidad", descending=True)
@@ -90,7 +93,7 @@ class SeguimientosAnalyticsService:
         grouped_pago = (
             df_merged.filter(pl.col("Estado_Pago") == "PAGO")
             .filter(filtro_valido)
-            .group_by(cols_filtro + ["Estado_Gestion", "Cargo_Usuario"])
+            .group_by(cols_filtro_base + ["Estado_Gestion", "Cargo_Usuario"])
             .len()
             .rename({"len": "Cantidad"})
         )
@@ -98,7 +101,7 @@ class SeguimientosAnalyticsService:
         grouped_sin_pago = (
             df_merged.filter(pl.col("Estado_Pago") == "SIN PAGO")
             .filter(filtro_valido)
-            .group_by(cols_filtro + ["Estado_Gestion", "Cargo_Usuario"])
+            .group_by(cols_filtro_base + ["Estado_Gestion", "Cargo_Usuario"])
             .len()
             .rename({"len": "Cantidad"})
         )

@@ -99,13 +99,18 @@ class ReportesController:
 
     def obtener_json_graficos(self, job_id, modulo):
         """Descarga JSON de gráficos usando el servicio de S3."""
-        # Podemos implementar un método 'leer_json' en S3Service si queremos abstraer más,
-        # pero por ahora usaremos el cliente raw para mantener compatibilidad rápida.
         s3_key = f"graficos/{modulo}/{job_id}.json"
         try:
+            # Verificar primero si existe
+            if not self.s3_service.verificar_existe(s3_key):
+                print(f"⚠️ No existe en S3: {s3_key}")
+                raise HTTPException(status_code=404, detail=f"No hay datos para '{modulo}' con job_id '{job_id}'.")
+            
             print(f"📥 Descargando gráfico: {s3_key}")
             response = self.s3_client_raw.get_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key)
             return json.loads(response['Body'].read().decode('utf-8'))
+        except HTTPException:
+            raise
         except self.s3_client_raw.exceptions.NoSuchKey:
             raise HTTPException(status_code=404, detail=f"No hay datos para '{modulo}'.")
         except Exception as e:
