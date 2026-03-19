@@ -36,7 +36,7 @@ class CarteraAnalyticsService:
         posibles_filtros = [
             "Empresa", "Regional_Cobro", "Zona", "Franja_Cartera", 
             "CALL_CENTER_FILTRO", "Call_Center_Apoyo", "Regional_Venta",
-            "Estado_Vigencia"
+            "Estado_Vigencia", "Cantidad_Novedades"
         ]
         cols_filtro = [c for c in posibles_filtros if c in df.columns]
 

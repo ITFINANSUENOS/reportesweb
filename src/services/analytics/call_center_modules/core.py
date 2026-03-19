@@ -31,7 +31,7 @@ def procesar_base_gestion(df: pl.DataFrame, df_novedades: pl.DataFrame):
     df_unificado = pl.concat([df_zona_norm, df_apoyo_norm])
     df_detalle = pl.concat([df_zona, df_apoyo])
 
-    # Pegar Novedades
+    # Pegar Novedades y asegurar campos para filtros
     if not df_novedades.is_empty() and "Cedula_Cliente" in df_novedades.columns:
         cols_nov = [c for c in ['Cedula_Cliente', 'Tipo_Novedad', 'Novedad'] if c in df_novedades.columns]
         nov_simple = df_novedades.select(cols_nov).unique(subset=['Cedula_Cliente'], keep='last')
@@ -40,7 +40,21 @@ def procesar_base_gestion(df: pl.DataFrame, df_novedades: pl.DataFrame):
             pl.col('Tipo_Novedad').fill_null('SIN NOVEDAD'),
             pl.col('Novedad').fill_null('')
         ])
-
+    
+    # Asegurar campos de filtro para frontend
+    if "Cantidad_Novedades" not in df_detalle.columns:
+        df_detalle = df_detalle.with_columns(pl.lit(0).cast(pl.Float64).alias("Cantidad_Novedades"))
+    
+    if "Estado_Gestion" not in df_detalle.columns:
+        df_detalle = df_detalle.with_columns(
+            pl.when(pl.col("Cantidad_Novedades") > 0).then(pl.lit("CON GESTIÓN"))
+            .otherwise(pl.lit("SIN GESTIÓN")).alias("Estado_Gestion")
+        )
+    
+    # Asegurar Estado_Vigencia si existe en df original
+    if "Estado_Vigencia" not in df_detalle.columns and "Estado_Vigencia" in df.columns:
+        df_detalle = df_detalle.with_columns(pl.col("Estado_Vigencia"))
+    
     return df_unificado, df_detalle
 
 def calcular_cumplimiento(df: pl.DataFrame):

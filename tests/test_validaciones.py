@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 from unittest.mock import MagicMock
-from src.controllers.api.reportes_controller import ReportesController
+from src.controllers.reportes import ReportesController
 
 # --- FIXTURE: PREPARACIÓN DEL ESCENARIO ---
 @pytest.fixture

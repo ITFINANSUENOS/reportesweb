@@ -1,5 +1,4 @@
 import polars as pl
-import pandas as pd
 import unicodedata
 from datetime import date
 from .utils import exportar_a_json
@@ -56,19 +55,54 @@ def procesar_novedades_sistema(df_nov: pl.DataFrame, df_llamadas: pl.DataFrame, 
     df_comp = df_proc.filter(pl.col(col_tipo).cast(pl.Utf8).str.to_uppercase().str.contains("COMPROMISO") & (pl.col('Call_Center') != 'SIN ASIGNAR'))
 
     if not df_comp.is_empty():
-        pdf_comp = df_comp.to_pandas()
-        col_fecha = next((col for col in pdf_comp.columns if 'fecha' in col.lower() and 'cuota' not in col.lower() and 'nacimiento' not in col.lower()), None)
-        if col_fecha:
-            pdf_comp['Fecha_Obj'] = pd.to_datetime(pdf_comp[col_fecha].astype(str).str.strip(), errors='coerce', dayfirst=True)
-            hoy, inicio_mes = pd.Timestamp.now().normalize(), pd.Timestamp.now().normalize().replace(day=1)
-            pdf_comp['Estado_Acuerdo'] = pdf_comp['Fecha_Obj'].apply(lambda f: 'ACUERDOS SIN FECHA' if pd.isna(f) or f < inicio_mes else ('ACUERDOS VENCIDOS' if f < hoy else 'ACUERDOS VIGENTES'))
-            agg_pd = pdf_comp.groupby(['Call_Center', 'Estado_Acuerdo']).size().reset_index(name='Cantidad')
-            df_compromisos_json = agg_pd.to_dict(orient='records')
+        hoy = date.today()
+        inicio_mes = date(hoy.year, hoy.month, 1)
+        
+        fecha_col = next((c for c in df_comp.columns if 'fecha' in c.lower() and 'cuota' not in c.lower() and 'nacimiento' not in c.lower()), None)
+        
+        if fecha_col:
+            df_comp = df_comp.with_columns([
+                pl.col(fecha_col).cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias("Fecha_Str")
+            ])
+            
+            def clasificar_estado(fecha_str: str) -> str:
+                if not fecha_str or fecha_str == "": return "ACUERDOS SIN FECHA"
+                try:
+                    partes = fecha_str.replace("/", "-").split("-")
+                    if len(partes) == 3:
+                        if len(partes[2]) == 2:
+                            partes[2] = "20" + partes[2]
+                        f = date(int(partes[2]), int(partes[1]), int(partes[0]))
+                        if f < inicio_mes: return "ACUERDOS VENCIDOS"
+                        if f < hoy: return "ACUERDOS VENCIDOS"
+                        return "ACUERDOS VIGENTES"
+                except:
+                    pass
+                return "ACUERDOS SIN FECHA"
+            
+            df_comp = df_comp.with_columns(
+                pl.col("Fecha_Str").map_elements(clasificar_estado, return_dtype=pl.Utf8).alias("Estado_Acuerdo")
+            )
+            
+            df_compromisos_json = (
+                df_comp.group_by(["Call_Center", "Estado_Acuerdo"])
+                .len()
+                .rename({"len": "Cantidad"})
+                .with_columns(pl.col("Cantidad").cast(pl.Int64))
+                .to_dicts()
+            )
 
     df_validos = df_proc.filter(pl.col('Call_Center') != 'SIN ASIGNAR')
+    
+    top_tipo = "N/A"
+    if not df_proc.is_empty() and col_tipo in df_proc.columns:
+        mode_result = df_proc.select(col_tipo).group_by(col_tipo).len().sort("len", descending=True)
+        if not mode_result.is_empty():
+            top_tipo = mode_result[col_tipo][0]
+    
     return {
         "df_agg_call": exportar_a_json(df_validos.group_by('Call_Center').len().rename({'len': 'Cantidad'}).sort('Cantidad', descending=True)) if not df_validos.is_empty() else [],
         "df_agg_tipo": exportar_a_json(df_validos.group_by(['Call_Center', col_tipo]).len().rename({'len': 'Cantidad'})) if not df_validos.is_empty() else [],
         "df_compromisos": df_compromisos_json,
-        "kpis": {"total": df_proc.height, "sin_asignar": df_proc.filter(pl.col('Call_Center') == 'SIN ASIGNAR').height if not df_proc.is_empty() else 0, "top_tipo": df_proc[col_tipo].mode()[0] if not df_proc.is_empty() and len(df_proc[col_tipo].mode()) > 0 else "N/A"}
+        "kpis": {"total": df_proc.height, "sin_asignar": df_proc.filter(pl.col('Call_Center') == 'SIN ASIGNAR').height if not df_proc.is_empty() else 0, "top_tipo": top_tipo}
     }

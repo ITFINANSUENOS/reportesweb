@@ -94,24 +94,31 @@ class BusquedasService:
             "Regional": payload.regional, "Regional_Venta": payload.regional,
             "Franja_Cartera": payload.franja, "Franja": payload.franja,
             "CALL_CENTER_FILTRO": payload.call_center, "Call_Center": payload.call_center,
-            "Novedad": payload.novedades, "Tipo_Novedad": payload.novedades
+            "Tipo_Novedad": payload.novedades if all(n in ["COMPROMISO", "AUSENCIA", "PAGO", "NOVEDAD"] for n in payload.novedades) else None
         }
         for col_name, valores in filtros_map.items():
             if valores and col_name in df.columns:
                 condicion = condicion & pl.col(col_name).is_in(valores)
 
+        # Filtro de Novedades (por Cantidad_Novedades)
+        if payload.novedades and len(payload.novedades) > 0:
+            if "Cantidad_Novedades" in df.columns:
+                if "Con Novedades" in payload.novedades and "Sin Novedades" not in payload.novedades:
+                    condicion = condicion & (pl.col("Cantidad_Novedades") > 0)
+                elif "Sin Novedades" in payload.novedades and "Con Novedades" not in payload.novedades:
+                    condicion = condicion & (pl.col("Cantidad_Novedades") == 0)
+            elif "Estado_Gestion" in df.columns:
+                if "Con Novedades" in payload.novedades and "Sin Novedades" not in payload.novedades:
+                    condicion = condicion & (pl.col("Estado_Gestion") == "CON GESTIÓN")
+                elif "Sin Novedades" in payload.novedades and "Con Novedades" not in payload.novedades:
+                    condicion = condicion & (pl.col("Estado_Gestion") == "SIN GESTIÓN")
+        
         if payload.estado_pago and "Estado_Pago" in df.columns: condicion = condicion & pl.col("Estado_Pago").is_in(payload.estado_pago)
         if payload.estado_gestion and "Estado_Gestion" in df.columns: condicion = condicion & pl.col("Estado_Gestion").is_in(payload.estado_gestion)
         if payload.rodamiento and "Rodamiento" in df.columns: condicion = condicion & pl.col("Rodamiento").is_in(payload.rodamiento)
-        
-        if payload.Regional_Venta and "Regional_Venta" in df.columns: 
-            condicion = condicion & pl.col("Regional_Venta").is_in(payload.Regional_Venta)
-        
-        if payload.Vendedor_Activo and "Vendedor_Activo" in df.columns: 
-            condicion = condicion & pl.col("Vendedor_Activo").is_in(payload.Vendedor_Activo)
-            
-        if payload.Nombre_Vendedor and "Nombre_Vendedor" in df.columns: 
-            condicion = condicion & pl.col("Nombre_Vendedor").is_in(payload.Nombre_Vendedor)
+        if payload.Regional_Venta and "Regional_Venta" in df.columns: condicion = condicion & pl.col("Regional_Venta").is_in(payload.Regional_Venta)
+        if payload.Vendedor_Activo and "Vendedor_Activo" in df.columns: condicion = condicion & pl.col("Vendedor_Activo").is_in(payload.Vendedor_Activo)
+        if payload.Nombre_Vendedor and "Nombre_Vendedor" in df.columns: condicion = condicion & pl.col("Nombre_Vendedor").is_in(payload.Nombre_Vendedor)
         
         # Filtrar por vigencia - requiere cruce con cartera
         if payload.vigencia and len(payload.vigencia) > 0 and "Cedula_Cliente" in df.columns:
