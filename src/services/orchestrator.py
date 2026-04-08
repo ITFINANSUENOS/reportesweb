@@ -1,3 +1,4 @@
+import polars as pl
 from src.core.constants import (
     COLS_TABLA_NOVEDADES, COLS_TABLA_RODAMIENTOS,
     COLS_MASTER_CARTERA, COLS_MASTER_NOVEDADES)
@@ -40,9 +41,14 @@ class ReportesOrchestrator:
         df_cartera_save = None 
         df_novedades_save = None
 
-        # Agregar Estado_Vigencia al DataFrame de cartera para filtros globales
+        # Agregar Estado_Vigencia y Estado_Pago al DataFrame de cartera para filtros globales
         cartera_service = CarteraAnalyticsService()
         df_cartera = cartera_service.agregar_estado_vigencia(df_cartera)
+        df_cartera = df_cartera.with_columns(
+            pl.when(pl.col("Tipo_Vigencia_Temp") == "ANTICIPADO").then(pl.lit("ANTICIPADO"))
+            .when(pl.col("Total_Recaudo") > 50000).then(pl.lit("PAGO"))
+            .otherwise(pl.lit("SIN PAGO")).alias("Estado_Pago")
+        )
 
         if not df_cartera.is_empty():
             metadata_base = {"job_id": job_id, "empresa": empresa}
@@ -188,3 +194,21 @@ class ReportesOrchestrator:
                 resultados_modulos["_archivo_novedades_master"] = path_master_nov
 
         return resultados_modulos
+
+    def ejecutar_pipeline(self, job_id: str, file_key: str, empresa: str, tipo_reporte: str = None) -> dict:
+        """
+        Pipeline principal para procesar reportes desde S3.
+        Descarga el archivo de S3, lo procesa y retorna los resultados.
+        """
+        print(f"📥 ORCHESTRATOR: Descargando archivo {file_key} de S3...")
+        local_path = self.storage.descargar_archivo(file_key, f"/tmp/{job_id}_input.xlsx")
+        
+        if not local_path:
+            raise ValueError(f"No se pudo descargar el archivo: {file_key}")
+        
+        try:
+            return self.procesar_excel_multi_modulo(local_path, job_id, empresa)
+        finally:
+            import os
+            if os.path.exists(local_path):
+                os.remove(local_path)

@@ -1,6 +1,6 @@
 import pytest
 import polars as pl
-from src.services.tableros.resultados.resultados_analytics_service import ResultadosAnalyticsService
+from src.services.analytics.resultados import ResultadosAnalyticsService
 
 def test_calculo_kpis_resultados():
     # 1. ARRANGE (Preparar datos de prueba)

@@ -43,6 +43,16 @@ class CallCenterAnalyticsService:
         print("📊 Procesando base de gestión...")
         df_unificado, df_detalle_final = procesar_base_gestion(df_cartera_enrich, df_novedades)
         
+        # Asegurar campos de filtro para frontend
+        cols_filtro_frontend = ['Empresa', 'Zona', 'Regional_Cobro', 'Franja_Meta', 'Rodamiento', 
+                                  'CALL_CENTER_FILTRO', 'Cantidad_Novedades', 'Estado_Gestion', 'Estado_Vigencia']
+        cols_existentes = [c for c in cols_filtro_frontend if c in df_detalle_final.columns]
+        
+        if cols_existentes:
+            df_filtros = df_detalle_final.select(cols_existentes).unique()
+        else:
+            df_filtros = pl.DataFrame()
+        
         print("📈 Calculando cumplimiento...")
         metricas_cumplimiento = calcular_cumplimiento(df_unificado)
         
@@ -50,22 +60,13 @@ class CallCenterAnalyticsService:
         rodamiento_data = calcular_rodamientos(df_unificado)
         
         print("📞 Procesando llamadas...")
-        stats_llamadas = procesar_llamadas(df_llamadas_proc) or {}  # <--- Asegurar que sea diccionario
+        stats_llamadas = procesar_llamadas(df_llamadas_proc) or {}
         
         print("✉️ Procesando mensajería...")
-        stats_mensajeria = procesar_mensajeria(df_mensajeria, df_novedades, df_cartera_enrich) or {}  # <--- Asegurar que sea diccionario
+        stats_mensajeria = procesar_mensajeria(df_mensajeria, df_novedades, df_cartera_enrich) or {}
         
         print("📝 Procesando novedades con filtro:", call_center_filtro)
-        stats_novedades = procesar_novedades_sistema(df_novedades, df_llamadas_proc, call_center_filtro) or {}  # <--- Asegurar que sea diccionario
-
-        # --- 2. PREPARAR FILTROS GLOBALES ---
-        cols_filtros = ['Empresa', 'Zona', 'Regional', 'Franja_Meta', 'Rodamiento', 'Regional_Cobro', 'CALL_CENTER_FILTRO']
-        cols_existentes = [c for c in cols_filtros if c in df_detalle_final.columns]
-        
-        if cols_existentes:
-            df_filtros = df_detalle_final.select(cols_existentes).unique()
-        else:
-            df_filtros = pl.DataFrame()
+        stats_novedades = procesar_novedades_sistema(df_novedades, df_llamadas_proc, call_center_filtro) or {}
 
         print("✅ Cálculo completado exitosamente")
 
@@ -75,12 +76,21 @@ class CallCenterAnalyticsService:
             "reporte_raw": exportar_a_json(metricas_cumplimiento),
             "rodamiento_data": exportar_a_json(rodamiento_data),
             
-            # Desempaquetamos los diccionarios de los submódulos (asegurándonos que sean diccionarios)
+            # Desempaquetamos los diccionarios de los submódulos
             **stats_llamadas,
             **stats_mensajeria,
             **stats_novedades,
             
-            "filtros_disponibles": exportar_a_json(df_filtros),
+            # Incluir filtros_disponibles para el frontend
+            "filtros_disponibles": {
+                "empresas": df_filtros["Empresa"].unique().to_list() if "Empresa" in df_filtros.columns else [],
+                "zonas": df_filtros["Zona"].unique().to_list() if "Zona" in df_filtros.columns else [],
+                "regionales": df_filtros["Regional_Cobro"].unique().to_list() if "Regional_Cobro" in df_filtros.columns else [],
+                "call_centers": df_filtros["CALL_CENTER_FILTRO"].unique().to_list() if "CALL_CENTER_FILTRO" in df_filtros.columns else [],
+                "franjas": df_filtros["Franja_Meta"].unique().to_list() if "Franja_Meta" in df_filtros.columns else [],
+                "estados_vigencia": df_filtros["Estado_Vigencia"].unique().to_list() if "Estado_Vigencia" in df_filtros.columns else [],
+                "estados_gestion": ["CON GESTIÓN", "SIN GESTIÓN"]
+            },
             "meta": {
                 "total_cuentas": df_unificado.height,
                 "total_meta": df_unificado["META_UNIFICADA"].sum() if not df_unificado.is_empty() else 0
