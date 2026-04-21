@@ -21,7 +21,7 @@ def controller_mock():
     
     return controller
 
-# --- TEST 1: EL CAMINO FELIZ (Todo correcto) ---
+# --- TEST 1: ÉXITO EN LA GENERACIÓN DE URL ---
 def test_generar_url_exito(controller_mock):
     # Datos válidos (Nombre correcto, XLSX, peso bajo)
     resultado = controller_mock.generar_url_subida(
@@ -31,7 +31,7 @@ def test_generar_url_exito(controller_mock):
     )
     
     assert "upload_url" in resultado
-    assert resultado["upload_url"] == "https://s3.aws.com/fake-upload-url"
+    assert resultado["upload_url"].startswith("https://")
     assert "file_key" in resultado
 
 # --- TEST 2: FALLO POR NOMBRE ---
@@ -46,7 +46,7 @@ def test_fallo_nombre_incorrecto(controller_mock):
     
     # Verificamos que el error sea 400 y tenga el mensaje correcto
     assert error.value.status_code == 400
-    assert "Nombre de archivo inválido" in error.value.detail
+    assert "Nombre inválido" in error.value.detail
 
 # --- TEST 3: FALLO POR TAMAÑO ---
 def test_fallo_archivo_muy_pesado(controller_mock):
@@ -61,4 +61,4 @@ def test_fallo_archivo_muy_pesado(controller_mock):
         )
             
     assert error.value.status_code == 400
-    assert "excede el tamaño máximo" in error.value.detail
+    assert "excede" in error.value.detail

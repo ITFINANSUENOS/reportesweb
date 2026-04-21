@@ -4,6 +4,7 @@ import boto3
 import uuid
 import json
 import os
+import logging
 from datetime import datetime
 from src.core.config import settings
 
@@ -19,15 +20,10 @@ class ReportesController:
     REQUIRED_NAME_PATTERN = "Reporte_General"
 
     def __init__(self):
-        # 1. Usamos el servicio de S3 centralizado para operaciones simples
+        # 1. Usamos el servicio de S3 centralizado (Sin fugas de abstracción)
         self.s3_service = S3Service()
         
-        # OJO: Para generar URLs firmadas, seguimos necesitando el cliente crudo de boto3
-        # porque el método generate_presigned_url es muy específico.
-        # Podríamos moverlo a S3Service, pero por ahora está bien dejarlo aquí o refactorizarlo luego.
-        self.s3_client_raw = self.s3_service.s3 
-        
-        # 2. Cliente SQS (Si existe)
+        # 2. Cliente SQS (Lo mantenemos porque aún no hay un SQSService)
         self.sqs = None
         if settings.SQS_QUEUE_URL:
             try:
@@ -38,7 +34,7 @@ class ReportesController:
                     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
                 )
             except Exception as e:
-                print(f"⚠️ Error inicializando SQS: {e}")
+                logging.warning(f"⚠️ Error inicializando SQS: {e}")
                 self.sqs = None
 
     def generar_url_subida(self, filename: str, content_type: str, file_size: int):
@@ -59,17 +55,11 @@ class ReportesController:
         file_key = f"uploads/{uuid.uuid4().hex}-{filename}"
         
         try:
-            url = self.s3_client_raw.generate_presigned_url(
-                'put_object', 
-                Params={
-                    'Bucket': settings.S3_BUCKET_NAME, 
-                    'Key': file_key, 
-                    'ContentType': content_type
-                }, 
-                ExpiresIn=3600
-            )
+            #Delegamos la generación de la URL a nuestro servicio centralizado
+            url = self.s3_service.generar_url_presignada(file_key, content_type)
             return {"upload_url": url, "file_key": file_key}
         except Exception as e:
+            logging.error(f"Error generando URL: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Error generando URL: {str(e)}")
 
     async def iniciar_procesamiento_async(self, file_key, empresa, tipo_reporte, background_tasks: BackgroundTasks):
@@ -89,11 +79,12 @@ class ReportesController:
                 )
                 return {"status": "queued", "job_id": job_id, "message": "Encolado en SQS (Producción)."}
             except Exception as e:
+                logging.error(f"Fallo SQS: {e}", exc_info=True)
                 return {"status": "error", "message": f"Fallo SQS: {str(e)}"}
 
         # B. MODO LOCAL
         else:
-            print(f"⚠️ SQS inactivo. Ejecutando Job {job_id} localmente.")
+            logging.info(f"⚠️ SQS inactivo. Ejecutando Job {job_id} localmente.")
             background_tasks.add_task(self.procesar_reporte_batch, file_key, job_id, empresa)
             return {"status": "processing_local", "job_id": job_id, "message": "Ejecutando localmente."}
 
@@ -101,24 +92,25 @@ class ReportesController:
         """Descarga JSON de gráficos usando el servicio de S3."""
         s3_key = f"graficos/{modulo}/{job_id}.json"
         try:
-            # Verificar primero si existe
-            if not self.s3_service.verificar_existe(s3_key):
-                print(f"⚠️ No existe en S3: {s3_key}")
-                raise HTTPException(status_code=404, detail=f"No hay datos para '{modulo}' con job_id '{job_id}'.")
+            logging.info(f"📥 Descargando gráfico: {s3_key}")
             
-            print(f"📥 Descargando gráfico: {s3_key}")
-            response = self.s3_client_raw.get_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key)
-            return json.loads(response['Body'].read().decode('utf-8'))
+            # Leemos directamente a la memoria usando nuestro servicio
+            data = self.s3_service.leer_json_memoria(s3_key)
+            
+            if data is None:
+                logging.warning(f"⚠️ No existe en S3: {s3_key}")
+                raise HTTPException(status_code=404, detail=f"No hay datos para '{modulo}' con job_id '{job_id}'.")
+                
+            return data
         except HTTPException:
             raise
-        except self.s3_client_raw.exceptions.NoSuchKey:
-            raise HTTPException(status_code=404, detail=f"No hay datos para '{modulo}'.")
         except Exception as e:
+            logging.error(f"Error S3: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Error S3: {str(e)}")
 
     # --- WORKER LOCAL (Lógica de fondo) ---
     async def procesar_reporte_batch(self, file_key: str, job_id: str, empresa: str):
-        print(f"⚙️ WORKER: Procesando {empresa}...")
+        logging.info(f"⚙️ WORKER: Procesando {empresa}...")
         
         # Aseguramos carpeta temporal
         os.makedirs("temp", exist_ok=True)
@@ -134,7 +126,7 @@ class ReportesController:
             
             # 3. Actualizar puntero "Reporte Activo"
             if resultados:
-                print(f"✅ Job {job_id} completado.")
+                logging.info(f"✅ Job {job_id} completado.")
                 try:
                     manifest_data = {
                         "active_job_id": job_id,
@@ -143,17 +135,16 @@ class ReportesController:
                     }
                     # Usamos el servicio para guardar el JSON de config
                     self.s3_service.guardar_json(manifest_data, "config/reporte_activo.json")
-                    print(f"🔄 Reporte Activo actualizado.")
+                    logging.info("🔄 Reporte Activo actualizado.")
                     return True
                 except Exception as e:
-                    print(f"⚠️ Error actualizando manifiesto: {e}")
+                    logging.error(f"⚠️ Error actualizando manifiesto: {e}", exc_info=True)
                     return True
             return False
 
         except Exception as e:
-            print(f"❌ ERROR WORKER: {e}")
-            import traceback
-            traceback.print_exc()
+            logging.error(f"❌ ERROR WORKER: {e}", exc_info=True)
             return False
         finally:
-            if os.path.exists(local_input): os.remove(local_input)
+            if os.path.exists(local_input): 
+                os.remove(local_input)

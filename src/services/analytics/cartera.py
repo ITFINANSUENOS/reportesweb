@@ -154,3 +154,24 @@ class CarteraAnalyticsService:
             .otherwise(pl.lit("vencido"))
             .alias("Estado_Vigencia")
         )
+
+    def enriquecer_datos_base(self, df_cartera: pl.DataFrame) -> pl.DataFrame:
+        """Agrega vigencias y estados de pago globales al DataFrame."""
+        if df_cartera.is_empty():
+            return df_cartera
+            
+        # 1. Llamamos al método interno para agregar la vigencia
+        df = self.agregar_estado_vigencia(df_cartera)
+        
+        # 2. Agregamos la lógica de Estado_Pago (SRP resuelto)
+        if "Tipo_Vigencia_Temp" in df.columns and "Total_Recaudo" in df.columns:
+            df = df.with_columns(
+                pl.when(pl.col("Tipo_Vigencia_Temp") == "ANTICIPADO").then(pl.lit("ANTICIPADO"))
+                .when(pl.col("Total_Recaudo") > 50000).then(pl.lit("PAGO"))
+                .otherwise(pl.lit("SIN PAGO")).alias("Estado_Pago")
+            )
+        else:
+            # Fallback seguro por si el excel viene sin esas columnas
+            df = df.with_columns(pl.lit("SIN PAGO").alias("Estado_Pago"))
+            
+        return df
