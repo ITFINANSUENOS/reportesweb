@@ -10,10 +10,15 @@ def test_calculo_kpis_resultados():
         "Regional_Cobro": ["Norte", "Norte"],
         "Zona": ["Z1", "Z1"],
         "Franja_Meta": ["1 A 30", "1 A 30"],
+        "Franja_Cartera": ["1 A 30", "1 A 30"],
+        "CALL_CENTER_FILTRO": ["CL1", "CL1"],
+        "Cantidad_Novedades": [0, 0],
         
         # Datos numéricos clave
-        "Meta_$": [100.0, 200.0],          # Suma total esperada: 300
-        "Recaudo_Meta": [50.0, 100.0],     # Suma total esperada: 150
+        "Meta_$": [100.0, 200.0],        
+        "Recaudo_Meta": [50.0, 100.0],   
+        
+        
         "Total_Recaudo_Sin_Anti": [0.0, 0.0],
         "Meta_T.R_$": [0.0, 0.0]
     })

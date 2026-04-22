@@ -18,7 +18,7 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
     # Lista de dominios permitidos (El puerto de Vite es 5173)
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "*"], 
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], 
     allow_credentials=True,
     allow_methods=["*"],  # Permitir todos los métodos (GET, POST, PUT, DELETE)
     allow_headers=["*"],  # Permitir todos los headers (Authorization, Content-Type, etc.)

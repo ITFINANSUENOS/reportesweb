@@ -1,12 +1,12 @@
 import polars as pl
 import os
-import boto3
 import io
+import logging
 from src.core.config import settings
+from src.services.storage.s3_service import S3Service
 
 class BusquedasService:
     def __init__(self):
-        # Mapeo centralizado de rutas para no repetirlo
         self.MAPA_RUTAS = {
             "seguimientos_gestion": "data/seguimientos_gestion",
             "seguimientos_rodamientos": "data/seguimientos_rodamientos",
@@ -18,6 +18,8 @@ class BusquedasService:
             "comercial_fnz": "data/comercial",
             "comercial_retanqueos": "data/comercial"
         }
+        # Instanciamos el servicio de S3
+        self.s3_service = S3Service()
 
     # --- UTILIDADES INTERNAS ---
     def _limpiar_cache_antigua(self, directorio: str = "temp", max_archivos: int = 10):
@@ -30,18 +32,18 @@ class BusquedasService:
                     try: os.remove(f)
                     except OSError: pass
         except Exception as e:
-            print(f"⚠️ Warning limpieza caché: {e}")
+            logging.warning(f"⚠️ Warning limpieza caché: {e}")
 
-    def _garantizar_archivo_local(self, s3_key: str, local_path: str):
+    def _garantizar_archivo_local(self, s3_key: str, local_path: str) -> bool:
+        """Usa el S3Service para descargar, evitando la fuga de abstracción."""
         if os.path.exists(local_path): return True
         try:
-            directory = os.path.dirname(local_path)
-            if directory: os.makedirs(directory, exist_ok=True)
-            s3 = boto3.client('s3', region_name=settings.AWS_REGION, aws_access_key_id=settings.AWS_ACCESS_KEY_ID, aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY)
-            s3.download_file(settings.S3_BUCKET_NAME, s3_key, local_path)
-            return True
+            # Delegamos toda la lógica al S3Service
+            ruta = self.s3_service.descargar_archivo(s3_key, local_path)
+            # Si ruta es un string válido, fue exitoso. Si es vacío ("") o None, falló.
+            return bool(ruta)
         except Exception as e:
-            print(f"❌ Error S3 ({s3_key}): {e}")
+            logging.error(f"❌ Error garantizando archivo ({s3_key}): {e}", exc_info=True)
             if os.path.exists(local_path): os.remove(local_path)
             return False
 
@@ -67,25 +69,28 @@ class BusquedasService:
         
         return s3_key, local_path
 
-    def _aplicar_filtros_comunes(self, df: pl.DataFrame, payload) -> pl.DataFrame:
-        """Aplica la lógica de filtrado de texto y dinámico sobre un DataFrame."""
+    def _aplicar_filtros_comunes(self, lf: pl.LazyFrame, payload) -> pl.LazyFrame:
+        """Aplica la lógica de filtrado dinámico sobre un LazyFrame (Optimizado en Memoria)."""
         origen = payload.origen
         
+        # Obtenemos las columnas disponibles sin cargar datos
+        columnas = lf.collect_schema().names()
+        
         # Filtros de Cosechas
-        if origen == "comercial_cosechas_s1": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_1_SIN_PAGO")
-        elif origen == "comercial_cosechas_s2": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_2_FALLO_2DA")
-        elif origen == "comercial_cosechas_s3": df = df.filter(pl.col("Grupo_Seguimiento") == "SECCION_3_FALLO_3RA_PLUS")
+        if origen == "comercial_cosechas_s1": lf = lf.filter(pl.col("Grupo_Seguimiento") == "SECCION_1_SIN_PAGO")
+        elif origen == "comercial_cosechas_s2": lf = lf.filter(pl.col("Grupo_Seguimiento") == "SECCION_2_FALLO_2DA")
+        elif origen == "comercial_cosechas_s3": lf = lf.filter(pl.col("Grupo_Seguimiento") == "SECCION_3_FALLO_3RA_PLUS")
         
         # Filtro Texto
         if payload.search_term:
             term = payload.search_term.lower()
             posibles_cols = ["Nombre_Cliente", "Cedula_Cliente", "Credito", "Cargo_Usuario", "Novedad", "Empresa", "Nombre_Vendedor", "Regional_Venta"]
-            cols_busqueda = [c for c in posibles_cols if c in df.columns]
+            cols_busqueda = [c for c in posibles_cols if c in columnas]
             if cols_busqueda:
                 filtro_texto = pl.lit(False)
                 for col in cols_busqueda:
                     filtro_texto = filtro_texto | pl.col(col).cast(pl.Utf8).str.to_lowercase().str.contains(term)
-                df = df.filter(filtro_texto)
+                lf = lf.filter(filtro_texto)
 
         # Filtros Dinámicos
         condicion = pl.lit(True)
@@ -97,57 +102,53 @@ class BusquedasService:
             "Tipo_Novedad": payload.novedades if all(n in ["COMPROMISO", "AUSENCIA", "PAGO", "NOVEDAD"] for n in payload.novedades) else None
         }
         for col_name, valores in filtros_map.items():
-            if valores and col_name in df.columns:
+            if valores and col_name in columnas:
                 condicion = condicion & pl.col(col_name).is_in(valores)
 
-        # Filtro de Novedades (por Cantidad_Novedades)
+        # Filtro de Novedades
         if payload.novedades and len(payload.novedades) > 0:
-            if "Cantidad_Novedades" in df.columns:
+            if "Cantidad_Novedades" in columnas:
                 if "Con Novedades" in payload.novedades and "Sin Novedades" not in payload.novedades:
                     condicion = condicion & (pl.col("Cantidad_Novedades") > 0)
                 elif "Sin Novedades" in payload.novedades and "Con Novedades" not in payload.novedades:
                     condicion = condicion & (pl.col("Cantidad_Novedades") == 0)
-            elif "Estado_Gestion" in df.columns:
+            elif "Estado_Gestion" in columnas:
                 if "Con Novedades" in payload.novedades and "Sin Novedades" not in payload.novedades:
                     condicion = condicion & (pl.col("Estado_Gestion") == "CON GESTIÓN")
                 elif "Sin Novedades" in payload.novedades and "Con Novedades" not in payload.novedades:
                     condicion = condicion & (pl.col("Estado_Gestion") == "SIN GESTIÓN")
         
-        if payload.estado_pago and "Estado_Pago" in df.columns: condicion = condicion & pl.col("Estado_Pago").is_in(payload.estado_pago)
-        if payload.estado_gestion and "Estado_Gestion" in df.columns: condicion = condicion & pl.col("Estado_Gestion").is_in(payload.estado_gestion)
-        if payload.rodamiento and "Rodamiento" in df.columns: condicion = condicion & pl.col("Rodamiento").is_in(payload.rodamiento)
-        if payload.Regional_Venta and "Regional_Venta" in df.columns: condicion = condicion & pl.col("Regional_Venta").is_in(payload.Regional_Venta)
-        if payload.Vendedor_Activo and "Vendedor_Activo" in df.columns: condicion = condicion & pl.col("Vendedor_Activo").is_in(payload.Vendedor_Activo)
-        if payload.Nombre_Vendedor and "Nombre_Vendedor" in df.columns: condicion = condicion & pl.col("Nombre_Vendedor").is_in(payload.Nombre_Vendedor)
+        if payload.estado_pago and "Estado_Pago" in columnas: condicion = condicion & pl.col("Estado_Pago").is_in(payload.estado_pago)
+        if payload.estado_gestion and "Estado_Gestion" in columnas: condicion = condicion & pl.col("Estado_Gestion").is_in(payload.estado_gestion)
+        if payload.rodamiento and "Rodamiento" in columnas: condicion = condicion & pl.col("Rodamiento").is_in(payload.rodamiento)
+        if payload.Regional_Venta and "Regional_Venta" in columnas: condicion = condicion & pl.col("Regional_Venta").is_in(payload.Regional_Venta)
+        if payload.Vendedor_Activo and "Vendedor_Activo" in columnas: condicion = condicion & pl.col("Vendedor_Activo").is_in(payload.Vendedor_Activo)
+        if payload.Nombre_Vendedor and "Nombre_Vendedor" in columnas: condicion = condicion & pl.col("Nombre_Vendedor").is_in(payload.Nombre_Vendedor)
         
-        # Filtrar por vigencia - requiere cruce con cartera
-        if payload.vigencia and len(payload.vigencia) > 0 and "Cedula_Cliente" in df.columns:
-            # Determinar el archivo de cartera según el origen
+        # Filtrar por vigencia - Cruce con cartera optimizado
+        if payload.vigencia and len(payload.vigencia) > 0 and "Cedula_Cliente" in columnas:
             origen_cartera = "seguimientos_rodamientos"
-            if origen == "detallados_call_center":
-                origen_cartera = "detallados_call_center"
-            elif origen == "detallados_cartera":
-                origen_cartera = "detallados_cartera"
+            if origen == "detallados_call_center": origen_cartera = "detallados_call_center"
+            elif origen == "detallados_cartera": origen_cartera = "detallados_cartera"
             
-            # Intentar cargar la cartera para hacer el filtro
             try:
                 s3_key_cartera, local_path_cartera = self._resolver_rutas(origen_cartera, payload.job_id)
                 if self._garantizar_archivo_local(s3_key_cartera, local_path_cartera):
-                    df_cartera = pl.read_parquet(local_path_cartera, columns=["Cedula_Cliente", "Estado_Vigencia"], memory_map=True)
+                    # Usamos scan_parquet para no cargar toda la cartera
+                    df_cartera = pl.scan_parquet(local_path_cartera).select(["Cedula_Cliente", "Estado_Vigencia"]).collect()
                     if "Estado_Vigencia" in df_cartera.columns:
-                        # Filtrar las cedulas que tienen la vigencia deseada
                         cedulas_vigencia = df_cartera.filter(pl.col("Estado_Vigencia").is_in(payload.vigencia))["Cedula_Cliente"].unique()
                         condicion = condicion & pl.col("Cedula_Cliente").is_in(cedulas_vigencia)
             except Exception as e:
-                print(f"⚠️ Warning: No se pudo aplicar filtro vigencia: {e}")
+                logging.warning(f"⚠️ Warning: No se pudo aplicar filtro vigencia: {e}")
 
-        if payload.cargos and "Cargo_Usuario" in df.columns:
+        if payload.cargos and "Cargo_Usuario" in columnas:
              if "SIN ASIGNAR" in payload.cargos:
                 condicion = condicion & (pl.col("Cargo_Usuario").is_in(payload.cargos) | pl.col("Cargo_Usuario").is_null() | (pl.col("Cargo_Usuario") == ""))
              else:
                 condicion = condicion & pl.col("Cargo_Usuario").is_in(payload.cargos)
 
-        return df.filter(condicion)
+        return lf.filter(condicion)
 
     # --- MÉTODOS PÚBLICOS DEL SERVICIO ---
     
@@ -159,8 +160,11 @@ class BusquedasService:
             return {"data": [], "total_registros": 0, "pagina_actual": 1, "total_paginas": 0}
 
         try:
-            df = pl.read_parquet(local_path, memory_map=True)
-            df_filtrado = self._aplicar_filtros_comunes(df, payload)
+            lf = pl.scan_parquet(local_path)
+            lf_filtrado = self._aplicar_filtros_comunes(lf, payload)
+
+            # Materializamos a un DataFrame solo con los datos ya filtrados
+            df_filtrado = lf_filtrado.collect()
 
             total_registros = df_filtrado.height
             if total_registros == 0: return {"data": [], "total_registros": 0, "pagina_actual": 1, "total_paginas": 0}
@@ -180,6 +184,7 @@ class BusquedasService:
                 "data": data_pagina.to_dicts()
             }
         except Exception as e:
+            logging.error(f"Error procesando filtrado: {e}", exc_info=True)
             raise Exception(f"Error procesando filtrado: {str(e)}")
 
     def exportar_excel(self, payload) -> io.BytesIO:
@@ -188,16 +193,19 @@ class BusquedasService:
         if not self._garantizar_archivo_local(s3_key, local_path):
             raise FileNotFoundError("Archivo no encontrado para exportar")
 
-        df = pl.read_parquet(local_path, memory_map=True)
-        df_filtrado = self._aplicar_filtros_comunes(df, payload)
+        #  Evaluación perezosa para exportaciones masivas
+        lf = pl.scan_parquet(local_path)
+        lf_filtrado = self._aplicar_filtros_comunes(lf, payload)
 
         if hasattr(payload, 'columnas_visibles') and payload.columnas_visibles:
-            cols_validas = [col for col in payload.columnas_visibles if col in df_filtrado.columns]
+            cols_validas = [col for col in payload.columnas_visibles if col in lf_filtrado.collect_schema().names()]
             if cols_validas:
-                df_filtrado = df_filtrado.select(cols_validas)
+                lf_filtrado = lf_filtrado.select(cols_validas)
+
+        df_final = lf_filtrado.collect()
 
         buffer = io.BytesIO()
-        df_filtrado.write_excel(buffer)
+        df_final.write_excel(buffer)
         buffer.seek(0)
         return buffer
 
@@ -211,21 +219,20 @@ class BusquedasService:
             cols_existentes = [c for c in cols_necesarias if c in esquema.names()]
             if not cols_existentes: return []
             
-            df = pl.read_parquet(local_path, columns=cols_existentes, memory_map=True)
-            
             term = q.lower()
             filtro = pl.lit(False)
-            if "Nombre_Cliente" in df.columns: filtro = filtro | pl.col("Nombre_Cliente").cast(pl.Utf8).str.to_lowercase().str.contains(term)
-            if "Cedula_Cliente" in df.columns: filtro = filtro | pl.col("Cedula_Cliente").cast(pl.Utf8).str.contains(term)
-            if "Credito" in df.columns: filtro = filtro | pl.col("Credito").cast(pl.Utf8).str.contains(term)
+            if "Nombre_Cliente" in cols_existentes: filtro = filtro | pl.col("Nombre_Cliente").cast(pl.Utf8).str.to_lowercase().str.contains(term)
+            if "Cedula_Cliente" in cols_existentes: filtro = filtro | pl.col("Cedula_Cliente").cast(pl.Utf8).str.contains(term)
+            if "Credito" in cols_existentes: filtro = filtro | pl.col("Credito").cast(pl.Utf8).str.contains(term)
 
-            return df.filter(filtro).head(limit).to_dicts()
-        except Exception:
+            df = pl.scan_parquet(local_path).select(cols_existentes).filter(filtro).head(limit).collect()
+            return df.to_dicts()
+        except Exception as e:
+            logging.error(f"Error en consulta rápida: {e}")
             return []
 
     def consultar_relacionados(self, payload) -> list:
         s3_key, local_path = self._resolver_rutas(payload.origen_destino, payload.job_id)
-        # Ajuste de nombre local para no chocar
         local_path = local_path.replace("search_", "rel_") 
 
         if not self._garantizar_archivo_local(s3_key, local_path): return []
@@ -240,7 +247,8 @@ class BusquedasService:
             if not resultado.is_empty():
                  resultado = resultado.with_columns(pl.col(pl.Date).dt.to_string("%Y-%m-%d"))
             return resultado.to_dicts()
-        except Exception:
+        except Exception as e:
+            logging.error(f"Error consultando relacionados: {e}")
             return []
             
     def descargar_dependencias_metricas(self, job_id: str):
@@ -252,7 +260,6 @@ class BusquedasService:
             "novedades": (f"data/seguimientos_gestion/{job_id}.parquet", os.path.join("temp", f"novs_{job_id}.parquet"))
         }
         
-        # Validar solo el principal (cartera), los otros son opcionales
         if not self._garantizar_archivo_local(archivos["cartera"][0], archivos["cartera"][1]):
             return None
             

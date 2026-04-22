@@ -1,6 +1,8 @@
 import boto3
 import json
 import os
+import botocore
+import logging
 from datetime import datetime
 from src.core.config import settings
 from src.utils.polars_utils import guardar_parquet
@@ -33,52 +35,48 @@ class S3Service:
                 Body=json_str,
                 ContentType='application/json'
             )
-            print(f"✅ JSON guardado en S3: {key_s3}")
+            logging.info(f"✅ JSON guardado en S3: {key_s3}")
             return True
         except Exception as e:
-            print(f"❌ Error guardando JSON {key_s3}: {e}")
+            logging.error(f"❌ Error guardando JSON {key_s3}: {e}", exc_info=True)
             return False
 
     def guardar_parquet(self, df, key_s3: str, columnas_validas: list = None) -> bool:
         """Guarda un DataFrame como Parquet local y lo sube a S3."""
         nombre_local = None
         try:
-            # Creamos un nombre local único y seguro
             nombre_local = key_s3.replace("/", "_")
-            
-            # Filtramos columnas si se especifican
             df_final = df.select(columnas_validas) if columnas_validas else df
-            
-            # Usamos la utilidad existente para guardar en disco
             guardar_parquet(df_final, nombre_local)
             
-            print(f"☁️ Subiendo Parquet a S3: {key_s3}...")
+            logging.info(f"☁️ Subiendo Parquet a S3: {key_s3}...")
             self.s3.upload_file(nombre_local, self.bucket, key_s3)
-            
             return True
         except Exception as e:
-            print(f"❌ Error subiendo Parquet {key_s3}: {e}")
+            logging.error(f"❌ Error subiendo Parquet {key_s3}: {e}", exc_info=True)
             return False
         finally:
-            # Limpieza del archivo temporal local
             if nombre_local and os.path.exists(nombre_local):
                 os.remove(nombre_local)
     
-    def descargar_archivo(self, key_s3: str, path_local: str):
-        """Descarga un archivo desde S3 al disco local."""
-        print(f"⬇️ Descargando {key_s3}...")
+    def descargar_archivo(self, key_s3: str, path_local: str) -> str:
+        """Descarga un archivo desde S3 al disco local y retorna la ruta."""
+        logging.info(f"⬇️ Descargando {key_s3}...")
         
-        # Crear directorio si no existe
         directory = os.path.dirname(path_local)
         if directory:
             os.makedirs(directory, exist_ok=True)
         
-        # Verificar si ya existe y tiene contenido válido
         if os.path.exists(path_local) and os.path.getsize(path_local) > 0:
-            print(f"✅ Archivo ya existe localmente: {path_local}")
-            return
+            logging.info(f"✅ Archivo ya existe localmente: {path_local}")
+            return path_local
         
-        self.s3.download_file(self.bucket, key_s3, path_local)
+        try:
+            self.s3.download_file(self.bucket, key_s3, path_local)
+            return path_local
+        except Exception as e:
+            logging.error(f"❌ Error descargando desde S3: {e}", exc_info=True)
+            return "" 
 
     def verificar_existe(self, key_s3: str) -> bool:
         """Verifica si un archivo existe en S3."""
@@ -87,3 +85,25 @@ class S3Service:
             return True
         except:
             return False
+        
+    def generar_url_presignada(self, key_s3: str, content_type: str, expiracion: int = 3600) -> str:
+        """Genera una URL firmada para interactuar con S3."""
+        return self.s3.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': self.bucket,
+                'Key': key_s3,
+                'ContentType': content_type
+            },
+            ExpiresIn=expiracion
+        )
+
+    def leer_json_memoria(self, key_s3: str) -> dict:
+        """Descarga y parsea un JSON directamente a memoria (sin guardar en disco)."""
+        try:
+            response = self.s3.get_object(Bucket=self.bucket, Key=key_s3)
+            return json.loads(response['Body'].read().decode('utf-8'))
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                return None
+            raise e
